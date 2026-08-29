@@ -2,9 +2,11 @@ import unittest
 
 from spade65.protocol import (
     EFFECTS,
+    KeyAssignment,
     MAIN_REPORT_LENGTH,
     SHORT_REPORT_LENGTH,
     debounce_report,
+    keymap_report,
     reset_report,
     rgb_effect_report,
     sleep_report,
@@ -32,6 +34,27 @@ class ProtocolTests(unittest.TestCase):
         report = debounce_report(5)
         self.assertEqual(len(report), SHORT_REPORT_LENGTH)
         self.assertEqual(report, bytes((0x08, 0x09, 0x05, 0, 0, 0, 0, 0)))
+
+    def test_keymap_report_preserves_defaults_and_encodes_assignment(self) -> None:
+        defaults = bytes(range(102))
+        layers = [[None] * 102 for _ in range(3)]
+        layers[1][17] = KeyAssignment(modifiers=0x03, usage=0x05)
+        report = keymap_report(layers, default_usages=defaults, fn_mode_index=1)
+        self.assertEqual(len(report), MAIN_REPORT_LENGTH)
+        self.assertEqual(report[:3], bytes((0x07, 0x03, 0x02)))
+        self.assertEqual(report[8:12], bytes((0, 0, 0, 1)))
+        layer_one_offset = 8 + 2 * 102
+        self.assertEqual(
+            report[layer_one_offset + 34 : layer_one_offset + 36],
+            bytes((0x83, 0x05)),
+        )
+        self.assertEqual(report[-2:], bytes((0, 101)))
+
+    def test_keymap_report_validates_shape(self) -> None:
+        with self.assertRaises(ValueError):
+            keymap_report([[None] * 102], default_usages=bytes(102))
+        with self.assertRaises(ValueError):
+            KeyAssignment(modifiers=0x10, usage=4)
 
     def test_sleep_report_uses_one_based_indices(self) -> None:
         report = sleep_report(light_off_minutes=10, hibernate_minutes=30)

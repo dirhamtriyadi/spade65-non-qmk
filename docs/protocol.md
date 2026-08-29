@@ -1,6 +1,15 @@
 # Catatan protokol Noir Spade65 non-QMK
 
-Dokumen ini merangkum hasil reverse engineering statis. Semua nilai harus dianggap **belum terverifikasi pada hardware** sampai checklist pada README selesai.
+Dokumen ini merangkum hasil reverse engineering statis dan validasi hardware bertahap. Nilai yang belum disebut dalam bagian validasi tetap harus dianggap **belum terverifikasi pada hardware**.
+
+## Validasi hardware
+
+Pada 29 Agustus 2026, unit kabel USB `0603:0351` bernama `JP Spade65`
+memvalidasi descriptor feature report utama `0x07` sepanjang 620 byte dan report
+pendek `0x08` sepanjang 8 byte. Pengiriman RGB `fixed` (brightness 2, speed 3)
+mengembalikan hasil ioctl 620, dan debounce 5 ms mengembalikan hasil ioctl 8.
+Mode dongle, keymap write, macro, per-key RGB, reset, serta firmware update belum
+diuji.
 
 ## Sumber analisis
 
@@ -105,7 +114,7 @@ Struktur awal yang ditemukan:
 
 Kode vendor membangun data untuk layer normal dan dua layer Fn. Matrix kabel `0603:0351` memiliki 102 slot internal (`0x66`), sementara profil UI memiliki 70 tombol logis. Slot kosong penting untuk menjaga urutan matrix.
 
-Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...` dan dikirim terpisah. Fitur ini belum diimplementasikan karena satu remap pada software Windows perlu dicapture dan dibandingkan dengan frame hasil analisis agar semantics byte pertama tidak merusak layer.
+Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...` dan dikirim terpisah. Mapping 102 slot dan builder frame tiga layer sudah diimplementasikan untuk ekspor offline. Pengiriman ke perangkat belum diaktifkan karena satu remap pada software Windows perlu dicapture dan dibandingkan dengan frame hasil analisis agar semantics byte pertama tidak merusak layer.
 
 ### Macro — opcode 0x05
 

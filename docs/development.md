@@ -75,12 +75,12 @@ Hal yang sudah diketahui:
 
 Langkah implementasi berikutnya:
 
-1. Ekstrak dan deobfuscate hanya entry `0x06030x0351` dari `SKLocation.js` secara lokal.
-2. Konversi matrix mapping menjadi data buatan sendiri yang dapat didokumentasikan; jangan commit source vendor.
-3. Tambahkan model `KeyAssignment(modifiers, usage)`.
-4. Mulai dengan satu layer dan assignment keyboard biasa, tanpa macro/combo.
-5. Buat command `keymap export-default` yang hanya menghasilkan JSON/frame offline.
-6. Bandingkan frame untuk satu perubahan dengan USB capture Windows.
+1. Selesai: ekstrak entry `0x06030x0351` dari `SKLocation.js` secara lokal.
+2. Selesai: konversi mapping menjadi konstanta orisinal 102 slot di `spade65/keymap.py`.
+3. Selesai: tambahkan model `KeyAssignment(modifiers, usage)` dan builder tiga layer.
+4. Selesai: buat `keymap export-default` yang hanya menghasilkan JSON/frame offline.
+5. Berikutnya: bandingkan frame untuk satu perubahan dengan USB capture Windows.
+6. Implementasikan import/edit assignment keyboard biasa, tanpa macro/combo.
 7. Baru aktifkan write dengan backup profil dan konfirmasi tambahan.
 
 Jangan membangun keymap dari urutan fisik 70 tombol saja. Firmware menggunakan slot kosong dalam matrix 102 elemen, sehingga menghilangkan slot kosong dapat menggeser semua assignment.

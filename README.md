@@ -8,14 +8,14 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 
 | Fitur | Implementasi | Diuji pada hardware |
 |---|---:|---:|
-| Deteksi USB dan dongle | Ya | Belum |
-| Membaca HID report descriptor | Ya | Belum |
-| Efek RGB bawaan | Ya | Belum |
-| Brightness dan speed RGB | Ya | Belum |
-| Debounce | Ya | Belum |
+| Deteksi USB dan dongle | Ya | Ya, mode USB `0603:0351` |
+| Membaca HID report descriptor | Ya | Ya, mode USB `0603:0351` |
+| Efek RGB bawaan | Ya | Ya, `fixed` via USB |
+| Brightness dan speed RGB | Ya | Ya, via USB |
+| Debounce | Ya | Ya, 5 ms via USB |
 | Timer lampu/sleep untuk dongle | Ya | Belum |
 | Reset pengaturan | Ya, dengan konfirmasi tambahan | Belum |
-| Remap tombol/layer | Protokol dasar ditemukan | Belum diimplementasikan |
+| Remap tombol/layer | Mapping 102 slot dan generator frame offline | Write sengaja belum diaktifkan |
 | Macro | Protokol dasar ditemukan | Belum diimplementasikan |
 | Per-key RGB | Protokol dasar ditemukan | Belum diimplementasikan |
 | Firmware update | Sengaja tidak diimplementasikan | Tidak |
@@ -133,6 +133,21 @@ Nilai default vendor adalah 5 ms.
 python spade65ctl.py debounce 5 --dry-run
 python spade65ctl.py debounce 5 --confirm
 ```
+
+### Keymap offline
+
+Mapping default kabel USB kini dapat diekspor tanpa membuka atau menulis ke
+perangkat. JSON memuat relasi 70 tombol UI ke 102 slot matrix dan frame opcode
+`0x03` sepanjang 620 byte:
+
+```bash
+python spade65ctl.py keymap export-default > keymap-default.json
+python spade65ctl.py keymap export-default --format hex
+```
+
+Perintah keymap saat ini sengaja hanya bersifat offline. Write remap belum
+diaktifkan sampai frame hasil satu perubahan tombol dapat dibandingkan dengan
+capture USB dari aplikasi Windows.
 
 ### Timer mode dongle
 

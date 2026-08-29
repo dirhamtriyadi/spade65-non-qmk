@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Sequence
+
 
 VENDOR_ID = 0x0603
 PRODUCT_IDS = {
@@ -45,6 +48,20 @@ LIGHT_OFF_MINUTES = (1, 2, 5, 10, 15, 20, 25, 30)
 HIBERNATE_MINUTES = (3, 5, 10, 15, 20, 25, 30, 60)
 
 
+@dataclass(frozen=True)
+class KeyAssignment:
+    """One explicit USB keyboard assignment in a matrix slot."""
+
+    modifiers: int
+    usage: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.modifiers <= 0x0F:
+            raise ValueError("key modifiers must be between 0x00 and 0x0f")
+        if not 0 <= self.usage <= 0xFF:
+            raise ValueError("key usage must be between 0x00 and 0xff")
+
+
 def rgb_effect_report(
     effect: str,
     *,
@@ -70,6 +87,44 @@ def rgb_effect_report(
 
     palette = 7 if multicolor and effect != "fixed" else color_index
     report[12 : 12 + len(EFFECTS)] = bytes((palette,)) * len(EFFECTS)
+    return bytes(report)
+
+
+def keymap_report(
+    layers: Sequence[Sequence[KeyAssignment | None]],
+    *,
+    default_usages: Sequence[int],
+    fn_mode_index: int = 0,
+) -> bytes:
+    """Build opcode 0x03 without sending it to a device.
+
+    ``None`` preserves a slot's default usage and leaves its status byte clear.
+    An explicit assignment uses the vendor's 0x80 status bit plus the four
+    standard left-modifier bits.
+    """
+
+    if len(layers) != 3:
+        raise ValueError("keymap must contain exactly three layers")
+    if not 0 <= fn_mode_index <= 2:
+        raise ValueError("fn mode index must be between 0 and 2")
+    if len(default_usages) != 102:
+        raise ValueError("Spade65 keymap must contain exactly 102 matrix slots")
+    if any(not 0 <= usage <= 0xFF for usage in default_usages):
+        raise ValueError("default usages must be bytes")
+    if any(len(layer) != len(default_usages) for layer in layers):
+        raise ValueError("every keymap layer must contain 102 matrix slots")
+
+    report = bytearray(MAIN_REPORT_LENGTH)
+    report[0:3] = bytes((MAIN_REPORT_ID, 0x03, fn_mode_index + 1))
+    offset = 8
+    for layer in layers:
+        for slot, assignment in enumerate(layer):
+            if assignment is None:
+                report[offset + 1] = default_usages[slot]
+            else:
+                report[offset] = 0x80 | assignment.modifiers
+                report[offset + 1] = assignment.usage
+            offset += 2
     return bytes(report)
 
 

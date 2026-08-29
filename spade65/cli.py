@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .hidraw import HidrawDevice, choose_device, discover_hidraw, send_feature_report
+from .keymap import default_keymap_report, export_default
 from .protocol import (
     EFFECTS,
     HIBERNATE_MINUTES,
@@ -160,6 +161,14 @@ def command_reset(args: argparse.Namespace) -> int:
     return _write_report(args, reset_report(), SHORT_USAGE)
 
 
+def command_keymap_export_default(args: argparse.Namespace) -> int:
+    if args.format == "hex":
+        print(default_keymap_report().hex())
+    else:
+        print(json.dumps(export_default(), indent=2))
+    return 0
+
+
 def _add_write_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--device", type=Path, help="explicit /dev/hidrawN path")
     parser.add_argument("--dry-run", action="store_true", help="print packet; do not write")
@@ -207,6 +216,16 @@ def build_parser() -> argparse.ArgumentParser:
     reset.add_argument("--i-understand-reset", action="store_true")
     _add_write_options(reset)
     reset.set_defaults(handler=command_reset)
+
+    keymap = subparsers.add_parser(
+        "keymap", help="offline keymap inspection (writing is not enabled)"
+    )
+    keymap_subparsers = keymap.add_subparsers(dest="keymap_command", required=True)
+    export = keymap_subparsers.add_parser(
+        "export-default", help="export the wired default matrix and opcode 0x03 frame"
+    )
+    export.add_argument("--format", choices=("json", "hex"), default="json")
+    export.set_defaults(handler=command_keymap_export_default)
     return parser
 
 
