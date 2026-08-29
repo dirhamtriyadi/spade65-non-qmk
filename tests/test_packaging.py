@@ -147,8 +147,23 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Forbidden GPL-only Qt module", script)
         self.assertIn("Unexpected HIDAPI payload", script)
         self.assertIn("hidapi.libs", script)
+        self.assertIn("Required Qt/XCB runtime was not bundled", script)
+        for library in (
+            "libxcb-shape.so.0",
+            "libxcb-image.so.0",
+            "libxcb-xkb.so.1",
+            "libxcb-icccm.so.4",
+            "libxkbcommon-x11.so.0",
+            "libxcb-util.so.1",
+            "libxcb-cursor.so.0",
+            "libxcb-keysyms.so.1",
+            "libxcb-render-util.so.0",
+        ):
+            self.assertIn(library, script)
 
     def test_release_artifacts_include_legal_notices_and_qt_license_texts(self):
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("licenses/** -text -whitespace", attributes)
         notice = (ROOT / "THIRD-PARTY-NOTICES.md").read_text(encoding="utf-8")
         self.assertIn("| PySide6 | 6.11.2 | LGPL-3.0-only |", notice)
         self.assertIn("pyside-setup.git/tag/?h=v6.11.2", notice)
@@ -392,8 +407,35 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name="Spade65CLI"', spec)
         self.assertIn("console=True", spec)
         self.assertIn("Expand-Archive", script)
-        self.assertIn("$ArchivedGui --smoke-test", script)
+        self.assertIn("Start-Process -FilePath $ArchivedGui", script)
+        self.assertIn("-Wait -PassThru", script)
         self.assertIn("$ArchivedCli --smoke-test", script)
+        self.assertIn("Remove-SmokeDirectory", script)
+        self.assertIn("Start-Sleep -Milliseconds 500", script)
+
+    def test_official_linux_builds_install_headless_egl_runtime(self):
+        required_packages = (
+            "libegl1",
+            "libgl1",
+            "libxcb-shape0",
+            "libxcb-image0",
+            "libxcb-xkb1",
+            "libxcb-icccm4",
+            "libxkbcommon-x11-0",
+            "libxcb-util1",
+            "libxcb-cursor0",
+            "libxcb-keysyms1",
+            "libxcb-render-util0",
+        )
+        for workflow_name in ("test.yml", "release.yml"):
+            workflow = (
+                ROOT / ".github" / "workflows" / workflow_name
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                "sudo apt-get install --no-install-recommends --yes", workflow
+            )
+            for package in required_packages:
+                self.assertIn(package, workflow)
 
     def test_native_hid_smoke_only_loads_extension_on_required_platforms(self):
         with patch.object(launcher.importlib, "import_module") as import_module:

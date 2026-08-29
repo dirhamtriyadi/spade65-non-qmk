@@ -1,4 +1,4 @@
-# Preserve exact upstream legal texts, including significant source whitespace.
-licenses/PERMISSIVE-LICENSES.txt -whitespace
-licenses/PYINSTALLER.txt -whitespace
-licenses/QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html -whitespace
+# Preserve exact upstream legal bytes, including line endings and significant
+# source whitespace. This keeps Windows checkout conversion from invalidating
+# the recorded upstream hashes.
+licenses/** -text -whitespace

@@ -140,7 +140,9 @@ packaging. macOS memakai Cocoa/WebKit melalui PyObjC dan metadata bundle
 mengizinkan localhost serta menjelaskan prompt mikrofon audio-reactive.
 
 Build Windows serta smoke test-nya memerlukan Edge WebView2 Runtime pada host.
-Build Linux membutuhkan `curl` dan `sha256sum`; script memverifikasi hash
+Build Linux membutuhkan loader EGL, `curl`, dan `sha256sum`; pada Debian/Ubuntu
+pasang `libegl1`, `libgl1`, paket runtime XCB yang dicantumkan di
+[`packaging/README.md`](../packaging/README.md), `curl`, dan `coreutils`. Script memverifikasi hash
 `appimagetool` serta runtime type-2 yang dipin sebelum mengeksekusinya. AppImage
 PySide6/QtWebEngine jauh lebih besar daripada paket browser-only. Asset resmi
 dibangun dan di-smoke-test pada Ubuntu 22.04 x86_64 (glibc 2.35); ini adalah

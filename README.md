@@ -42,7 +42,8 @@ Spade65 aktif.
 
 - Python 3.10 atau lebih baru.
 - Linux: `hidraw` dan `sysfs` standar untuk CLI; extra `desktop` memasang
-  PySide6/QtWebEngine untuk jendela desktop.
+  PySide6/QtWebEngine untuk jendela desktop. Runtime grafis membutuhkan loader
+  EGL (`libegl1` pada Debian/Ubuntu).
 - Windows/macOS: package `hidapi` melalui extra `cross-platform`; gabungkan
   dengan extra `desktop` untuk GUI standalone dari source.
 - Windows memerlukan Microsoft Edge WebView2 Runtime. Windows 10/11 yang mutakhir

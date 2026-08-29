@@ -31,6 +31,26 @@ source_version=$("$build_python" \
 "$build_python" -m PyInstaller --noconfirm --clean \
   "$repo_root/packaging/spade65.spec"
 
+# The host graphics dispatcher (EGL/GL) must match the user's driver stack,
+# but these generic XCB support libraries are safe and necessary to bundle.
+# Fail before AppImage creation if the build host could not supply any of them.
+for required_library in \
+  'libxcb-shape.so.0' \
+  'libxcb-image.so.0' \
+  'libxcb-xkb.so.1' \
+  'libxcb-icccm.so.4' \
+  'libxkbcommon-x11.so.0' \
+  'libxcb-util.so.1' \
+  'libxcb-cursor.so.0' \
+  'libxcb-keysyms.so.1' \
+  'libxcb-render-util.so.0'; do
+  if ! find "$repo_root/dist/Spade65" -type f \
+    -name "$required_library" -print -quit | grep -q .; then
+    echo "Required Qt/XCB runtime was not bundled: $required_library" >&2
+    exit 1
+  fi
+done
+
 # QtWebEngineWidgets needs the LGPL QtQuick runtime libraries, but not these
 # optional GPL-only modules. Keep this artifact check next to the real build so
 # a PyInstaller/PySide hook change cannot silently broaden the license scope.

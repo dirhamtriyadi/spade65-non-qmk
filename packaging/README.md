@@ -50,6 +50,21 @@ python -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
 python -m pip check
 ```
 
+On Debian/Ubuntu build hosts, also install the EGL loader used when the
+packaged QtWebEngine backend is imported by the headless smoke test:
+
+```sh
+sudo apt-get update
+sudo apt-get install --no-install-recommends \
+  libegl1 libgl1 libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
+  libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
+  libxcb-render-util0 curl coreutils
+```
+
+Use the equivalent EGL, curl, and SHA-256 utility packages on other Linux
+distributions. A normal graphical desktop often already provides EGL, but the
+build now states this dependency explicitly instead of relying on that.
+
 For editable source installs that are not building release artifacts, Linux can
 use `python -m pip install -e ".[desktop]"`; Windows and macOS use
 `python -m pip install -e ".[cross-platform,desktop]"`. A base install can still
@@ -76,7 +91,7 @@ pwsh -File packaging/build_windows.ps1
 bash packaging/build_macos.sh
 ```
 
-Linux requires `curl` and `sha256sum`; the script downloads the official
+Linux requires an EGL loader, `curl`, and `sha256sum`; the script downloads the official
 `AppImage/appimagetool` 1.9.1 release and verifies its pinned SHA-256 before
 execution. A custom `APPIMAGETOOL_URL` must be paired with the corresponding
 `APPIMAGETOOL_SHA256`. The embedded type-2 runtime is also downloaded by
@@ -100,7 +115,9 @@ They omit the unused QML tree, Qt Data Visualization, and optional virtual
 keyboard/Quick 3D tooling that would otherwise pull GPL-only Qt modules into the
 AppImage. `build_linux.sh` independently rejects Qt Graphs, Data Visualization,
 Quick 3D, Quick Timeline, Virtual Keyboard, and Wayland Compositor filenames
-before packaging. Do not remove this check when upgrading PySide6 or
+before packaging. It also requires the generic XCB support libraries to be
+collected, while leaving driver-facing EGL/GL dispatch to the host graphics
+stack. Do not remove these checks when upgrading PySide6 or
 PyInstaller; rebuild, inspect, and re-license the actual payload instead.
 
 The AppImage supports the verified Linux `hidraw` transport and intentionally
