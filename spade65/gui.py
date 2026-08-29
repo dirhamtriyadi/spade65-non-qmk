@@ -49,6 +49,7 @@ from .protocol import (
     streaming_activation_report,
     streaming_rgb_reports,
 )
+from .settings import GUI_HOST, GUI_PORT
 
 
 WRITE_LOCK = threading.Lock()
@@ -331,7 +332,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(error)})
 
 
-def run_gui(*, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
+def run_gui(*, host: str = GUI_HOST, port: int = GUI_PORT, open_browser: bool = True) -> None:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("GUI may only bind to localhost")
     token = secrets.token_urlsafe(24)

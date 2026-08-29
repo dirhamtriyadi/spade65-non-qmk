@@ -22,6 +22,11 @@ launcher = load_script("spade65_packaging_launcher", "packaging/launcher.py")
 
 
 class PackagingTests(unittest.TestCase):
+    def test_desktop_launcher_uses_the_reserved_local_gui_port(self):
+        self.assertEqual(launcher.GUI_HOST, "127.0.0.1")
+        self.assertEqual(launcher.GUI_PORT, 8765)
+        self.assertEqual(launcher.GUI_URL, "http://127.0.0.1:8765/")
+
     def test_native_commands_use_platform_scripts(self):
         root = Path("/source")
 
@@ -37,9 +42,11 @@ class PackagingTests(unittest.TestCase):
         windows = build.native_command(
             "windows", root=root, find_executable=executable
         )
-        self.assertEqual(linux[-1], "/source/packaging/build_linux.sh")
-        self.assertEqual(macos[-1], "/source/packaging/build_macos.sh")
-        self.assertEqual(windows[-1], "/source/packaging/build_windows.ps1")
+        self.assertEqual(Path(linux[-1]), root / "packaging" / "build_linux.sh")
+        self.assertEqual(Path(macos[-1]), root / "packaging" / "build_macos.sh")
+        self.assertEqual(
+            Path(windows[-1]), root / "packaging" / "build_windows.ps1"
+        )
 
     def test_architecture_guard_rejects_mislabeled_build(self):
         build.validate_architecture("linux", "x86_64")
@@ -172,6 +179,38 @@ class PackagingTests(unittest.TestCase):
             launcher.verify_native_hid_load("darwin")
         self.assertEqual(import_module.call_args_list[0].args, ("hid",))
         self.assertEqual(import_module.call_args_list[1].args, ("hid",))
+
+    def test_macos_release_uses_verified_universal_python_and_hid_build(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        macos_job = workflow.split("  macos:\n", 1)[1].split(
+            "\n  publish:\n", 1
+        )[0]
+        self.assertIn("python-3.13.15-macos11.pkg", macos_job)
+        self.assertIn(
+            "3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3",
+            macos_job,
+        )
+        self.assertIn("shasum -a 256 -c -", macos_job)
+        self.assertIn("lipo -verify_arch x86_64 arm64", macos_job)
+        self.assertIn("bash packaging/build_macos_hidapi.sh", macos_job)
+        self.assertNotIn("actions/setup-python@", macos_job)
+
+        hid_build = (ROOT / "packaging" / "build_macos_hidapi.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('--no-binary=:all:', hid_build)
+        self.assertIn("--no-build-isolation", hid_build)
+        self.assertIn(
+            "ecbc265cbe8b7b88755f421e0ba25f084091ec550c2b90ff9e8ddd4fcd540311",
+            hid_build,
+        )
+        self.assertIn("shasum -a 256 -c -", hid_build)
+        self.assertIn("macosx_11_0_universal2.whl", hid_build)
+        self.assertGreaterEqual(
+            hid_build.count("lipo -verify_arch x86_64 arm64"), 2
+        )
 
 
 if __name__ == "__main__":

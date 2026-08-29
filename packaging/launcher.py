@@ -13,8 +13,7 @@ import webbrowser
 from importlib.resources import files
 from pathlib import Path
 
-
-GUI_URL = "http://127.0.0.1:8765/"
+from spade65.settings import GUI_HOST, GUI_PORT, GUI_URL
 
 
 def verify_native_hid_load(platform_name: str | None = None) -> None:
@@ -150,7 +149,7 @@ def main() -> int:
     # Keep a stable origin so browser-local profile and language preferences
     # survive restarts of the desktop launcher.
     try:
-        run_gui(host="127.0.0.1", port=8765, open_browser=True)
+        run_gui(host=GUI_HOST, port=GUI_PORT, open_browser=True)
     except OSError:
         # Cover the race where another launcher binds the port after our probe.
         if not reopen_running_gui():

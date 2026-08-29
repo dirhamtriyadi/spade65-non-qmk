@@ -116,18 +116,45 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.13"
-          architecture: arm64
-          cache: pip
-      - name: Install universal2 build dependencies
+      - name: Install verified Python.org universal2 interpreter
+        env:
+          PYTHON_INSTALLER_URL: https://www.python.org/ftp/python/3.13.15/python-3.13.15-macos11.pkg
+          PYTHON_INSTALLER_SHA256: 3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3
         run: |
-          python -m pip install --upgrade pip
+          set -euo pipefail
+          installer_pkg="${RUNNER_TEMP}/python-3.13.15-macos11.pkg"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${PYTHON_INSTALLER_URL}" --output "${installer_pkg}"
+          echo "${PYTHON_INSTALLER_SHA256}  ${installer_pkg}" | shasum -a 256 -c -
+          sudo /usr/sbin/installer -pkg "${installer_pkg}" -target /
+
+          framework_python=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
+          framework_library=/Library/Frameworks/Python.framework/Versions/3.13/Python
+          test -x "${framework_python}"
+          test -f "${framework_library}"
+          file "${framework_python}"
+          file "${framework_library}"
+          lipo -verify_arch x86_64 arm64 "${framework_python}"
+          lipo -verify_arch x86_64 arm64 "${framework_library}"
+
+          "${framework_python}" -m venv "${RUNNER_TEMP}/spade65-build-venv"
+          venv_bin="${RUNNER_TEMP}/spade65-build-venv/bin"
+          venv_python="${venv_bin}/python"
+          resolved_python=$("${venv_python}" -c \
+            'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')
+          file "${resolved_python}"
+          lipo -verify_arch x86_64 arm64 "${resolved_python}"
+          echo "${venv_bin}" >> "${GITHUB_PATH}"
+          echo "SPADE65_BUILD_PYTHON=${venv_python}" >> "${GITHUB_ENV}"
+      - name: Install pinned build dependencies
+        run: |
+          set -euo pipefail
           python -m pip install -r requirements-build.txt
-          python -m pip install . --no-deps
-          python -m pip install --no-cache-dir --no-binary=hidapi "hidapi==0.15.0"
-          lipo -verify_arch x86_64 arm64 "$(python -c 'import hid; print(hid.__file__)')"
+          python -m pip install --no-deps --no-build-isolation .
+          python -m pip --version
+          python -m PyInstaller --version
+      - name: Build and verify universal2 HID extension
+        run: bash packaging/build_macos_hidapi.sh
       - name: Build universal macOS disk image
         run: |
           export SPADE65_VERSION="${RELEASE_TAG#v}"

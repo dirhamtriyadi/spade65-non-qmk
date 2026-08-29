@@ -44,6 +44,7 @@ from .protocol import (
     streaming_activation_report,
     streaming_rgb_reports,
 )
+from .settings import GUI_HOST, GUI_PORT
 
 
 def _number(value: str) -> int:
@@ -416,8 +417,8 @@ def build_parser() -> argparse.ArgumentParser:
     info.set_defaults(handler=command_info)
 
     gui = subparsers.add_parser("gui", help="launch the local graphical interface")
-    gui.add_argument("--host", default="127.0.0.1")
-    gui.add_argument("--port", type=int, default=8765)
+    gui.add_argument("--host", default=GUI_HOST)
+    gui.add_argument("--port", type=int, default=GUI_PORT)
     gui.add_argument("--no-browser", action="store_true")
     gui.set_defaults(handler=command_gui)
 

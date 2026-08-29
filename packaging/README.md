@@ -60,6 +60,8 @@ requires the matching `APPIMAGE_RUNTIME_SHA256`. Verification is never skipped,
 and `--runtime-file` prevents appimagetool from fetching its mutable
 `continuous` runtime. macOS requires Xcode command-line tools and a universal2
 Python plus universal2 native dependencies. The release workflow builds
+with the SHA-256-verified Python.org 3.13.15 universal2 installer instead of
+assuming that an architecture-selected CI interpreter is fat. It then builds
 `hidapi` from source for both macOS architectures and scans every Mach-O file in
 the finished application to reject thin native binaries. Every packaged
 executable also runs a no-browser/no-device-enumeration smoke test before its
@@ -72,13 +74,23 @@ archive. The macOS script verifies the DMG, mounts it read-only, inspects the ap
 and reruns the smoke test from the mounted image.
 
 On macOS, install the native HID extension as universal2. In a clean virtual
-environment this command builds both slices instead of accepting a thin wheel:
+environment, first verify that the selected Python itself contains both slices,
+then use the same helper as CI. The helper forces a source wheel build, uses the
+pinned Cython/setuptools/wheel versions from `requirements-build.txt`, and
+hash-checks the pinned `hidapi` source archive before compiling it. It rejects a
+thin result before packaging:
 
 ```sh
-ARCHFLAGS="-arch x86_64 -arch arm64" MACOSX_DEPLOYMENT_TARGET=11.0 \
-  python -m pip install --force-reinstall --no-cache-dir \
-  --no-binary=hidapi "hidapi==0.15.0"
+resolved_python=$(python -c \
+  'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')
+lipo -verify_arch x86_64 arm64 "$resolved_python"
+bash packaging/build_macos_hidapi.sh
+python packaging/build.py
 ```
+
+GitHub Actions installs the pinned Python.org package after verifying SHA-256.
+For a manual build, install a current Python.org universal2 distribution first;
+the helper fails closed if the interpreter or resulting HID extension is thin.
 
 The macOS script reads the application version from `pyproject.toml`, verifies
 it against `spade65.__version__`, and embeds it in the app automatically.
