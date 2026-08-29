@@ -19,6 +19,7 @@
       <button data-page="macros" data-i18n="nav.macros">Macros</button>
       <button data-page="settings" data-i18n="nav.settings">Settings</button>
       <button data-page="diagnostics" data-i18n="nav.diagnostics">Diagnostics</button>
+      <button data-page="about" data-i18n="nav.about">About</button>
     </nav>
     <label class="language-picker"><span data-i18n="language.label">Language</span><select id="languageSelect" aria-label="Language" data-i18n-aria-label="language.label"><option value="en">English</option><option value="id">Bahasa Indonesia</option></select></label>
     <button id="quitBtn" class="sidebar-quit" data-i18n="action.quitApplication">Quit application</button>
@@ -108,6 +109,19 @@ spade65ctl service run ~/.config/spade65/default.json</pre><p class="hint" data-
     <section class="page" id="page-diagnostics">
       <div class="grid two"><div class="card"><h3 data-i18n="diagnostics.interfaces">Detected interfaces</h3><pre id="deviceJson" data-i18n="status.loading">Loading…</pre></div><div class="card"><h3 data-i18n="diagnostics.validation">Profile validation</h3><button id="validateBtn" data-i18n="action.validateProfile">Validate current profile</button><pre id="validationOutput" data-i18n="status.notRun">Not run</pre></div></div>
       <div class="card"><h3 data-i18n="diagnostics.parity">Original software parity</h3><table><thead><tr><th data-i18n="diagnostics.originalArea">Original area</th><th data-i18n="diagnostics.implementation">Implementation</th><th data-i18n="diagnostics.verification">Verification</th></tr></thead><tbody><tr><td data-i18n="diagnostics.keyboardArea">Keyboard assignment · 3 layers · profiles</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.keyboardVerification">All vendor assignment categories; local import/export</td></tr><tr><td data-i18n="diagnostics.macroArea">Macro editor / recorder</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.macroVerification">10 macros, 84 events, repeat and key binding</td></tr><tr><td data-i18n="diagnostics.rgbArea">20 built-in RGB effects</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.usbValidated">USB validated</td></tr><tr><td data-i18n="diagnostics.streamingArea">AP / streaming effects</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.streamingVerification">10 modes, layers, ranges, palette and advanced parameters</td></tr><tr><td data-i18n="diagnostics.perKeyArea">Per-key custom color</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.usbValidated">USB validated</td></tr><tr><td data-i18n="diagnostics.settingsArea">Debounce / dongle timers / reset</td><td class="ok-text" data-i18n="status.complete">Complete</td><td data-i18n="diagnostics.settingsVerification">Debounce USB validated; dongle/reset untested</td></tr><tr><td data-i18n="diagnostics.firmwareArea">Updater / firmware / bootloader / raw flash</td><td data-i18n="status.excluded">Excluded</td><td class="danger-text" data-i18n="diagnostics.brickBoundary">Brick-risk boundary</td></tr></tbody></table><p class="hint" data-i18n="diagnostics.parityHint">Dormant generic code in the vendor bundle (program association, long/instant press and polling-rate UI) is not an active Spade65 device page or is not serialized by its Jupeng backend. See docs/parity.md.</p></div>
+    </section>
+
+    <section class="page" id="page-about">
+      <div class="card">
+        <div class="card-heading"><div><h2 data-i18n="about.title">Spade65 Control Center</h2><p data-i18n="about.description">Independent configuration software for the Noir Spade65 non-QMK keyboard.</p></div><span class="pill" data-i18n="about.independent">Independent project</span></div>
+        <div class="grid two about-details">
+          <div><dl class="about-list"><dt data-i18n="about.versionLabel">Application version</dt><dd id="aboutVersion">Loading…</dd><dt data-i18n="about.maintainerLabel">Maintainer</dt><dd>dirhamtriyadi</dd><dt data-i18n="about.platformLabel">Linux backend</dt><dd>PySide6 / QtWebEngine</dd></dl></div>
+          <div><dl class="about-list"><dt data-i18n="about.repositoryLabel">Source repository</dt><dd><a href="https://github.com/dirhamtriyadi/spade65-non-qmk" target="_blank" rel="noopener">github.com/dirhamtriyadi/spade65-non-qmk</a></dd><dt data-i18n="about.licenseLabel">License</dt><dd>MIT</dd><dt data-i18n="about.supportLabel">Supported hardware</dt><dd>Spade65 non-QMK · USB 0603:0351</dd></dl></div>
+        </div>
+        <div class="button-row"><button id="updatesBtn" class="primary" data-i18n="about.checkUpdates">Check for updates</button><a class="button secondary" href="https://github.com/dirhamtriyadi/spade65-non-qmk/releases" target="_blank" rel="noopener" data-i18n="about.releaseNotes">Release notes</a></div>
+      </div>
+      <div class="card"><h3 data-i18n="about.safetyTitle">Safety and scope</h3><p data-i18n="about.safetyDescription">This application supports descriptor-validated configuration writes. Firmware flashing, bootloader access, raw flash, and arbitrary HID packets are intentionally disabled.</p></div>
+      <div class="card"><h3 data-i18n="about.privacyTitle">Privacy</h3><p data-i18n="about.privacyDescription">The application runs locally, stores profiles locally, and does not include telemetry or automatic update installation.</p></div>
     </section>
   </main>
   <script src="/layout-state.js"></script>
