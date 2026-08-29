@@ -147,6 +147,28 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Forbidden GPL-only Qt module", script)
         self.assertIn("Unexpected HIDAPI payload", script)
         self.assertIn("hidapi.libs", script)
+        self.assertIn("Host-bound Linux runtime entered the bundle", script)
+        for library in (
+            "libstdc++.so",
+            "libgcc_s.so",
+            "libgbm.so",
+            "libfontconfig.so",
+            "libfreetype.so",
+            "libexpat.so",
+            "libX11.so",
+            "libX11-xcb.so",
+            "libasound.so",
+            "libEGL.so",
+            "libGL.so",
+            "libdrm",
+            "libvulkan.so",
+            "libva.so",
+            "libxcb.so",
+            "libwayland-client.so",
+            "libglapi.so",
+            "libharfbuzz.so",
+        ):
+            self.assertIn(library, script)
         self.assertIn("Required Qt/XCB runtime was not bundled", script)
         for library in (
             "libxcb-shape.so.0",
@@ -160,6 +182,24 @@ class PackagingTests(unittest.TestCase):
             "libxcb-render-util.so.0",
         ):
             self.assertIn(library, script)
+
+        for workflow_path in (
+            ROOT / ".github" / "workflows" / "test.yml",
+            ROOT / ".github" / "workflows" / "release.yml",
+        ):
+            workflow = workflow_path.read_text(encoding="utf-8")
+            for package in (
+                "libstdc++6",
+                "libgcc-s1",
+                "libgbm1",
+                "libfontconfig1",
+                "libfreetype6",
+                "libexpat1",
+                "libx11-6",
+                "libx11-xcb1",
+                "libasound2",
+            ):
+                self.assertIn(package, workflow)
 
     def test_release_artifacts_include_legal_notices_and_qt_license_texts(self):
         attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
@@ -369,6 +409,20 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('"qtpy.QtDataVisualization"', spec)
         self.assertIn('"PySide6.QtDataVisualization"', spec)
         self.assertIn('ROOT / "packaging" / "hooks"', spec)
+        self.assertIn("LINUX_HOST_RUNTIME_LIBRARIES", spec)
+        self.assertIn("analysis.binaries = [", spec)
+        for library in (
+            "libstdc++.so.6",
+            "libgcc_s.so.1",
+            "libgbm.so.1",
+            "libfontconfig.so.1",
+            "libfreetype.so.6",
+            "libexpat.so.1",
+            "libX11.so.6",
+            "libX11-xcb.so.1",
+            "libasound.so.2",
+        ):
+            self.assertIn(library, spec)
         hook_root = ROOT / "packaging" / "hooks"
         qml_hook = (hook_root / "hook-PySide6.QtQml.py").read_text(
             encoding="utf-8"

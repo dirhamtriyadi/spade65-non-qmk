@@ -110,6 +110,14 @@ build on the oldest target environment you intend to support. A graphical
 session and the normal Qt display dependencies are required to open the window,
 while the packaged smoke test remains headless.
 
+The AppImage deliberately excludes the build host's `libstdc++`, `libgcc_s`,
+GBM, X11 core, ALSA, Fontconfig, FreeType, Expat, and graphics-dispatch
+libraries. Those libraries load GPU/audio drivers or parse host configuration
+and must therefore stay aligned with the target system. The build fails if one
+re-enters the bundle. This prevents an Ubuntu baseline library from shadowing a
+newer Mesa/Intel driver, ALSA plugin, or Fontconfig installation on rolling
+distributions.
+
 The PyInstaller build uses local hooks for the widgets-only QtWebEngine backend.
 They omit the unused QML tree, Qt Data Visualization, and optional virtual
 keyboard/Quick 3D tooling that would otherwise pull GPL-only Qt modules into the

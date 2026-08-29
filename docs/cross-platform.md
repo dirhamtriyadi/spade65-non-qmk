@@ -128,6 +128,22 @@ dan beralih ke browser bila runtime native tidak dapat dimuat. Gunakan
 `python -m spade65 gui --browser` untuk selalu membuka browser atau
 `python -m spade65 gui --no-browser` untuk menjalankan server saja.
 
+### Troubleshooting Wayland dan rolling distribution
+
+AppImage v0.7.2 dan seterusnya memakai runtime C++, grafis, audio, serta font
+milik host agar tetap cocok dengan driver dan konfigurasi distro. Rilis lama
+dapat gagal pada EndeavourOS/Arch dengan pesan `CXXABI not found`, `EGL not
+available`, atau error Fontconfig. Gunakan rilis terbaru; sebagai fallback
+aman untuk v0.7.1, jalankan server tanpa membuka proses desktop lain:
+
+```bash
+./Spade65-Linux-x86_64.AppImage gui --no-browser
+```
+
+Lalu buka alamat `http://127.0.0.1:8765/` secara manual di browser. Jangan
+membakukan workaround `LD_PRELOAD` di launcher karena lokasi dan ABI library
+berbeda antar-distribusi; perbaikan produksi berada di isi AppImage v0.7.2.
+
 Apabila descriptor suatu collection tidak dapat dibaca, `probe` dapat tetap
 menampilkannya tetapi command write menolak collection tersebut. VID/PID saja
 tidak pernah cukup untuk melewati validasi.

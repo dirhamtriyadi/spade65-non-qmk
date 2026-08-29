@@ -31,6 +31,50 @@ source_version=$("$build_python" \
 "$build_python" -m PyInstaller --noconfirm --clean \
   "$repo_root/packaging/spade65.spec"
 
+# Host graphics dispatchers, C/C++ runtimes, ALSA, and the font stack must
+# remain compatible with the user's GPU/audio drivers and /etc/fonts
+# configuration. Ubuntu copies inside the AppImage can shadow newer rolling-
+# distribution libraries and break Wayland, XWayland, audio, or font loading.
+for host_library_pattern in \
+  'libstdc++.so*' \
+  'libgcc_s.so*' \
+  'libgbm.so*' \
+  'libfontconfig.so*' \
+  'libfreetype.so*' \
+  'libexpat.so*' \
+  'libX11.so*' \
+  'libX11-xcb.so*' \
+  'libasound.so*' \
+  'libEGL.so*' \
+  'libGL.so*' \
+  'libGLX.so*' \
+  'libGLdispatch.so*' \
+  'libOpenGL.so*' \
+  'libGLES*.so*' \
+  'libdrm.so*' \
+  'libdrm_amdgpu.so*' \
+  'libdrm_intel.so*' \
+  'libdrm_nouveau.so*' \
+  'libvulkan.so*' \
+  'libva.so*' \
+  'libva-drm.so*' \
+  'libva-x11.so*' \
+  'libxcb.so*' \
+  'libxcb-dri2.so*' \
+  'libxcb-dri3.so*' \
+  'libwayland-client.so*' \
+  'libwayland-cursor.so*' \
+  'libwayland-egl.so*' \
+  'libglapi.so*' \
+  'libharfbuzz.so*'; do
+  bundled_host_library=$(find "$repo_root/dist/Spade65" \
+    -name "$host_library_pattern" -print -quit)
+  if [[ -n $bundled_host_library ]]; then
+    echo "Host-bound Linux runtime entered the bundle: $bundled_host_library" >&2
+    exit 1
+  fi
+done
+
 # The host graphics dispatcher (EGL/GL) must match the user's driver stack,
 # but these generic XCB support libraries are safe and necessary to bundle.
 # Fail before AppImage creation if the build host could not supply any of them.
