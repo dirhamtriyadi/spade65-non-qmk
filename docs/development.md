@@ -1,78 +1,81 @@
-# Panduan pengembangan
+**English** · [Bahasa Indonesia](id/development.md)
 
-## Arsitektur
+# Development guide
+
+## Architecture
 
 ```text
 spade65ctl.py
   └── spade65.cli
-        ├── spade65.protocol   # konstanta dan builder paket murni
-        ├── spade65.device     # model + parser descriptor netral OS
-        ├── spade65.transport  # pemilih backend lintas platform
-        ├── spade65.hidraw     # backend Linux: sysfs + ioctl
-        ├── spade65.application # ownership port + lifecycle GUI bersama
-        ├── spade65.instance   # identitas/aktivasi instance localhost
-        ├── spade65.gui        # API HTTP loopback + asset web
-        └── spade65.desktop    # lifecycle jendela PyWebView
-              └── spade65.web # HTML/CSS/JS + katalog locale
+        ├── spade65.protocol   # constants and pure packet builders
+        ├── spade65.device     # OS-neutral descriptor model and parser
+        ├── spade65.transport  # cross-platform backend selector
+        ├── spade65.hidraw     # Linux backend: sysfs + ioctl
+        ├── spade65.application # shared port ownership + GUI lifecycle
+        ├── spade65.instance   # localhost instance identity/activation
+        ├── spade65.gui        # loopback HTTP API + web assets
+        └── spade65.desktop    # PyWebView window lifecycle
+              └── spade65.web # HTML/CSS/JS + locale catalogs
 
 packaging/
-  ├── build.py                 # dispatcher build manual sesuai OS host
+  ├── build.py                 # manual build dispatcher for the host OS
   ├── launcher.py              # desktop default, browser fallback, smoke test
-  ├── spade65.spec             # asset + backend WebView per platform
-  └── build_*                  # paket native Windows, Linux, dan macOS
+  ├── spade65.spec             # assets + per-platform WebView backend
+  └── build_*                  # native Windows, Linux, and macOS packages
 ```
 
-Pemisahan ini disengaja:
+This separation is intentional:
 
-- `protocol.py` dapat diuji tanpa Linux maupun keyboard.
-- `hidraw.py` tidak mengetahui arti opcode.
-- `transport.py` mempertahankan hidraw di Linux dan memakai HIDAPI yang dapat
-  membaca descriptor pada Windows/macOS.
-- `cli.py` menangani validasi keselamatan dan UX.
-- `gui.py` hanya bind ke loopback, membuat token sesi, memvalidasi authority
-  `Host`/`Origin` untuk menolak DNS rebinding, dan melayani API serta asset yang
-  sama untuk WebView maupun browser.
-- `desktop.py` mengelola PyWebView, storage persisten, lifecycle server/window,
-  download, dan aktivasi instance yang sudah berjalan.
-- `application.py` mengklaim port secara atomik, menyalakan server sebelum
-  renderer, mengantrekan aktivasi selama window startup, dan berbagi alur yang
-  sama antara executable tanpa argumen dan subcommand `gui`.
-- `instance.py` hanya menerima instance yang halaman dan token Spade65-nya
-  terverifikasi; layanan lain pada 8765 tidak diambil alih.
-- `web/locales/index.json` mendaftarkan bahasa; `en.json` adalah canonical
-  catalog/default dan locale lain harus memiliki key yang sama.
-- `packaging/launcher.py` membuka jendela desktop pada port stabil 8765 tanpa
-  argumen, beralih ke browser bila backend native gagal, mengaktifkan jendela
-  existing pada peluncuran kedua, dan meneruskan argumen lain ke CLI.
+- `protocol.py` can be tested without Linux or a keyboard.
+- `hidraw.py` does not know the meaning of opcodes.
+- `transport.py` retains hidraw on Linux and uses HIDAPI, which can read
+  descriptors, on Windows and macOS.
+- `cli.py` handles safety validation and user experience.
+- `gui.py` binds only to loopback, creates a session token, validates the
+  `Host`/`Origin` authority to reject DNS rebinding, and serves the same API and
+  assets to the WebView and browser.
+- `desktop.py` manages PyWebView, persistent storage, server/window lifecycle,
+  downloads, and activation of an existing instance.
+- `application.py` claims the port atomically, starts the server before the
+  renderer, queues activation during window startup, and shares one path between
+  the no-argument executable and the `gui` subcommand.
+- `instance.py` accepts only an instance whose Spade65 page and token have been
+  verified; it does not take over another service on port 8765.
+- `web/locales/index.json` registers languages; `en.json` is the canonical and
+  default catalog, and every other locale must contain the same keys.
+- `packaging/launcher.py` opens the desktop window on stable port 8765 when no
+  arguments are supplied, falls back to the browser if the native backend fails,
+  activates the existing window on a second launch, and passes other arguments
+  to the CLI.
 
-GUI v0.7.0 bukan rewrite ke widget native. Layout dan logika antarmuka tetap
-HTML/CSS/JavaScript, dirender di shell native PyWebView. Extra `desktop` memasang
-backend platform: PySide6/QtWebEngine pada Linux, pythonnet/Edge WebView2 pada
-Windows, dan PyObjC/Cocoa/WebKit pada macOS. Extra `cross-platform` tetap
-memasang `hidapi` untuk Windows/macOS; jangan membuat fallback write bila HIDAPI
-gagal membaca descriptor. Windows mengharuskan Edge WebView2 Runtime tersedia
-pada host.
+The v0.7.0 GUI is not a rewrite using native widgets. The interface layout and
+logic remain HTML/CSS/JavaScript rendered in a native PyWebView shell. The
+`desktop` extra installs the platform backend: PySide6/QtWebEngine on Linux,
+pythonnet/Edge WebView2 on Windows, and PyObjC/Cocoa/WebKit on macOS. The
+`cross-platform` extra still installs `hidapi` for Windows and macOS; do not add
+a write fallback when HIDAPI cannot read a descriptor. Windows requires Edge
+WebView2 Runtime on the host.
 
-Desktop memakai `private_mode=False` dan direktori storage khusus aplikasi agar
-`localStorage` tidak hilang ketika jendela ditutup. Lokasinya dipilih oleh
-`desktop_storage_path()` untuk Local AppData pada Windows dan XDG data pada
-Linux. Cocoa WebKit memakai default website data store persisten yang dikelola
-macOS untuk bundle ID aplikasi, karena backend tersebut mengabaikan custom path
-pywebview. Pada Linux/macOS, `DesktopApi` memvalidasi JSON dan membuka dialog
-Save native untuk ekspor profil/library. Windows memakai handler download
-WebView2 pada UI thread; mode browser tetap memakai download Blob. Menutup
-jendela atau endpoint quit menghentikan server; tidak ada system tray. Mode
-browser dan `--no-browser` tetap tersedia melalui CLI.
+The desktop uses `private_mode=False` and an application-specific storage
+directory so `localStorage` is not lost when the window closes.
+`desktop_storage_path()` selects Local AppData on Windows and XDG data on Linux.
+Cocoa WebKit uses the persistent default website data store managed by macOS for
+the application bundle ID because that backend ignores pywebview's custom path.
+On Linux and macOS, `DesktopApi` validates JSON and opens a native Save dialog
+for profile and library exports. Windows uses the WebView2 download handler on
+the UI thread; browser mode continues to use Blob downloads. Closing the window
+or calling the quit endpoint stops the server; there is no system tray. Browser
+mode and `--no-browser` remain available through the CLI.
 
-Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
-yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan
-implementasi HTML/CSS orisinal; gambar PNG vendor tidak boleh disalin ke Git.
-`web/layout-state.js` adalah resolver murni untuk enum layout, migrasi storage,
-normalisasi USB/dongle, serta fallback disconnected. Firmware dan software
-original tidak menyediakan readback layout fisik; frontend karena itu hanya
-memulihkan preferensi host dan menyebutkannya secara eksplisit di UI.
+The GUI layouts use the `ItemCss` coordinates for `SPADE65-01` through
+`SPADE65-04` found in `KeyBoardStyle.js`. The repository stores only the geometry
+and an original HTML/CSS implementation; vendor PNG images must not be copied
+into Git. `web/layout-state.js` is a pure resolver for layout enums, storage
+migration, USB/dongle normalization, and the disconnected fallback. Neither the
+firmware nor the original software provides physical-layout readback, so the
+frontend restores only a host preference and states this explicitly in the UI.
 
-## Menjalankan quality checks
+## Running quality checks
 
 ```bash
 python -m unittest discover -v
@@ -84,95 +87,108 @@ python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```
 
-Untuk perubahan transport, tambahkan descriptor sintetis ke `tests/test_hidraw.py`. Untuk perubahan paket, tambahkan assertion offset-by-offset ke `tests/test_protocol.py`.
+For transport changes, add synthetic descriptors to `tests/test_hidraw.py`. For
+packet changes, add offset-by-offset assertions to `tests/test_protocol.py`.
 
-Perubahan locale harus mempertahankan key parity terhadap `en.json`, placeholder
-bernama `{...}`, serta fallback English. Ikuti
-[`localization.md`](localization.md) dan uji teks statis maupun renderer dinamis.
+Locale changes must preserve key parity with `en.json`, named `{...}`
+placeholders, and the English fallback. Follow
+[`localization.md`](localization.md), and test both static text and dynamic
+renderers.
 
-Perubahan desktop packaging harus diuji pada OS target. Setiap executable wajib
-lulus `--smoke-test` tanpa membuat jendela, membuka browser, enumerasi device,
-atau HID write sebelum dikemas. Smoke test mengimpor backend WebView platform
-dan memeriksa asset/route localhost; unit test lifecycle memakai WebView mock
-agar tidak memerlukan display. Tetap lakukan uji manual untuk window close,
-**Quit application**, second-launch activation, import, dan download ekspor pada
-OS target.
+Desktop-packaging changes must be tested on the target operating system. Every
+executable must pass `--smoke-test` without creating a window, opening a browser,
+enumerating devices, or writing HID before it is packaged. The smoke test imports
+the platform WebView backend and checks localhost assets and routes; lifecycle
+unit tests use a mock WebView so they do not require a display. Continue to test
+window close, **Quit application**, second-launch activation, import, and export
+downloads manually on the target operating system.
 
-Workflow test pada setiap push ke `main` menjalankan package preflight native
-Windows, Linux, dan macOS tanpa publish. Workflow tag kemudian memasang extra
-`desktop`, membangun ulang source immutable dari tag, memeriksa universal Mach-O
-pada macOS, dan baru memublikasikan tiga asset setelah semuanya tersedia.
-AppImage release dibangun dan di-smoke-test pada runner Ubuntu 22.04 x86_64
-(glibc 2.35) serta membawa PySide6/QtWebEngine, sehingga audit ukuran artifact
-merupakan bagian review packaging. AppImage yang dibuat manual mewarisi baseline
-glibc mesin build dan tidak otomatis memiliki portabilitas yang sama. Lihat
-[`releasing.md`](releasing.md).
+The test workflow for every push to `main` runs a native Windows, Linux, and
+macOS packaging preflight without publishing. The tag workflow then installs the
+`desktop` extra, rebuilds immutable source from the tag, checks the universal
+Mach-O binary on macOS, and publishes the three assets only after all are
+available. The release AppImage is built and smoke-tested on an Ubuntu 22.04
+x86_64 runner (glibc 2.35) and includes PySide6/QtWebEngine, so reviewing artifact
+size is part of packaging review. An AppImage built manually inherits the build
+machine's glibc baseline and does not automatically have the same portability.
+See [`releasing.md`](releasing.md).
 
-## Aturan keselamatan implementasi
+## Implementation safety rules
 
-1. Semua command write harus tetap memerlukan `--confirm`.
-2. Semua command write harus memiliki `--dry-run`.
-3. Interface harus dipilih berdasarkan VID, PID, usage, report ID, dan report length.
-4. Perbedaan descriptor adalah error, bukan warning.
-5. Firmware update, raw flash, dan bootloader berada di luar scope sampai ada
-   prosedur recovery yang telah diuji; jangan membuat endpoint atau builder-nya.
-6. Jangan menulis report ke interface keyboard boot/consumer biasa.
-7. Jika sebuah command hanya valid untuk dongle, batasi PID-nya di code.
-8. GUI hanya boleh bind ke loopback, memakai token sesi, menolak `Host` asing
-   serta `Origin` browser yang tidak cocok, dan mengekspos allowlist tindakan
-   konfigurasi yang sudah memiliki builder tervalidasi.
-9. Profil JSON adalah data deklaratif; jangan pernah menerima byte/report mentah.
+1. Every write command must continue to require `--confirm`.
+2. Every write command must provide `--dry-run`.
+3. Select interfaces by VID, PID, usage, report ID, and report length.
+4. A descriptor mismatch is an error, not a warning.
+5. Firmware updates, raw flashing, and bootloader access remain out of scope
+   until a recovery procedure has been tested; do not create endpoints or
+   builders for them.
+6. Do not write reports to ordinary boot-keyboard or consumer interfaces.
+7. If a command is valid only for the dongle, restrict its PID in code.
+8. The GUI may bind only to loopback, must use a session token, must reject
+   foreign `Host` values and mismatched browser `Origin` values, and may expose
+   only an allowlist of configuration actions with validated builders.
+9. JSON profiles are declarative data; never accept raw report bytes or packets.
 
-## Workflow pengujian hardware
+## Hardware-testing workflow
 
-Buat branch terpisah dan kerjakan dari operasi paling kecil:
+Create a separate branch and proceed from the smallest operation:
 
-1. `probe` pada USB dan dongle.
-2. RGB built-in satu kali.
-3. Debounce dengan nilai default 5 ms terlebih dahulu.
-4. Timer dongle.
-5. Baca current state jika format get report sudah diketahui.
-6. Per-key RGB.
-7. Remap satu tombol.
-8. Layer dan macro.
+1. Run `probe` over USB and through the dongle.
+2. Apply one built-in RGB effect.
+3. Set debounce to the default 5 ms first.
+4. Set dongle timers.
+5. Read current state if the get-report format is known.
+6. Apply per-key RGB.
+7. Remap one key.
+8. Test layers and macros.
 
-Setelah setiap write, uji input keyboard dengan tool seperti `evtest` atau halaman keyboard tester. Cabut-pasang perangkat sebelum menyimpulkan bahwa command gagal permanen.
+After every write, test keyboard input with a tool such as `evtest` or a keyboard
+tester page. Disconnect and reconnect the device before concluding that a
+command failed permanently.
 
-## Menambahkan command baru
+## Adding a command
 
-1. Buat builder yang mengembalikan `bytes` di `protocol.py`.
-2. Validasi seluruh range sebelum membangun buffer.
-3. Tambahkan test dengan panjang report dan offset penting.
-4. Tambahkan handler CLI yang memakai `_write_report()`.
-5. Tentukan usage dan PID yang paling sempit.
-6. Dokumentasikan statusnya sebagai belum diuji sampai hardware test selesai.
+1. Create a builder that returns `bytes` in `protocol.py`.
+2. Validate every range before constructing the buffer.
+3. Add a test that checks report length and important offsets.
+4. Add a CLI handler that uses `_write_report()`.
+5. Select the narrowest applicable usage and PID.
+6. Document its status as untested until hardware testing is complete.
 
-## Status key remapping
+## Key-remapping status
 
-Hal yang sudah diketahui:
+Known facts:
 
-- Report ID `07`, opcode `03`, panjang 620 byte.
-- Data mulai di offset 8.
-- Terdapat tiga layer.
-- Setiap matrix slot memakai dua byte.
-- Matrix internal wired memiliki 102 slot; layout UI memiliki 70 tombol.
-- Default USB HID keycodes tersedia dalam modul `SKLocation` vendor.
+- Report ID `07`, opcode `03`, length 620 bytes.
+- Data begins at offset 8.
+- There are three layers.
+- Each matrix slot uses two bytes.
+- The wired internal matrix has 102 slots; the UI layout has 70 keys.
+- Default USB HID keycodes are available in the vendor's `SKLocation` module.
 
-Langkah implementasi berikutnya:
+Implementation progress:
 
-1. Selesai: ekstrak entry `0x06030x0351` dari `SKLocation.js` secara lokal.
-2. Selesai: konversi mapping menjadi konstanta orisinal 102 slot di `spade65/keymap.py`.
-3. Selesai: tambahkan model `KeyAssignment(modifiers, usage)` dan builder tiga layer.
-4. Selesai: buat `keymap export-default` yang hanya menghasilkan JSON/frame offline.
-5. Selesai: implementasikan profil JSON untuk assignment keyboard, macro, dan warna.
-6. Selesai: aktifkan write dengan dry-run, validasi descriptor, dan konfirmasi tambahan.
-7. Berikutnya: bandingkan satu remap dengan USB capture dan validasi macro pada hardware.
+1. Complete: extract entry `0x06030x0351` from `SKLocation.js` locally.
+2. Complete: convert the mapping into an original 102-slot constant in
+   `spade65/keymap.py`.
+3. Complete: add the `KeyAssignment(modifiers, usage)` model and three-layer
+   builder.
+4. Complete: create `keymap export-default`, which generates only offline JSON
+   and frames.
+5. Complete: implement JSON profiles for keyboard assignments, macros, and
+   colors.
+6. Complete: enable writes with dry-run, descriptor validation, and an additional
+   confirmation.
+7. Next: compare one remap against a USB capture and validate macros on hardware.
 
-Jangan membangun keymap dari urutan fisik 70 tombol saja. Firmware menggunakan slot kosong dalam matrix 102 elemen, sehingga menghilangkan slot kosong dapat menggeser semua assignment.
+Do not build the keymap from only the 70-key physical order. The firmware uses
+empty slots in its 102-element matrix, so removing the empty slots can shift
+every assignment.
 
-## Melanjutkan reverse engineering lokal
+## Continuing local reverse engineering
 
-Artefak vendor tidak berada di repository. Jika installer resmi tersedia di root checkout:
+Vendor artifacts are not stored in the repository. If the official installer is
+available at the checkout root:
 
 ```bash
 innoextract --extract --output-dir extracted Spade65_SETUP_20240403.exe
@@ -182,21 +198,25 @@ python tools/deobfuscate_jupeng.py \
   reverse_engineered/backend/protocol/device/keyborad/JupengSeries.deobfuscated.js
 ```
 
-`innoextract` adalah tool sistem dan tidak dibundel. Dua script Python dalam repository hanya memakai standard library.
+`innoextract` is a system tool and is not bundled. The two Python scripts in the
+repository use only the standard library.
 
-## Capture Windows yang berguna
+## Useful Windows captures
 
-Jika dibutuhkan, gunakan USBPcap + Wireshark dan lakukan satu perubahan per capture:
+If necessary, use USBPcap and Wireshark and make only one change in each capture:
 
-- Capture A: RGB fixed, brightness 1.
-- Capture B: RGB fixed, brightness 2.
-- Capture C: tombol A menjadi B.
-- Capture D: kembalikan tombol B menjadi A.
+- Capture A: fixed RGB, brightness 1.
+- Capture B: fixed RGB, brightness 2.
+- Capture C: remap A to B.
+- Capture D: restore B to A.
 
-Perbandingan satu-delta mengurangi ambiguity. Catat mode kabel/dongle, versi firmware, dan timestamp tindakan. Hindari capture firmware update.
+A single-delta comparison reduces ambiguity. Record the wired/dongle mode,
+firmware version, and the action timestamp. Avoid capturing a firmware update.
 
-## Data sensitif dan artefak vendor
+## Sensitive data and vendor artifacts
 
-- `probe --json` tidak menampilkan `unique`/serial secara default. Jangan memakai `--include-unique` untuk artefak publik.
-- Jangan commit installer, firmware, `app.asar`, binary `.node`, atau hasil ekstraksi source vendor.
-- Commit hanya catatan interoperabilitas dan kode implementasi orisinal.
+- `probe --json` does not display the `unique`/serial value by default. Do not
+  use `--include-unique` in public artifacts.
+- Do not commit the installer, firmware, `app.asar`, `.node` binaries, or
+  extracted vendor source.
+- Commit only interoperability notes and original implementation code.

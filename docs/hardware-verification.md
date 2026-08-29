@@ -1,29 +1,35 @@
-# Verifikasi hardware
+**English** · [Bahasa Indonesia](id/hardware-verification.md)
 
-Pengujian terakhir dilakukan pada 29 Agustus 2026 menggunakan Spade65 USB
-`0603:0351` yang tersedia di mesin pengembangan.
+# Hardware verification
 
-## Berhasil
+The latest tests were performed on August 29, 2026, using the USB Spade65
+`0603:0351` available on the development machine.
 
-- Tiga interface `/dev/hidraw3`, `/dev/hidraw4`, dan `/dev/hidraw5` ditemukan.
-- Interface konfigurasi mengiklankan feature report `0x07` sepanjang 620 byte,
-  feature report `0x08` sepanjang 8 byte, serta output report `0x06` sepanjang
-  64 byte.
-- Satu frame custom timeline berhasil dikirim melalui perintah background
-  service ke `/dev/hidraw4`. Jalur ini hanya mengaktifkan streaming dan mengirim
-  lima output RGB; tidak menulis flash, keymap, macro, atau bootloader.
-- Pembacaan sysfs menghasilkan USB revision `01.00`. Nilai ini tidak diberi label
-  versi firmware.
+## Successful tests
 
-## Tidak dijalankan
+- Three interfaces were discovered: `/dev/hidraw3`, `/dev/hidraw4`, and
+  `/dev/hidraw5`.
+- The configuration interface advertises a 620-byte feature report `0x07`, an
+  8-byte feature report `0x08`, and a 64-byte output report `0x06`.
+- One custom-timeline frame was sent successfully to `/dev/hidraw4` through a
+  background-service command. This path only activates streaming and sends five
+  RGB output reports; it does not write flash, the keymap, macros, or the
+  bootloader.
+- A sysfs read returned USB revision `01.00`. This value is not labeled as a
+  firmware version.
 
-- Keymap dan macro tidak ditulis karena perangkat tidak menyediakan readback
-  konfigurasi untuk membuat backup kondisi saat ini. Mengujinya akan menimpa
-  tiga layer dan macro pengguna tanpa jalur restore yang terjamin.
-- Reset tidak dikirim karena bersifat menghapus konfigurasi.
-- Timer dongle tidak dikirim karena PID dongle `0603:0356` tidak terdeteksi.
-- Firmware, bootloader, raw flash, dan arbitrary HID tidak tersedia di aplikasi.
+## Tests not performed
 
-Frame keymap, macro, reset, dan timer tetap diuji melalui unit test terhadap
-format report hasil analisis backend original. Pengujian fisiknya baru aman
-dilakukan setelah tersedia profil backup yang diketahui atau dongle yang sesuai.
+- The keymap and macros were not written because the device does not provide
+  configuration readback from which to back up its current state. Testing these
+  operations would overwrite the user's three layers and macros without a
+  guaranteed restore path.
+- Reset was not sent because it erases configuration.
+- Dongle timers were not sent because dongle PID `0603:0356` was not detected.
+- Firmware, bootloader, raw-flash, and arbitrary-HID operations are not
+  available in the application.
+
+The keymap, macro, reset, and timer frames are still covered by unit tests
+against the report formats recovered from the original backend. Physical tests
+will only be safe once a known backup profile or the appropriate dongle is
+available.

@@ -1,26 +1,30 @@
-# Lokalisasi GUI
+**English** · [Bahasa Indonesia](id/localization.md)
 
-GUI memakai katalog JSON yang dibundel bersama aplikasi. English (`en`) adalah
-bahasa canonical sekaligus default, dan Bahasa Indonesia (`id`) tersedia sejak
-versi `0.6.0`. Pilihan pada sidebar disimpan di `localStorage` dengan key
-`spade65-language`. Sejak v0.7.0, jendela standalone memakai profil WebView
-khusus aplikasi dengan `private_mode=False`, sehingga pilihan tetap digunakan
-saat GUI dibuka kembali pada origin localhost yang sama. Storage desktop berada
-di Local AppData Windows dan XDG data Linux; pada macOS, Cocoa WebKit memakai
-default website data store persisten yang dikelola OS untuk bundle ID aplikasi.
+# GUI localization
 
-Mode `gui --browser` dan fallback browser memakai `localStorage` profil browser,
-yang terpisah dari storage WebView. Backup library menyimpan code bahasa dan
-download ekspor tetap didukung di jendela desktop; restore akan menerapkan bahasa
-kembali bila locale tersebut masih didukung. Backup/restore juga merupakan cara
-yang aman untuk memindahkan profil dan pilihan bahasa antara WebView dan browser.
-Bahasa browser tidak dideteksi otomatis.
+The GUI uses JSON catalogs bundled with the application. English (`en`) is both
+the canonical and default language, and Bahasa Indonesia (`id`) has been
+available since version `0.6.0`. The sidebar selection is stored in
+`localStorage` under the `spade65-language` key. Since v0.7.0, the standalone
+window has used an application-specific WebView profile with
+`private_mode=False`, so the selection remains in effect after reopening the GUI
+at the same localhost origin. Desktop storage resides in Windows Local AppData
+and Linux XDG data; on macOS, Cocoa WebKit uses the persistent default website
+data store managed by the operating system for the application bundle ID.
 
-Jika manifest atau locale terpilih gagal dimuat, GUI kembali ke English. Teks
-English yang tertanam di HTML juga menjadi fallback paling awal agar halaman
-tetap dapat digunakan ketika katalog gagal dilayani.
+The `gui --browser` mode and browser fallback use the browser profile's
+`localStorage`, which is separate from WebView storage. A library backup includes
+the language code, and export downloads remain supported in the desktop window;
+restore reapplies the language if that locale is still supported. Backup and
+restore are also the safe way to transfer profiles and language preferences
+between a WebView and a browser. The browser language is not detected
+automatically.
 
-## Struktur file
+If the manifest or selected locale cannot be loaded, the GUI returns to English.
+English text embedded in the HTML is also the earliest fallback so the page
+remains usable if catalogs cannot be served.
+
+## File structure
 
 ```text
 spade65/web/
@@ -32,7 +36,7 @@ spade65/web/
     └── id.json
 ```
 
-`locales/index.json` adalah manifest bahasa:
+`locales/index.json` is the language manifest:
 
 ```json
 {
@@ -44,19 +48,18 @@ spade65/web/
 }
 ```
 
-Nama file harus sama dengan `code`, hanya memakai huruf, angka, `_`, atau `-`,
-dan berakhiran `.json`. Server hanya melayani pola nama aman tersebut. File
-locale ikut dimasukkan melalui package data setuptools dan data collection
-PyInstaller, jadi perubahan katalog berlaku pada instalasi source maupun paket
-desktop.
+Each filename must match its `code`, use only letters, digits, `_`, or `-`, and
+end in `.json`. The server serves only this safe filename pattern. Locale files
+are included through setuptools package data and PyInstaller data collection, so
+catalog changes apply to both source installations and desktop packages.
 
-## Konvensi string
+## String conventions
 
-Semua locale harus memiliki key yang sama dengan `en.json`. Gunakan key stabil
-berdasarkan area dan makna, misalnya `nav.device`, `action.applyProfile`, atau
-`profile.savedLocal`; jangan memakai kalimat English sebagai key.
+Every locale must contain the same keys as `en.json`. Use stable keys based on
+their area and meaning, such as `nav.device`, `action.applyProfile`, or
+`profile.savedLocal`; do not use an English sentence as a key.
 
-Untuk teks statis di HTML, pilih atribut sesuai target:
+For static HTML text, select the attribute appropriate to the target:
 
 ```html
 <h3 data-i18n="safety.title">Safety status</h3>
@@ -66,56 +69,71 @@ Untuk teks statis di HTML, pilih atribut sesuai target:
 <select data-i18n-aria-label="device.select" aria-label="Device"></select>
 ```
 
-- `data-i18n` mengganti `textContent`;
-- `data-i18n-placeholder` mengganti `placeholder`;
-- `data-i18n-title` mengganti `title`;
-- `data-i18n-aria-label` mengganti `aria-label`.
+- `data-i18n` replaces `textContent`;
+- `data-i18n-placeholder` replaces `placeholder`;
+- `data-i18n-title` replaces `title`;
+- `data-i18n-aria-label` replaces `aria-label`.
 
-Pertahankan fallback English yang bermakna pada markup. Jangan memasang
-`data-i18n` pada elemen yang berisi child node yang harus dipertahankan, karena
-penggantian `textContent` akan menghapus child tersebut.
+Keep a meaningful English fallback in the markup. Do not attach `data-i18n` to
+an element containing child nodes that must be preserved, because replacing its
+`textContent` removes those children.
 
-String yang dibuat dinamis di `app.js` harus memakai helper `t()`:
+Dynamically created strings in `app.js` must use the `t()` helper:
 
 ```javascript
 toast(t('profile.savedLocal', {name}));
 ```
 
-Interpolation memakai placeholder bernama berbentuk `{name}`. Nama placeholder
-dan jumlahnya harus identik di setiap bahasa. Jangan merangkai beberapa fragmen
-terjemahan untuk membentuk satu kalimat; sediakan satu key lengkap agar urutan
-kata dapat berubah antarbahasa. Setelah bahasa berubah, renderer dinamis yang
-relevan harus dipanggil dari `renderLocalizedDynamic()` agar daftar atau status
-yang sudah tampil ikut diperbarui.
+Interpolation uses named placeholders in the form `{name}`. Placeholder names
+and counts must be identical in every language. Do not concatenate translated
+fragments to form a sentence; provide one complete key so word order can differ
+between languages. After the language changes, call the relevant dynamic
+renderers from `renderLocalizedDynamic()` so lists and statuses already on the
+screen are updated as well.
 
-Teks dari backend, nama perangkat, path, keycode HID, token konfirmasi literal
-seperti `RESET SPADE65`/`APPLY PROFILE`, dan isi JSON diagnostics tidak perlu
-diterjemahkan. Untuk pesan UI yang membungkus error backend, terjemahkan bagian
-UI-nya dan sisipkan detail error sebagai placeholder.
+Backend text, device names, paths, HID keycodes, literal confirmation tokens such
+as `RESET SPADE65`/`APPLY PROFILE`, and JSON diagnostic contents do not need
+translation. When a UI message wraps a backend error, translate the UI portion
+and insert the error details as a placeholder.
 
-## Menambahkan bahasa
+## Adding a language
 
-Contoh menambahkan bahasa Jepang dengan code `ja`:
+For example, to add Japanese with the code `ja`:
 
-1. Salin `spade65/web/locales/en.json` ke
+1. Copy `spade65/web/locales/en.json` to
    `spade65/web/locales/ja.json`.
-2. Terjemahkan seluruh value tanpa mengubah key atau placeholder `{...}`.
-3. Tambahkan `{"code": "ja", "name": "日本語"}` ke array `languages` dalam
-   `locales/index.json`. Nama ini adalah nama bahasa yang tampil pada selector.
-4. Jalankan test dan pemeriksaan katalog di bawah.
-5. Buka jendela desktop, ganti bahasa, tutup dan jalankan ulang aplikasi, lalu
-   pastikan pilihan tetap tersimpan.
-6. Ulangi dengan `gui --browser`, lalu periksa semua page, dialog, toast,
-   placeholder, title, download ekspor, serta label aksesibilitas.
+2. Translate every value without changing keys or `{...}` placeholders.
+3. Add `{"code": "ja", "name": "日本語"}` to the `languages` array in
+   `locales/index.json`. This name is displayed in the language selector.
+4. Run the tests and catalog checks below.
+5. Open the desktop window, change the language, close and relaunch the
+   application, and verify that the selection persists.
+6. Repeat with `gui --browser`, then inspect every page, dialog, toast,
+   placeholder, title, export download, and accessibility label.
 
-Tidak perlu mengubah backend, daftar route, `pyproject.toml`, atau spec
-PyInstaller untuk setiap bahasa baru selama file memakai pola nama di atas.
-English harus tetap menjadi `default`, canonical key set, dan fallback.
+There is no need to change the backend, route list, `pyproject.toml`, or
+PyInstaller spec for each new language as long as the file follows the naming
+pattern above. English must remain the `default`, canonical key set, and
+fallback.
 
-## Validasi
+## Documentation language convention
 
-Jalankan seluruh test, syntax check JavaScript, lalu pemeriksaan konsistensi
-katalog di bawah:
+English is also the canonical documentation language. `README.md`, every
+top-level guide in `docs/`, and `packaging/README.md` must be written in English
+and must link to other English guides by default. Their maintained Indonesian
+counterparts are `README.id.md`, `docs/id/<name>.md`, and
+`packaging/README.id.md`. The language switch at the top of each document is the
+only canonical-page link that should enter the Indonesian documentation tree.
+
+Create or update the English document first, then apply the same factual and
+safety changes to its Indonesian counterpart. Keep command lines, paths,
+confirmation tokens, and protocol identifiers unchanged. Legal notices that
+reproduce third-party terms remain in their original English form. README
+preview screenshots should show the GUI in its default English locale.
+
+## Validation
+
+Run the full test suite, JavaScript syntax check, and catalog consistency check:
 
 ```bash
 python -m unittest discover -v
@@ -123,7 +141,7 @@ python -m compileall -q spade65 spade65ctl.py packaging tests
 node --check spade65/web/app.js
 ```
 
-Untuk pemeriksaan cepat bahwa katalog dapat dibaca dan key-nya identik:
+For a quick check that catalogs can be read and have identical keys:
 
 ```bash
 python - <<'PY'
@@ -145,5 +163,5 @@ print(f"{len(catalogs)} locales, {len(english)} keys: OK")
 PY
 ```
 
-Selain key parity, review manusia tetap diperlukan untuk terminology, panjang
-label pada layout sempit, plural/context, dan kesesuaian placeholder.
+In addition to key parity, human review remains necessary for terminology,
+label length in narrow layouts, plurals and context, and placeholder accuracy.

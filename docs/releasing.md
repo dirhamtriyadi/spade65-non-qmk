@@ -1,51 +1,53 @@
-# Panduan rilis desktop
+**English** · [Bahasa Indonesia](id/releasing.md)
 
-## Hasil rilis
+# Desktop release guide
 
-Workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-berjalan saat tag berbentuk `vMAJOR.MINOR.PATCH` dikirim. Untuk versi `0.7.3`,
-tag yang benar adalah `v0.7.3`. Setelah validasi dan ketiga build berhasil,
-workflow memublikasikan GitHub Release dengan tepat tiga asset:
+## Release artifacts
+
+The [`.github/workflows/release.yml`](../.github/workflows/release.yml) workflow
+runs when a tag matching `vMAJOR.MINOR.PATCH` is pushed. For version `0.7.3`,
+the correct tag is `v0.7.3`. After validation and all three builds succeed, the
+workflow publishes a GitHub Release containing exactly three assets:
 
 - `Spade65-Windows-x64.zip`
 - `Spade65-Linux-x86_64.AppImage`
 - `Spade65-macOS-universal.dmg`
 
-Build dilakukan secara native pada runner Windows, Ubuntu, dan macOS; ketiga
-format tidak dibuat melalui satu cross-compiler. Job publish baru berjalan
-setelah seluruh job platform berhasil dan memastikan ketiga asset ada serta
-tidak kosong. Eksekusi manual (`workflow_dispatch`) dapat membangun ulang tag
-yang sudah ada hanya selama release masih draft. Workflow menolak menimpa
-release yang telah dipublikasikan.
+The builds run natively on Windows, Ubuntu, and macOS runners; the three formats
+are not produced by a single cross-compiler. The publish job runs only after all
+platform jobs succeed and confirms that all three assets exist and are nonempty.
+A manual run (`workflow_dispatch`) can rebuild an existing tag only while its
+release remains a draft. The workflow refuses to overwrite a published release.
 
-Sebelum tag dibuat, push ke branch `main` menjalankan package preflight native
-melalui workflow test: ZIP Windows, AppImage Linux, dan DMG macOS dibangun serta
-di-smoke-test tanpa publish. Workflow rilis tetap membangun ulang ketiga asset
-dari commit tag yang immutable; hasil preflight tidak dipakai ulang sebagai
-release asset.
+Before a tag is created, every push to the `main` branch runs native package
+preflights through the test workflow: the Windows ZIP, Linux AppImage, and macOS
+DMG are built and smoke-tested without being published. The release workflow
+still rebuilds all three assets from the immutable tagged commit; it does not
+reuse preflight output as release assets.
 
-Executable GUI hasil build membuka localhost di `127.0.0.1:8765` dalam jendela
-standalone PyWebView ketika dijalankan tanpa argumen. UI tetap berupa
-HTML/CSS/JavaScript lokal di dalam WebView, bukan widget native penuh. Jika
-backend native tidak tersedia, launcher membuka browser sebagai fallback.
-Peluncuran kedua mengaktifkan dan memulihkan jendela existing. Menutup jendela
-atau memilih **Quit application** menghentikan server; tidak ada system tray.
-Storage WebView bersifat persisten dan download ekspor profil/library diaktifkan.
+When launched without arguments, the built GUI executable serves localhost at
+`127.0.0.1:8765` and displays it in a standalone PyWebView window. The UI remains
+local HTML, CSS, and JavaScript inside a WebView rather than a fully native
+widget interface. If the native backend is unavailable, the launcher opens a
+browser as a fallback. A second launch activates and restores the existing
+window. Closing the window or choosing **Quit application** stops the server;
+there is no system tray. WebView storage is persistent, and downloads for
+profile and library exports are enabled.
 
-ZIP Windows juga menyertakan `Spade65CLI.exe` agar output/error CLI terlihat;
-Linux dan macOS meneruskan argumen pada executable yang sama ke command
-`spade65ctl`. Mode eksplisit tersedia melalui subcommand `gui --browser` dan
-`gui --no-browser`.
+The Windows ZIP also includes `Spade65CLI.exe`, so CLI output and errors remain
+visible. On Linux and macOS, arguments passed to the same executable are
+forwarded to the `spade65ctl` command. Explicit modes are available through the
+`gui --browser` and `gui --no-browser` subcommands.
 
-## Menyiapkan tag
+## Preparing a tag
 
-Versi harus sama di tiga tempat:
+The version must match in three places:
 
-1. tag Git, misalnya `v0.7.3`;
-2. `project.version` di `pyproject.toml`, misalnya `0.7.3`;
-3. `spade65.__version__` di `spade65/__init__.py`, misalnya `0.7.3`.
+1. the Git tag, for example `v0.7.3`;
+2. `project.version` in `pyproject.toml`, for example `0.7.3`;
+3. `spade65.__version__` in `spade65/__init__.py`, for example `0.7.3`.
 
-Periksa versi dan jalankan test sebelum membuat tag:
+Verify the version and run the tests before creating the tag:
 
 ```bash
 python packaging/check_version.py v0.7.3
@@ -54,72 +56,73 @@ python -m compileall -q spade65 spade65ctl.py packaging tests
 git status --short
 ```
 
-Setelah commit rilis sudah berada di remote dan worktree sesuai harapan, buat
-serta kirim tag:
+After the release commit is on the remote and the worktree is in the expected
+state, create and push the tag:
 
 ```bash
 git tag -a v0.7.3 -m "Spade65 v0.7.3"
 git push origin v0.7.3
 ```
 
-Jangan memindahkan tag yang telah dipublikasikan ke commit lain. Jika build
-gagal, perbaiki source dan terbitkan versi patch baru. Eksekusi manual cocok
-untuk mengulang kegagalan infrastruktur pada tag yang commit-nya tidak berubah.
+Do not move a published tag to a different commit. If a build fails, fix the
+source and publish a new patch version. A manual run is appropriate for retrying
+an infrastructure failure when the tagged commit has not changed.
 
-## Apa yang divalidasi workflow
+## What the workflow validates
 
-Sebelum memublikasikan asset, pipeline:
+Before publishing any assets, the pipeline:
 
-- menolak tag yang tidak sesuai format atau tidak cocok dengan kedua versi
-  project;
-- menjalankan unit test dan bytecode compilation;
-- memasang extra `desktop` dan memeriksa dependency environment sebelum build;
-- menyertakan HTML, CSS, JavaScript, seluruh katalog locale, PyWebView, dan
-  backend renderer platform dalam bundle;
-- menjalankan smoke test executable tanpa membuat window, membuka browser,
-  enumerasi perangkat, atau HID write; test mengimpor backend WebView, dan pada
-  Windows/macOS tetap memuat extension HID native agar dependency binary yang
-  rusak terdeteksi;
-- menguji route HTTP locale dari bundle agar data PyInstaller yang hilang
-  terdeteksi;
-- membuat dan menjalankan smoke test AppImage x86_64 pada runner Ubuntu 22.04
-  (glibc 2.35), sambil membundel PySide6/QtWebEngine;
-- menolak modul Qt GPL-only yang tidak digunakan setelah PyInstaller selesai,
-  sehingga perubahan hook/dependency tidak diam-diam memperluas scope lisensi;
-- mengekstrak ulang ZIP Windows dan menjalankan smoke test melalui executable
-  console hasil ekstraksi, termasuk validasi renderer Edge WebView2;
-- membangun aplikasi macOS universal dan memeriksa setiap file Mach-O agar
-  memiliki slice `x86_64` dan `arm64`; bundle memakai Cocoa/WebKit dan
-  mendeklarasikan local networking serta penggunaan mikrofon untuk audio-reactive;
-- memverifikasi serta mount DMG read-only sebelum smoke test terakhir;
-- menolak publish bila salah satu dari tiga file keluaran hilang atau kosong.
+- rejects a tag that has an invalid format or does not match both project
+  version declarations;
+- runs unit tests and bytecode compilation;
+- installs the `desktop` extra and checks the dependency environment before
+  building;
+- includes the HTML, CSS, JavaScript, every locale catalog, PyWebView, and the
+  platform renderer backend in the bundle;
+- runs the executable smoke test without creating a window, opening a browser,
+  enumerating devices, or writing HID reports; the test imports the WebView
+  backend and, on Windows and macOS, still loads the native HID extension so
+  broken binary dependencies are detected;
+- tests an HTTP locale route from the bundle so missing PyInstaller data is
+  detected;
+- builds and smoke-tests the x86_64 AppImage on an Ubuntu 22.04 runner (glibc
+  2.35), while bundling PySide6 and QtWebEngine;
+- rejects unused GPL-only Qt modules after PyInstaller completes, preventing a
+  hook or dependency change from silently expanding the license scope;
+- extracts the Windows ZIP again and runs the smoke test through the extracted
+  console executable, including validation of the Edge WebView2 renderer;
+- builds a universal macOS application and checks every Mach-O file for both
+  `x86_64` and `arm64` slices; the bundle uses Cocoa/WebKit and declares local
+  networking and microphone use for audio-reactive features;
+- verifies and mounts the DMG read-only before the final smoke test;
+- refuses to publish if any of the three output files is missing or empty.
 
-Smoke test packaging hanya menguji startup, import runtime desktop, resource,
-dan route aplikasi. Ia tidak membuka GUI interaktif, menggantikan pengujian
-keyboard fisik, atau mengirim HID report. Uji manual per OS tetap harus mencakup
-second-launch activation, close/quit, fallback browser, file picker, dan download
-ekspor.
+The packaging smoke test covers startup, desktop-runtime imports, resources,
+and application routes only. It does not open the interactive GUI, replace
+physical-keyboard testing, or send HID reports. Manual testing on every OS must
+still cover second-launch activation, close and quit behavior, browser fallback,
+the file picker, and export downloads.
 
-## Build lokal
+## Local builds
 
-Pasang dependency project serta tool build:
+Install the project dependencies and build tools:
 
 ```bash
 python -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
 python -m pip check
 ```
 
-Jalankan dispatcher pada OS target. Command ini otomatis memilih script native,
-memakai interpreter Python yang sedang aktif, menjalankan smoke test paket, dan
-menghasilkan nama artifact yang sama dengan CI:
+Run the dispatcher on the target OS. This command automatically selects the
+native script, uses the active Python interpreter, runs the packaged smoke test,
+and produces the same artifact name as CI:
 
 ```bash
 python packaging/build.py
 ```
 
-Gunakan `python packaging/build.py --dry-run` untuk melihat script yang akan
-dijalankan tanpa membangun. Script platform juga dapat dipanggil langsung untuk
-otomasi yang memang spesifik OS:
+Use `python packaging/build.py --dry-run` to see which script would run without
+building. The platform scripts can also be invoked directly for genuinely
+OS-specific automation:
 
 ```bash
 # Linux
@@ -132,64 +135,66 @@ pwsh -File packaging/build_windows.ps1
 bash packaging/build_macos.sh
 ```
 
-Script menulis hasil ke `artifacts/`. Build macOS universal membutuhkan Python
-dan semua native dependency dalam format universal2; script sengaja gagal bila
-menemukan Mach-O satu arsitektur. Wheel `hidapi` tipis tidak cukup; gunakan
-perintah `ARCHFLAGS` dan `--no-binary=hidapi` yang dicantumkan di panduan
-packaging. macOS memakai Cocoa/WebKit melalui PyObjC dan metadata bundle
-mengizinkan localhost serta menjelaskan prompt mikrofon audio-reactive.
+The scripts write their output to `artifacts/`. A universal macOS build requires
+Python and every native dependency in universal2 format; the script deliberately
+fails if it finds a single-architecture Mach-O file. A thin `hidapi` wheel is
+not sufficient. Use the `ARCHFLAGS` and `--no-binary=hidapi` command documented
+in the packaging guide. macOS uses Cocoa/WebKit through PyObjC, and the bundle
+metadata permits localhost traffic and explains the microphone prompt for
+audio-reactive features.
 
-Build Windows serta smoke test-nya memerlukan Edge WebView2 Runtime pada host.
-Build Linux membutuhkan loader EGL, `curl`, dan `sha256sum`; pada Debian/Ubuntu
-pasang `libegl1`, `libgl1`, paket runtime XCB yang dicantumkan di
-[`packaging/README.md`](../packaging/README.md), `curl`, dan `coreutils`. Script
-memverifikasi hash
-`appimagetool` serta runtime type-2 yang dipin sebelum mengeksekusinya. AppImage
-PySide6/QtWebEngine jauh lebih besar daripada paket browser-only. Asset resmi
-dibangun dan di-smoke-test pada Ubuntu 22.04 x86_64 (glibc 2.35); ini adalah
-baseline yang didukung, bukan janji kompatibilitas berdasarkan nomor glibc saja.
-Build manual mewarisi kebutuhan libc dari mesin yang menjalankan build, sehingga
-sebaiknya dibuat pada OS target tertua yang ingin didukung.
-Build Ubuntu resmi juga mengaktifkan inventaris legal dpkg yang ketat. Setiap
-binary native dari direktori sistem yang masuk ke hasil PyInstaller harus
-memiliki paket pemilik dan `/usr/share/doc/<paket>/copyright`; jika tidak,
-workflow gagal sebelum AppImage dibuat. Manifest dan salinan copyright tersebut
-tersimpan di `usr/share/doc/spade65/linux-system-libraries` dalam AppImage.
-Build manual pada host non-dpkg tetap berjalan, tetapi manifest-nya diberi label
-`source-path-only` dan tidak menyatakan atribusi library sistem telah lengkap.
-Rincian tingkat rendah ada di
-[`packaging/README.md`](../packaging/README.md).
+The Windows build and its smoke test require the Edge WebView2 Runtime on the
+host. The Linux build requires an EGL loader, `curl`, and `sha256sum`. On
+Debian/Ubuntu, install `libegl1`, `libgl1`, the XCB runtime packages listed in
+[`packaging/README.md`](../packaging/README.md), `curl`, and `coreutils`. The
+script verifies the hashes of the pinned `appimagetool` and type-2 runtime before
+executing them. The PySide6/QtWebEngine AppImage is substantially larger than a
+browser-only package. Official assets are built and smoke-tested on Ubuntu 22.04
+x86_64 (glibc 2.35); this is the supported baseline, not a compatibility promise
+based solely on the glibc version number. A manual build inherits the libc
+requirements of its build machine, so it should be produced on the oldest target
+OS that needs to be supported.
 
-Package preflight `main` dan workflow rilis memakai dependency desktop yang sama
-dengan build manual: Windows memasang `.[cross-platform,desktop]`, Linux hanya
-memasang `.[desktop]` karena paketnya memakai `hidraw`, sedangkan macOS memasang
-extra `desktop` lalu membangun HIDAPI universal2 dengan helper terpisah. Jangan
-menganggap unit test atau smoke test headless sebagai pengganti uji renderer
-interaktif pada OS target.
+The official Ubuntu build also enables strict dpkg-based legal inventory. Every
+native binary copied from a system directory into the PyInstaller output must
+have an owning package and a `/usr/share/doc/<package>/copyright` file; otherwise,
+the workflow fails before creating the AppImage. The manifest and copied
+copyright notices are stored under
+`usr/share/doc/spade65/linux-system-libraries` in the AppImage. A manual build on
+a non-dpkg host still works, but its manifest is labeled `source-path-only` and
+does not claim that system-library attribution is complete. Low-level details
+are documented in [`packaging/README.md`](../packaging/README.md).
 
-Jika paket desktop belum tersedia untuk sebuah commit, instalasi dari source
-tetap didukung sebagaimana dijelaskan di
-[`docs/cross-platform.md`](cross-platform.md). Pengguna paket rilis tidak perlu
-clone repository atau menjalankan Python secara manual.
+The `main` package preflight and the release workflow use the same desktop
+dependencies as a manual build: Windows installs
+`.[cross-platform,desktop]`; Linux installs only `.[desktop]` because its package
+uses `hidraw`; and macOS installs the `desktop` extra before building universal2
+HIDAPI with a separate helper. Do not treat unit tests or a headless smoke test
+as substitutes for interactive renderer testing on the target OS.
 
-## Signing dan distribusi
+If a desktop package is not yet available for a commit, installation from source
+remains supported as described in
+[`docs/cross-platform.md`](cross-platform.md). Release-package users do not need
+to clone the repository or run Python manually.
 
-Paket Windows saat ini tidak memiliki code signature. Bundle macOS hanya
-ditandatangani ad-hoc agar struktur aplikasi valid, bukan dengan Apple Developer
-ID, dan DMG belum dinotarization. Karena itu Windows SmartScreen atau macOS
-Gatekeeper dapat menampilkan peringatan pada file hasil unduhan. Hanya lanjutkan
-jika asset berasal dari halaman release project dan tag/commit-nya dipercaya;
-instalasi source adalah fallback yang transparan.
+## Signing and distribution
 
-Signing produksi membutuhkan sertifikat privat Windows serta kredensial Apple
-Developer ID/notarization. Jangan pernah commit sertifikat, password, token,
-atau provisioning secret. Penambahan signing nantinya harus memakai repository
-secrets dan tetap mempertahankan smoke test sebelum publish.
+The Windows package currently has no code signature. The macOS bundle is signed
+ad hoc only to keep the application structure valid, not with an Apple Developer
+ID, and the DMG has not been notarized. Windows SmartScreen or macOS Gatekeeper
+may therefore warn about a downloaded file. Proceed only when the asset came
+from the project's release page and its tag and commit are trusted; installing
+from source is the transparent fallback.
 
-## Batas keselamatan
+Production signing requires a private Windows certificate and Apple Developer
+ID/notarization credentials. Never commit certificates, passwords, tokens, or
+provisioning secrets. Any future signing support must use repository secrets and
+retain the smoke test before publication.
 
-Paket desktop berisi fitur konfigurasi yang sama dengan source. Packaging tidak
-menambahkan firmware flashing, bootloader, raw flash/write, ataupun arbitrary
-HID packet. Operasi tersebut tetap tidak memiliki route backend atau packet
-builder karena dapat menyebabkan brick dan belum ada prosedur recovery yang
-terverifikasi. Jangan menyisipkannya ke workflow rilis, installer, atau launcher.
+## Safety boundary
+
+The desktop package contains the same configuration features as the source.
+Packaging does not add firmware flashing, bootloader access, raw flash/write, or
+arbitrary HID packets. Those operations still have no backend route or packet
+builder because they can brick the device and no verified recovery procedure is
+available. Do not add them to the release workflow, installer, or launcher.

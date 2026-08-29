@@ -1,63 +1,66 @@
-# Audit paritas software original Spade65
+**English** · [Bahasa Indonesia](id/parity.md)
 
-Audit ini memakai hasil ekstraksi statis `Spade65_SETUP_20240403.exe`, terutama
-`app.component.js`, `APModeModule.js`, `SupportData.js`, `KeyBoardStyle.js`, dan
-backend perangkat `JupengSeries.deobfuscated.js`. Istilah **lengkap** di bawah
-berarti seluruh fungsi konfigurasi Spade65 yang aktif dan dapat direplikasi
-dengan protokol yang sudah terverifikasi, bukan seluruh kode generik yang ikut
-dibundel dalam aplikasi vendor.
+# Original Spade65 software parity audit
 
-## Halaman aktif perangkat
+This audit is based on a static extraction of `Spade65_SETUP_20240403.exe`, with
+particular attention to `app.component.js`, `APModeModule.js`, `SupportData.js`,
+`KeyBoardStyle.js`, and the `JupengSeries.deobfuscated.js` device backend. The
+term **complete** below means every active Spade65 configuration function that
+can be reproduced with the verified protocol, not every piece of generic code
+bundled with the vendor application.
 
-`setPageData` software original hanya mengaktifkan empat area untuk perangkat:
+## Active device pages
 
-| Area original | Implementasi proyek |
+The original software's `setPageData` enables only four areas for this device:
+
+| Original area | Project implementation |
 |---|---|
-| Keyboard settings | Editor Normal/FN1/FN2, empat layout fisik, assignment, shortcut, macro binding, disable group, Win Lock, WASD/arrow, profil lokal dan import/export |
-| Lighting setting / AP mode | Sepuluh mode, maksimal sepuluh layer, show/hide layer, rentang tombol, palet, opacity, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient dan audio reactive |
-| Built-in effects | Seluruh 20 effect ID firmware, brightness, speed, palette index, multicolor, dan custom per-key color |
-| Macro settings | Maksimal sepuluh macro perangkat, 84 event per macro, delay, key-down/up, repeat, rename, rekam dari keyboard, hapus dan bind ke tombol |
+| Keyboard settings | Normal/FN1/FN2 editor, four physical layouts, assignments, shortcuts, macro binding, group disabling, Win Lock, WASD/arrow swap, local profiles, and import/export |
+| Lighting setting / AP mode | Ten modes, up to ten layers, layer show/hide, key ranges, palettes, opacity, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient, and audio-reactive controls |
+| Built-in effects | All 20 firmware effect IDs, brightness, speed, palette index, multicolor, and custom per-key color |
+| Macro settings | Up to ten device macros, 84 events per macro, delay, key-down/up, repeat, rename, keyboard recording, deletion, and key binding |
 
-Daftar assignment vendor berisi 132 entri (130 usage unik). Proyek mengekspos
-seluruh usage unik tersebut ditambah `disabled`: keyboard, numpad, media,
-browser/system, mouse, profile next/previous, FN/FN2, copy/paste, dan shortcut
-bermodifier.
+The vendor assignment list contains 132 entries representing 130 unique usages.
+The project exposes every unique usage plus `disabled`: keyboard, numpad, media,
+browser/system, mouse, profile next/previous, FN/FN2, copy/paste, and
+modifier-based shortcuts.
 
-Profil software original adalah penyimpanan host. Backend memilih satu profil,
-lalu menulis frame keymap yang sama ke perangkat; nomor profil tidak diserialisasi
-ke report keymap. Karena itu saved profiles + import/export proyek ini setara,
-tanpa mengarang opcode profile baru.
+Profiles in the original software are stored on the host. The backend selects a
+profile and then writes the same keymap frame to the device; the profile number
+is not serialized into the keymap report. The project's saved profiles and
+import/export therefore provide equivalent behavior without inventing a new
+profile opcode.
 
-## Kode bundle yang bukan fitur aktif Spade65
+## Bundled code that is not an active Spade65 feature
 
-Beberapa komponen ada di bundle generik tetapi bukan halaman aktif perangkat:
+Several components exist in the generic bundle but are not active device pages:
 
-- `RELATEDPROGRAM` adalah integrasi host Windows. Proyek sekarang menyediakan
-  ekuivalen lintas platform opt-in melalui background service untuk Linux,
-  Windows, dan macOS, tanpa menyalin integrasi executable vendor.
-- `Custom Effect` timeline tidak terdapat di daftar halaman aktif Spade65, tetapi
-  ekuivalen aman berbasis streaming lokal sekarang tersedia hingga 200 frame.
-- UI polling rate dikomentari dan `reportRateIndex` tidak pernah diserialisasi
-  oleh backend Jupeng.
-- Model UI menyimpan long/instant press, tetapi `KeyAssigntoData` Jupeng hanya
-  membaca assignment normal (`keyAssignType[2]`). Menampilkan kontrol itu akan
-  menyesatkan karena perangkat tidak pernah menerimanya.
-- Login, telemetry, updater aplikasi, dan pemeriksaan update bukan fungsi
-  konfigurasi keyboard.
+- `RELATEDPROGRAM` is a Windows host integration. The project now provides an
+  opt-in, cross-platform equivalent through the background service on Linux,
+  Windows, and macOS without copying the vendor executable integration.
+- The `Custom Effect` timeline is not listed among the active Spade65 pages, but
+  a safe local-streaming equivalent is now available for up to 200 frames.
+- The polling-rate UI is commented out, and `reportRateIndex` is never
+  serialized by the Jupeng backend.
+- The UI model stores long/instant-press values, but Jupeng's `KeyAssigntoData`
+  reads only the normal assignment (`keyAssignType[2]`). Displaying those
+  controls would be misleading because the device never receives them.
+- Login, telemetry, the application updater, and update checks are not keyboard
+  configuration functions.
 
-## Batas keselamatan
+## Safety boundary
 
-Firmware updater, bootloader, raw flash, dan arbitrary HID packet sengaja tidak
-memiliki endpoint atau packet builder. Reset memerlukan teks konfirmasi; overwrite
-keymap memerlukan dua konfirmasi; semua feature write harus cocok dengan ukuran
-report descriptor. Pengecualian ini adalah keputusan keselamatan, bukan fitur
-yang belum selesai.
+The firmware updater, bootloader, raw flash, and arbitrary HID packets
+deliberately have no endpoint or packet builder. Reset requires typed
+confirmation; overwriting the keymap requires two confirmations; and every
+feature write must match the report-descriptor size. These exclusions are safety
+decisions, not unfinished features.
 
-## Status pengujian hardware
+## Hardware-test status
 
-Deteksi descriptor, built-in RGB, per-key RGB, streaming/AP mode, custom timeline,
-background service, dan debounce sudah divalidasi melalui USB pada `0603:0351`.
-Keymap/macro, timer dongle, dan reset sudah cocok dengan frame backend original
-dan memiliki pengujian offline, tetapi belum dieksekusi pada hardware: keymap dan
-reset tidak memiliki readback untuk membuat backup kondisi sekarang, sedangkan
-dongle `0603:0356` tidak terhubung pada pengujian terakhir.
+Descriptor detection, built-in RGB, per-key RGB, streaming/AP mode, the custom
+timeline, the background service, and debounce have been validated over USB on
+`0603:0351`. Keymap/macros, dongle timers, and reset match the original backend
+frames and have offline tests, but have not been executed on hardware: keymap and
+reset have no readback from which to back up the current state, and dongle
+`0603:0356` was not connected during the latest tests.

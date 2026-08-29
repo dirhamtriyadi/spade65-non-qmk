@@ -1,5 +1,7 @@
 # Release packaging
 
+**English** · [Bahasa Indonesia](README.id.md)
+
 Pushing a `vMAJOR.MINOR.PATCH` tag runs `.github/workflows/release.yml`. The tag
 must match `project.version` in `pyproject.toml`; a mismatch stops the release.
 The workflow tests the source, builds on each target operating system, and
