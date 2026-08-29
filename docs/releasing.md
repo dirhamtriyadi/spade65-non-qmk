@@ -3,8 +3,8 @@
 ## Hasil rilis
 
 Workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-berjalan saat tag berbentuk `vMAJOR.MINOR.PATCH` dikirim. Untuk versi `0.7.0`,
-tag yang benar adalah `v0.7.0`. Setelah validasi dan ketiga build berhasil,
+berjalan saat tag berbentuk `vMAJOR.MINOR.PATCH` dikirim. Untuk versi `0.7.1`,
+tag yang benar adalah `v0.7.1`. Setelah validasi dan ketiga build berhasil,
 workflow memublikasikan GitHub Release dengan tepat tiga asset:
 
 - `Spade65-Windows-x64.zip`
@@ -41,14 +41,14 @@ Linux dan macOS meneruskan argumen pada executable yang sama ke command
 
 Versi harus sama di tiga tempat:
 
-1. tag Git, misalnya `v0.7.0`;
-2. `project.version` di `pyproject.toml`, misalnya `0.7.0`;
-3. `spade65.__version__` di `spade65/__init__.py`, misalnya `0.7.0`.
+1. tag Git, misalnya `v0.7.1`;
+2. `project.version` di `pyproject.toml`, misalnya `0.7.1`;
+3. `spade65.__version__` di `spade65/__init__.py`, misalnya `0.7.1`.
 
 Periksa versi dan jalankan test sebelum membuat tag:
 
 ```bash
-python packaging/check_version.py v0.7.0
+python packaging/check_version.py v0.7.1
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py packaging tests
 git status --short
@@ -58,8 +58,8 @@ Setelah commit rilis sudah berada di remote dan worktree sesuai harapan, buat
 serta kirim tag:
 
 ```bash
-git tag -a v0.7.0 -m "Spade65 v0.7.0"
-git push origin v0.7.0
+git tag -a v0.7.1 -m "Spade65 v0.7.1"
+git push origin v0.7.1
 ```
 
 Jangan memindahkan tag yang telah dipublikasikan ke commit lain. Jika build
@@ -142,7 +142,8 @@ mengizinkan localhost serta menjelaskan prompt mikrofon audio-reactive.
 Build Windows serta smoke test-nya memerlukan Edge WebView2 Runtime pada host.
 Build Linux membutuhkan loader EGL, `curl`, dan `sha256sum`; pada Debian/Ubuntu
 pasang `libegl1`, `libgl1`, paket runtime XCB yang dicantumkan di
-[`packaging/README.md`](../packaging/README.md), `curl`, dan `coreutils`. Script memverifikasi hash
+[`packaging/README.md`](../packaging/README.md), `curl`, dan `coreutils`. Script
+memverifikasi hash
 `appimagetool` serta runtime type-2 yang dipin sebelum mengeksekusinya. AppImage
 PySide6/QtWebEngine jauh lebih besar daripada paket browser-only. Asset resmi
 dibangun dan di-smoke-test pada Ubuntu 22.04 x86_64 (glibc 2.35); ini adalah

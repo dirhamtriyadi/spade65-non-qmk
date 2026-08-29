@@ -47,7 +47,7 @@ Unduh asset yang sesuai dari GitHub Releases.
 - Linux x86_64: beri izin eksekusi dengan
   `chmod +x Spade65-Linux-x86_64.AppImage`, lalu jalankan file tersebut. Jika
   FUSE tidak tersedia, gunakan
-  `APPIMAGE_EXTRACT_AND_RUN=1 ./Spade65-Linux-x86_64.AppImage`. AppImage v0.7.0
+  `APPIMAGE_EXTRACT_AND_RUN=1 ./Spade65-Linux-x86_64.AppImage`. AppImage desktop
   membundel PySide6/QtWebEngine sehingga ukurannya lebih besar dan membutuhkan
   sesi grafis. Asset resmi dibangun serta di-smoke-test pada Ubuntu 22.04 x86_64
   (glibc 2.35), yang menjadi baseline dukungan. Distribusi yang lebih baru

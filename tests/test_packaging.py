@@ -427,15 +427,48 @@ class PackagingTests(unittest.TestCase):
             "libxcb-keysyms1",
             "libxcb-render-util0",
         )
-        for workflow_name in ("test.yml", "release.yml"):
-            workflow = (
-                ROOT / ".github" / "workflows" / workflow_name
-            ).read_text(encoding="utf-8")
+        test_workflow = (
+            ROOT / ".github" / "workflows" / "test.yml"
+        ).read_text(encoding="utf-8")
+        release_workflow = (
+            ROOT / ".github" / "workflows" / "release.yml"
+        ).read_text(encoding="utf-8")
+        scoped_jobs = (
+            (
+                "test.yml",
+                test_workflow.split("  linux-package:\n", 1)[1].split(
+                    "\n  macos-package:\n", 1
+                )[0],
+                test_workflow.split("  windows-package:\n", 1)[1].split(
+                    "\n  linux-package:\n", 1
+                )[0],
+            ),
+            (
+                "release.yml",
+                release_workflow.split("  linux:\n", 1)[1].split(
+                    "\n  macos:\n", 1
+                )[0],
+                release_workflow.split("  windows:\n", 1)[1].split(
+                    "\n  linux:\n", 1
+                )[0],
+            ),
+        )
+        for workflow_name, linux_job, windows_job in scoped_jobs:
+            workflow = {
+                "test.yml": test_workflow,
+                "release.yml": release_workflow,
+            }[workflow_name]
+            self.assertEqual(
+                workflow.count("Install Linux desktop runtime prerequisites"), 1
+            )
+            self.assertNotIn(
+                "Install Linux desktop runtime prerequisites", windows_job
+            )
             self.assertIn(
-                "sudo apt-get install --no-install-recommends --yes", workflow
+                "sudo apt-get install --no-install-recommends --yes", linux_job
             )
             for package in required_packages:
-                self.assertIn(package, workflow)
+                self.assertIn(package, linux_job)
 
     def test_native_hid_smoke_only_loads_extension_on_required_platforms(self):
         with patch.object(launcher.importlib, "import_module") as import_module:

@@ -66,7 +66,7 @@ menampilkan peringatan. Lihat [panduan rilis](docs/releasing.md) dan
 [panduan lintas platform](docs/cross-platform.md) untuk instalasi, verifikasi,
 serta fallback menjalankan dari source.
 
-AppImage v0.7.0 membundel PySide6/QtWebEngine dan karena itu lebih besar daripada
+AppImage desktop membundel PySide6/QtWebEngine dan karena itu lebih besar daripada
 rilis browser-only. Asset Linux resmi dibangun dan di-smoke-test pada runner
 Ubuntu 22.04 x86_64 (glibc 2.35); itulah baseline Linux yang didukung. Distribusi
 yang lebih baru biasanya kompatibel, tetapi kompatibilitas tidak disimpulkan
