@@ -15,10 +15,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from . import __version__
-from .hidraw import (
-    HidrawDevice,
+from .transport import (
+    Device,
     choose_device,
-    discover_hidraw,
+    discover_devices,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -60,9 +60,10 @@ SAFE_ACTIONS = frozenset(
 )
 
 
-def _device_summary(device: HidrawDevice) -> dict[str, object]:
+def _device_summary(device: Device) -> dict[str, object]:
     return {
         "path": str(device.path),
+        "backend": device.backend,
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
         "transport": PRODUCT_IDS.get(device.product_id, "unknown"),
@@ -79,7 +80,7 @@ def _device_summary(device: HidrawDevice) -> dict[str, object]:
 def gui_metadata() -> dict[str, object]:
     devices = [
         device
-        for device in discover_hidraw()
+        for device in discover_devices()
         if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
     ]
     return {
@@ -100,9 +101,9 @@ def _choose(
     *,
     product_ids: set[int] | None = None,
     explicit_path: str | None = None,
-) -> HidrawDevice:
+) -> Device:
     return choose_device(
-        discover_hidraw(),
+        discover_devices(),
         vendor_id=VENDOR_ID,
         product_ids=product_ids or set(PRODUCT_IDS),
         usage=usage,
@@ -110,7 +111,7 @@ def _choose(
     )
 
 
-def _send_features(device: HidrawDevice, reports: list[bytes]) -> list[int]:
+def _send_features(device: Device, reports: list[bytes]) -> list[int]:
     allowed_shapes = {
         MAIN_REPORT_ID: MAIN_REPORT_LENGTH,
         SHORT_REPORT_ID: SHORT_REPORT_LENGTH,
@@ -132,7 +133,7 @@ def _send_features(device: HidrawDevice, reports: list[bytes]) -> list[int]:
     results = []
     with WRITE_LOCK:
         for index, report in enumerate(reports):
-            result = send_feature_report(device.path, report)
+            result = send_feature_report(device, report)
             if result != len(report):
                 raise RuntimeError(f"short feature write: {result}/{len(report)}")
             results.append(result)
@@ -200,14 +201,14 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         if device.report_length("output", 0x06) != 64:
             raise RuntimeError("missing streaming output report")
         with WRITE_LOCK:
-            feature_result = send_feature_report(device.path, activation)
+            feature_result = send_feature_report(device, activation)
             if feature_result != SHORT_REPORT_LENGTH:
                 raise RuntimeError(
                     f"short streaming activation: {feature_result}/{SHORT_REPORT_LENGTH}"
                 )
             output_results = []
             for chunk in chunks:
-                result = send_output_report(device.path, chunk)
+                result = send_output_report(device, chunk)
                 if result != 64:
                     raise RuntimeError(f"short streaming output: {result}/64")
                 output_results.append(result)

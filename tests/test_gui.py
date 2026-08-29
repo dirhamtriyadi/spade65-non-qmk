@@ -7,13 +7,13 @@ from spade65.gui import (
     execute_action,
     gui_metadata,
 )
-from spade65.hidraw import HidrawDevice, ReportShape
+from spade65.device import Device, ReportShape
 from spade65.keymap import profile_template
 
 
 class GuiTests(unittest.TestCase):
     def test_metadata_exposes_safe_scope_and_no_firmware(self) -> None:
-        with patch("spade65.gui.discover_hidraw", return_value=[]):
+        with patch("spade65.gui.discover_devices", return_value=[]):
             metadata = gui_metadata()
         self.assertFalse(metadata["firmware_update"])
         self.assertEqual(set(metadata["safe_actions"]), set(SAFE_ACTIONS))
@@ -31,19 +31,19 @@ class GuiTests(unittest.TestCase):
                 execute_action(action, {})
 
     def test_reset_requires_exact_confirmation_before_discovery(self) -> None:
-        with patch("spade65.gui.discover_hidraw") as discover:
+        with patch("spade65.gui.discover_devices") as discover:
             with self.assertRaisesRegex(RuntimeError, "RESET SPADE65"):
                 execute_action("reset", {"confirmation": "yes"})
         discover.assert_not_called()
 
     def test_profile_requires_exact_confirmation_before_discovery(self) -> None:
-        with patch("spade65.gui.discover_hidraw") as discover:
+        with patch("spade65.gui.discover_devices") as discover:
             with self.assertRaisesRegex(RuntimeError, "APPLY PROFILE"):
                 execute_action("profile", {"profile": profile_template()})
         discover.assert_not_called()
 
     def test_every_feature_write_is_descriptor_gated(self) -> None:
-        device = HidrawDevice(
+        device = Device(
             path="/dev/hidraw-test",  # type: ignore[arg-type]
             vendor_id=0x0603,
             product_id=0x0351,

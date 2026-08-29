@@ -1,4 +1,4 @@
-"""Command-line interface for Spade65 Linux configuration."""
+"""Command-line interface for cross-platform Spade65 configuration."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ import time
 from pathlib import Path
 
 from . import __version__
-from .hidraw import (
-    HidrawDevice,
+from .transport import (
+    Device,
     choose_device,
-    discover_hidraw,
+    discover_devices,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -50,9 +50,10 @@ def _number(value: str) -> int:
     return int(value, 0)
 
 
-def _device_dict(device: HidrawDevice, *, include_unique: bool = False) -> dict[str, object]:
+def _device_dict(device: Device, *, include_unique: bool = False) -> dict[str, object]:
     result: dict[str, object] = {
         "path": str(device.path),
+        "backend": device.backend,
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
         "transport": PRODUCT_IDS.get(device.product_id, "unknown"),
@@ -76,7 +77,7 @@ def _device_dict(device: HidrawDevice, *, include_unique: bool = False) -> dict[
 def command_probe(args: argparse.Namespace) -> int:
     devices = [
         device
-        for device in discover_hidraw()
+        for device in discover_devices()
         if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
     ]
     if args.json:
@@ -129,7 +130,7 @@ def _write_report(
         raise RuntimeError("refusing to write without --confirm (use --dry-run first)")
 
     device = choose_device(
-        discover_hidraw(),
+        discover_devices(),
         vendor_id=VENDOR_ID,
         product_ids=product_ids or set(PRODUCT_IDS),
         usage=usage,
@@ -144,8 +145,8 @@ def _write_report(
         raise RuntimeError(
             f"report length mismatch: descriptor says {expected}, tool expects {len(report)}"
         )
-    result = send_feature_report(device.path, report)
-    print(f"Terkirim ke {device.path}; ioctl result={result}.")
+    result = send_feature_report(device, report)
+    print(f"Terkirim ke {device.path}; transport result={result}.")
     return 0
 
 
@@ -206,9 +207,9 @@ def command_profile_validate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _main_device(args: argparse.Namespace) -> HidrawDevice:
+def _main_device(args: argparse.Namespace) -> Device:
     device = choose_device(
-        discover_hidraw(),
+        discover_devices(),
         vendor_id=VENDOR_ID,
         product_ids=set(PRODUCT_IDS),
         usage=MAIN_USAGE,
@@ -223,9 +224,9 @@ def _main_device(args: argparse.Namespace) -> HidrawDevice:
     return device
 
 
-def _send_main_reports(device: HidrawDevice, reports: list[bytes] | tuple[bytes, ...]) -> None:
+def _send_main_reports(device: Device, reports: list[bytes] | tuple[bytes, ...]) -> None:
     for index, report in enumerate(reports):
-        result = send_feature_report(device.path, report)
+        result = send_feature_report(device, report)
         if result != len(report):
             raise RuntimeError(f"short feature write: {result}/{len(report)}")
         if index + 1 < len(reports):
@@ -292,7 +293,7 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
     if not args.confirm:
         raise RuntimeError("refusing to write without --confirm (use --dry-run first)")
     device = choose_device(
-        discover_hidraw(),
+        discover_devices(),
         vendor_id=VENDOR_ID,
         product_ids={0x0351},
         usage=OUTPUT_USAGE,
@@ -302,11 +303,11 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
         raise RuntimeError("stream interface has no matching short feature report")
     if device.report_length("output", 0x06) != 64:
         raise RuntimeError("stream interface has no 64-byte output report 0x06")
-    feature_result = send_feature_report(device.path, activation)
+    feature_result = send_feature_report(device, activation)
     if feature_result != len(activation):
         raise RuntimeError("short streaming activation write")
     for report in chunks:
-        result = send_output_report(device.path, report)
+        result = send_output_report(device, report)
         if result != len(report):
             raise RuntimeError(f"short output write: {result}/{len(report)}")
     print(f"1 frame streaming RGB terkirim ke {device.path}.")
@@ -322,7 +323,7 @@ def command_gui(args: argparse.Namespace) -> int:
 
 def command_info(args: argparse.Namespace) -> int:
     devices = [
-        device for device in discover_hidraw()
+        device for device in discover_devices()
         if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
     ]
     summaries = []
@@ -373,8 +374,21 @@ def command_service_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_service_integration(args: argparse.Namespace) -> int:
+    from .startup import render_startup
+
+    if args.output.exists() and not args.force:
+        raise RuntimeError(f"refusing to overwrite {args.output}; use --force")
+    platform = None if args.platform == "auto" else args.platform
+    args.output.write_text(
+        render_startup(args.config, platform=platform), encoding="utf-8"
+    )
+    print(f"Background launcher ditulis ke {args.output}.")
+    return 0
+
+
 def _add_write_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--device", type=Path, help="explicit /dev/hidrawN path")
+    parser.add_argument("--device", type=Path, help="explicit HID path shown by probe")
     parser.add_argument("--dry-run", action="store_true", help="print packet; do not write")
     parser.add_argument("--confirm", action="store_true", help="allow the HID write")
 
@@ -382,7 +396,7 @@ def _add_write_options(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spade65ctl",
-        description="Experimental Linux configuration tool for the non-QMK Noir Spade65",
+        description="Cross-platform configuration tool for the non-QMK Noir Spade65",
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -397,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe.set_defaults(handler=command_probe)
 
     info = subparsers.add_parser(
-        "info", help="read-only USB revision and kernel battery information"
+        "info", help="read-only USB revision and available battery information"
     )
     info.set_defaults(handler=command_info)
 
@@ -489,7 +503,7 @@ def build_parser() -> argparse.ArgumentParser:
     vendor_import.set_defaults(handler=command_vendor_import)
 
     service = subparsers.add_parser(
-        "service", help="background AP effects and Linux application associations"
+        "service", help="background AP effects and application associations"
     )
     service_subparsers = service.add_subparsers(dest="service_command", required=True)
     service_example = service_subparsers.add_parser("example", help="write a config template")
@@ -505,6 +519,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="required in addition to allow_profile_writes in config",
     )
     service_run.set_defaults(handler=command_service_run)
+    service_integration = service_subparsers.add_parser(
+        "integration", help="generate an OS startup launcher without installing it"
+    )
+    service_integration.add_argument("config", type=Path)
+    service_integration.add_argument("output", type=Path)
+    service_integration.add_argument(
+        "--platform", choices=("auto", "linux", "windows", "macos"),
+        default="auto",
+    )
+    service_integration.add_argument("--force", action="store_true")
+    service_integration.set_defaults(handler=command_service_integration)
     return parser
 
 

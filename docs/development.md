@@ -6,7 +6,9 @@
 spade65ctl.py
   └── spade65.cli
         ├── spade65.protocol   # konstanta dan builder paket murni
-        ├── spade65.hidraw     # discovery sysfs, parser descriptor, ioctl
+        ├── spade65.device     # model + parser descriptor netral OS
+        ├── spade65.transport  # pemilih backend lintas platform
+        ├── spade65.hidraw     # backend Linux: sysfs + ioctl
         └── spade65.gui        # API localhost + asset web tanpa dependency
 ```
 
@@ -14,9 +16,13 @@ Pemisahan ini disengaja:
 
 - `protocol.py` dapat diuji tanpa Linux maupun keyboard.
 - `hidraw.py` tidak mengetahui arti opcode.
+- `transport.py` mempertahankan hidraw di Linux dan memakai HIDAPI yang dapat
+  membaca descriptor pada Windows/macOS.
 - `cli.py` menangani validasi keselamatan dan UX.
 
-Tidak ada dependency runtime eksternal. Hindari menambahkan `hidapi` hanya untuk convenience sebelum terbukti diperlukan; ioctl Linux sudah menyediakan feature report yang dibutuhkan.
+Linux tidak memiliki dependency runtime eksternal. Extra `cross-platform`
+memasang `hidapi` untuk Windows/macOS; jangan membuat fallback write bila HIDAPI
+gagal membaca descriptor.
 
 Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
 yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan

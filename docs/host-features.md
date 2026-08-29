@@ -1,4 +1,4 @@
-# Fitur host Linux
+# Fitur host lintas platform
 
 ## Konversi ekspor software original
 
@@ -40,7 +40,7 @@ mkdir -p ~/.config/spade65
 spade65ctl service example ~/.config/spade65/default.json
 ```
 
-Edit `associations` menjadi nama proses Linux dan path profil. Jalankan:
+Edit `associations` menjadi nama proses aplikasi dan path profil. Jalankan:
 
 ```bash
 spade65ctl service run ~/.config/spade65/default.json
@@ -49,6 +49,8 @@ spade65ctl service run ~/.config/spade65/default.json
 Pada X11, service memakai `_NET_ACTIVE_WINDOW` dan `_NET_WM_PID`. Pada Wayland
 tidak ada API foreground-window yang portabel, sehingga fallback memilih rule
 pertama dengan proses yang sedang berjalan. Urutan rule karena itu signifikan.
+Windows memakai Win32 foreground-window API dan macOS memakai proses frontmost
+melalui System Events. macOS dapat meminta izin Automation/Accessibility.
 
 Secara default service hanya menjalankan AP effect/timeline. Agar pergantian
 aplikasi juga menulis keymap, dua izin harus aktif sekaligus:
@@ -56,12 +58,18 @@ aplikasi juga menulis keymap, dua izin harus aktif sekaligus:
 1. `"allow_profile_writes": true` di file config.
 2. Flag runtime `--allow-profile-writes`.
 
-Semua write tetap diperiksa terhadap HID descriptor. Template systemd user ada
-di `contrib/systemd/spade65-background@.service`; salin ke
-`~/.config/systemd/user/`, lalu sesuaikan `ExecStart` jika lokasi executable
-berbeda.
+Semua write tetap diperiksa terhadap HID descriptor. Launcher untuk OS aktif
+dapat dibuat tanpa langsung memasangnya:
 
-Service/systemd ini adalah komponen background yang tetap berjalan tanpa GUI;
+```bash
+spade65ctl service integration ~/.config/spade65/default.json launcher-output
+```
+
+Gunakan `--platform linux`, `windows`, atau `macos` untuk menghasilkan launcher
+platform lain. Linux menghasilkan unit systemd, Windows menghasilkan launcher
+`.cmd` untuk folder Startup, dan macOS menghasilkan LaunchAgent `.plist`.
+
+Service/launcher ini adalah komponen background yang tetap berjalan tanpa GUI;
 tidak ada ikon tray dan tidak diperlukan toolkit desktop tambahan. Audio-reactive
 tetap dijalankan dari GUI karena service tidak meminta akses mikrofon secara
 diam-diam.
@@ -72,12 +80,13 @@ diam-diam.
 spade65ctl info
 ```
 
-Perintah ini hanya membaca sysfs. `usb_revision` berasal dari `bcdDevice`, bukan
-diklaim sebagai versi firmware. Versi firmware software original berasal dari
+Perintah ini tidak mengirim report HID. Di Linux, `usb_revision` dibaca dari
+sysfs; di Windows/macOS nilainya berasal dari metadata enumerasi HIDAPI. Nilai
+tersebut bukan versi firmware. Versi firmware software original berasal dari
 fungsi `GetFWVersion` dalam native addon Windows tertutup; tanpa metode request
 yang dapat diverifikasi, proyek tidak mengirim tebakan HID. Baterai hanya
-ditampilkan jika kernel mengekspornya melalui `power_supply` untuk perangkat yang
-sama.
+ditampilkan jika Linux mengekspornya melalui `power_supply` untuk perangkat yang
+sama; belum ada pembacaan baterai terverifikasi pada Windows/macOS.
 
 Hasil pengujian fisik dan batas operasi yang sengaja tidak dikirim dicatat di
 [`hardware-verification.md`](hardware-verification.md).

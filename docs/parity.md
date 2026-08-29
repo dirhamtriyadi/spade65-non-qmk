@@ -33,8 +33,8 @@ tanpa mengarang opcode profile baru.
 Beberapa komponen ada di bundle generik tetapi bukan halaman aktif perangkat:
 
 - `RELATEDPROGRAM` adalah integrasi host Windows. Proyek sekarang menyediakan
-  ekuivalen Linux opt-in melalui background service (X11 dan fallback Wayland),
-  tanpa menyalin integrasi executable Windows.
+  ekuivalen lintas platform opt-in melalui background service untuk Linux,
+  Windows, dan macOS, tanpa menyalin integrasi executable vendor.
 - `Custom Effect` timeline tidak terdapat di daftar halaman aktif Spade65, tetapi
   ekuivalen aman berbasis streaming lokal sekarang tersedia hingga 200 frame.
 - UI polling rate dikomentari dan `reportRateIndex` tidak pernah diserialisasi

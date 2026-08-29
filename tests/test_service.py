@@ -7,6 +7,7 @@ from unittest.mock import patch
 from spade65.keymap import profile_template
 from spade65.service import (
     BackgroundService,
+    active_process_name,
     load_service_config,
     matching_rule,
     service_template,
@@ -45,6 +46,27 @@ class ServiceTests(unittest.TestCase):
             {"process": "code", "profile": "editor.json"},
         ]
         self.assertEqual(matching_rule(config)["profile"], "browser.json")
+
+    @patch("spade65.service.active_process_name", return_value="FIREFOX.EXE")
+    def test_windows_executable_suffix_is_normalized(self, active) -> None:
+        config = service_template()
+        config["associations"] = [
+            {"process": r"C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+             "profile": "browser.json"},
+        ]
+        self.assertEqual(matching_rule(config)["profile"], "browser.json")
+
+    def test_foreground_process_dispatches_for_windows_and_macos(self) -> None:
+        with patch(
+            "spade65.service._active_process_windows", return_value="code.exe"
+        ) as windows:
+            self.assertEqual(active_process_name("win32"), "code.exe")
+            windows.assert_called_once_with()
+        with patch(
+            "spade65.service._active_process_macos", return_value="Safari"
+        ) as macos:
+            self.assertEqual(active_process_name("darwin"), "Safari")
+            macos.assert_called_once_with()
 
     @patch("spade65.service.running_process_names", return_value={"code"})
     @patch("spade65.service.active_process_name", return_value=None)

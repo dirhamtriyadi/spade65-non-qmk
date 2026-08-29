@@ -1,6 +1,7 @@
 # spade65-non-qmk
 
-Utilitas Linux eksperimental untuk mengatur keyboard **Noir Spade65 non-QMK** tanpa menjalankan software Windows resmi.
+Utilitas lintas platform untuk mengatur keyboard **Noir Spade65 non-QMK** tanpa
+bergantung pada software Windows resmi.
 
 Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_20240403.exe`. Jalur USB telah diuji bertahap pada unit fisik; fitur yang belum diuji tetap ditandai secara eksplisit di bawah.
 
@@ -8,7 +9,7 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 
 | Fitur | Implementasi | Diuji pada hardware |
 |---|---:|---:|
-| Deteksi USB dan dongle | Ya | Ya, mode USB `0603:0351` |
+| Deteksi USB dan dongle | Linux hidraw + Windows/macOS HIDAPI | Ya, Linux mode USB `0603:0351` |
 | Membaca HID report descriptor | Ya | Ya, mode USB `0603:0351` |
 | Efek RGB bawaan | Ya | Ya, `fixed` via USB |
 | Brightness dan speed RGB | Ya | Ya, via USB |
@@ -18,17 +19,17 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 | Remap tombol/layer | Ya, seluruh kategori assignment vendor + tiga layer | Belum |
 | Macro | Ya, maksimal 10 macro/84 event, recorder, repeat dan binding | Belum |
 | Per-key RGB | Ya, tersimpan dan streaming | Ya, mode USB `0603:0351` |
-| GUI lokal | Ya, tanpa dependency eksternal | Ya, browser lokal + deteksi hardware |
+| GUI lokal | Ya, frontend web lokal yang sama di seluruh OS | Ya, browser lokal + deteksi hardware Linux |
 | Animasi app/AP mode | Ya, 10 pola/layer + range, palet, parameter lanjut dan audio | Streaming USB tervalidasi |
 | Custom timeline | Ya, 200 frame + playback/background streaming | Service mengirim frame via USB |
 | Import file vendor | Ya, KeyAssign/Macro/APMode JSON | Diuji offline |
-| Asosiasi aplikasi/background service | Ya, X11 + fallback proses Wayland | Seleksi diuji offline; output service via USB |
-| Informasi read-only | USB revision + baterai jika diekspos kernel | Ya, tanpa HID write |
+| Asosiasi aplikasi/background service | Linux, Windows, dan macOS | Seleksi tiap platform diuji; output service via USB Linux |
+| Informasi read-only | USB revision + baterai jika diekspos OS | Ya, tanpa HID write |
 | Firmware/raw flash/bootloader | Sengaja tidak diimplementasikan | Tidak; risiko brick |
 
 Fitur konfigurasi keyboard yang aman dari aplikasi vendor sudah tersedia melalui
-CLI dan GUI. Asosiasi profil Windows `RELATEDPROGRAM` digantikan service Linux
-opt-in. Updater aplikasi, login, dan telemetri vendor tidak direplikasi karena
+CLI dan GUI. Asosiasi profil Windows `RELATEDPROGRAM` digantikan service host
+opt-in pada Linux, Windows, dan macOS. Updater aplikasi, login, dan telemetri vendor tidak direplikasi karena
 bukan konfigurasi keyboard. Tidak ada endpoint, builder paket, atau fallback raw
 HID untuk flash firmware dan bootloader.
 
@@ -39,9 +40,9 @@ Spade65 aktif.
 
 ## Persyaratan
 
-- Linux dengan `hidraw` dan `sysfs` standar.
 - Python 3.10 atau lebih baru.
-- Tidak membutuhkan package Python pihak ketiga.
+- Linux: `hidraw` dan `sysfs` standar, tanpa dependency runtime tambahan.
+- Windows/macOS: package `hidapi` melalui extra `cross-platform`.
 
 ## Menjalankan
 
@@ -61,9 +62,18 @@ python -m pip install -e .
 spade65ctl probe
 ```
 
-`pip install -e .` di atas hanya memakai source lokal; aplikasi tidak memiliki dependency runtime eksternal.
+Pada Windows atau macOS:
 
-## Izin hidraw melalui udev
+```bash
+python -m pip install -e ".[cross-platform]"
+spade65ctl probe
+spade65ctl gui
+```
+
+Detail backend, izin, serta status pengujian setiap OS tersedia di
+[`docs/cross-platform.md`](docs/cross-platform.md).
+
+## Izin hidraw Linux melalui udev
 
 Pasang rule yang tersedia dalam repository:
 
@@ -152,7 +162,7 @@ spade65ctl info
 ```
 
 Service dapat menjalankan AP effect/timeline setelah GUI ditutup dan memilih
-profil menurut aplikasi Linux. Write keymap otomatis nonaktif secara default dan
+profil menurut aplikasi aktif di Linux, Windows, atau macOS. Write keymap otomatis nonaktif secara default dan
 memerlukan izin ganda. `info` tidak mengirim paket HID.
 
 Apply profil meminta dua konfirmasi karena menimpa seluruh keymap. Reset meminta
@@ -178,7 +188,7 @@ Opsi penting:
 - `--color-index 0..7`
 - `--multicolor`
 - `--dry-run`
-- `--device /dev/hidrawN` jika lebih dari satu Spade65 terhubung
+- `--device PATH` memakai path yang ditampilkan `probe` jika lebih dari satu Spade65 terhubung
 
 Contoh:
 

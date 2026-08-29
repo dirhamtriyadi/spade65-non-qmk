@@ -1,16 +1,17 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from spade65.hidraw import (
-    HidrawDevice,
-    choose_device,
-    discover_hidraw,
-    parse_report_descriptor,
-    readonly_device_info,
-    send_output_report,
-)
+from spade65.device import Device, choose_device, parse_report_descriptor
+
+if sys.platform.startswith("linux"):
+    from spade65.hidraw import (
+        discover_hidraw,
+        readonly_device_info,
+        send_output_report,
+    )
 
 
 class HidrawTests(unittest.TestCase):
@@ -31,6 +32,7 @@ class HidrawTests(unittest.TestCase):
         self.assertEqual(reports[0].report_id, 7)
         self.assertEqual(reports[0].byte_length, 620)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux hidraw backend")
     def test_discovers_a_synthetic_hidraw_device(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -56,6 +58,7 @@ class HidrawTests(unittest.TestCase):
             )
             self.assertEqual(selected.name, "Noir SPADE65")
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux sysfs metadata")
     def test_readonly_info_does_not_claim_usb_revision_is_firmware(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             usb = Path(directory) / "1-2"
@@ -64,13 +67,14 @@ class HidrawTests(unittest.TestCase):
             (usb / "idVendor").write_text("0603\n")
             (usb / "idProduct").write_text("0351\n")
             (usb / "bcdDevice").write_text("0100\n")
-            info = readonly_device_info(HidrawDevice(
+            info = readonly_device_info(Device(
                 path=Path("/dev/hidraw4"), vendor_id=0x0603,
                 product_id=0x0351, sysfs_path=interface,
             ))
             self.assertEqual(info["usb_revision"], "01.00")
             self.assertIsNone(info["firmware_version"])
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux hidraw backend")
     @patch("spade65.hidraw.os.close")
     @patch("spade65.hidraw.os.write", return_value=64)
     @patch("spade65.hidraw.os.open", return_value=12)

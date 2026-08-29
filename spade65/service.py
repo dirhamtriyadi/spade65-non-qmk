@@ -1,20 +1,22 @@
-"""Opt-in Linux application association and background RGB service."""
+"""Opt-in cross-platform application association and background RGB service."""
 
 from __future__ import annotations
 
-import copy
+import csv
+import io
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 from .effects import render_app_effects, timeline_frames
-from .hidraw import (
-    HidrawDevice,
+from .transport import (
+    Device,
     choose_device,
-    discover_hidraw,
+    discover_devices,
     send_feature_report,
     send_output_report,
 )
@@ -78,9 +80,7 @@ def _process_name(pid: int) -> str | None:
         return None
 
 
-def active_process_name() -> str | None:
-    """Return the X11 foreground process; None on unsupported desktops."""
-
+def _active_process_linux() -> str | None:
     if not os.environ.get("DISPLAY"):
         return None
     try:
@@ -101,7 +101,76 @@ def active_process_name() -> str | None:
     return _process_name(pid)
 
 
-def running_process_names(proc_root: Path = Path("/proc")) -> set[str]:
+def _active_process_windows() -> str | None:
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [
+            wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+        ]
+        kernel32.OpenProcess.argtypes = [
+            wintypes.DWORD, wintypes.BOOL, wintypes.DWORD
+        ]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        window = user32.GetForegroundWindow()
+        if not window:
+            return None
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(window, ctypes.byref(pid))
+        handle = kernel32.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return None
+        try:
+            length = wintypes.DWORD(32768)
+            buffer = ctypes.create_unicode_buffer(length.value)
+            if not kernel32.QueryFullProcessImageNameW(
+                handle, 0, buffer, ctypes.byref(length)
+            ):
+                return None
+            return buffer.value.replace("\\", "/").rsplit("/", 1)[-1]
+        finally:
+            kernel32.CloseHandle(handle)
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _active_process_macos() -> str | None:
+    script = (
+        'tell application "System Events" to get name of first application process '
+        "whose frontmost is true"
+    )
+    try:
+        value = subprocess.run(
+            ["osascript", "-e", script], check=True, capture_output=True,
+            text=True, timeout=2,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    return value or None
+
+
+def active_process_name(platform: str | None = None) -> str | None:
+    """Return the foreground process using the current operating system API."""
+
+    current = platform or sys.platform
+    if current == "win32":
+        return _active_process_windows()
+    if current == "darwin":
+        return _active_process_macos()
+    return _active_process_linux()
+
+
+def _running_process_names_linux(proc_root: Path = Path("/proc")) -> set[str]:
     names = set()
     for entry in proc_root.iterdir():
         if not entry.name.isdigit():
@@ -115,26 +184,66 @@ def running_process_names(proc_root: Path = Path("/proc")) -> set[str]:
     return names
 
 
+def running_process_names(
+    proc_root: Path = Path("/proc"), platform: str | None = None
+) -> set[str]:
+    current = platform or sys.platform
+    if current == "win32":
+        try:
+            output = subprocess.run(
+                ["tasklist", "/fo", "csv", "/nh"], check=True,
+                capture_output=True, text=True, timeout=4,
+            ).stdout
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return set()
+        return {
+            row[0].strip().casefold()
+            for row in csv.reader(io.StringIO(output)) if row and row[0].strip()
+        }
+    if current == "darwin":
+        try:
+            output = subprocess.run(
+                ["ps", "-axo", "comm="], check=True, capture_output=True,
+                text=True, timeout=4,
+            ).stdout
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return set()
+        return {
+            line.strip().replace("\\", "/").rsplit("/", 1)[-1].casefold()
+            for line in output.splitlines() if line.strip()
+        }
+    return _running_process_names_linux(proc_root)
+
+
+def _normalized_process(value: str) -> str:
+    name = value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].casefold()
+    for suffix in (".exe", ".app"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+    return name
+
+
 def matching_rule(config: dict[str, Any]) -> dict[str, str] | None:
     foreground = active_process_name()
     associations = config.get("associations", [])
     if foreground:
         for rule in associations:
-            if Path(rule["process"]).name.casefold() == foreground.casefold():
+            if _normalized_process(rule["process"]) == _normalized_process(foreground):
                 return rule
         return None
     # Wayland has no portable active-window API. A running-process fallback is
     # deterministic and documented; rule order resolves multiple matches.
     running = running_process_names()
+    candidates = {_normalized_process(name) for name in running}
     for rule in associations:
-        if Path(rule["process"]).name.casefold() in running:
+        if _normalized_process(rule["process"]) in candidates:
             return rule
     return None
 
 
-def _choose_main(path: Path | None) -> HidrawDevice:
+def _choose_main(path: Path | None) -> Device:
     device = choose_device(
-        discover_hidraw(), vendor_id=VENDOR_ID, product_ids={0x0351, 0x0356},
+        discover_devices(), vendor_id=VENDOR_ID, product_ids={0x0351, 0x0356},
         usage=MAIN_USAGE, explicit_path=path,
     )
     if device.report_length("feature", MAIN_REPORT_ID) != MAIN_REPORT_LENGTH:
@@ -149,7 +258,7 @@ def apply_profile(profile: dict[str, Any], *, path: Path | None = None) -> None:
         reports.extend((rgb_effect_report("custom"), compiled["colors"]))
     device = _choose_main(path)
     for index, report in enumerate(reports):
-        result = send_feature_report(device.path, report)
+        result = send_feature_report(device, report)
         if result != len(report):
             raise RuntimeError(f"short background profile write: {result}/{len(report)}")
         if index + 1 < len(reports):
@@ -163,7 +272,7 @@ def stream_colors(colors: dict[str, object], *, path: Path | None = None) -> Non
     }
     compiled = compile_profile(profile)
     device = choose_device(
-        discover_hidraw(), vendor_id=VENDOR_ID, product_ids={0x0351},
+        discover_devices(), vendor_id=VENDOR_ID, product_ids={0x0351},
         usage=OUTPUT_USAGE, explicit_path=path,
     )
     if device.report_length("feature", SHORT_REPORT_ID) != SHORT_REPORT_LENGTH:
@@ -171,10 +280,10 @@ def stream_colors(colors: dict[str, object], *, path: Path | None = None) -> Non
     if device.report_length("output", 0x06) != 64:
         raise RuntimeError("stream output descriptor does not match")
     activation = streaming_activation_report()
-    if send_feature_report(device.path, activation) != len(activation):
+    if send_feature_report(device, activation) != len(activation):
         raise RuntimeError("short background streaming activation")
     for report in streaming_rgb_reports(compiled["matrix_colors"]):
-        if send_output_report(device.path, report) != len(report):
+        if send_output_report(device, report) != len(report):
             raise RuntimeError("short background streaming write")
 
 
@@ -244,7 +353,13 @@ class BackgroundService:
         fps = int(self.config.get("fps", 10))
         poll_seconds = float(self.config.get("poll_seconds", 1))
         while True:
-            status = self.step()
+            try:
+                status = self.step()
+            except (OSError, RuntimeError) as error:
+                if once:
+                    raise
+                print(f"Spade65 service warning: {error}", file=sys.stderr)
+                status = "idle"
             if once:
                 return
             streaming = status.startswith(("timeline:", "effects:"))

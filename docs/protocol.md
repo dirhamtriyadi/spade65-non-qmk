@@ -48,9 +48,12 @@ Kode `InitialDevice` juga mencari:
 
 Inferensi tersebut berasal dari parameter `FindDevice()` dan nama handle internal `DeviceId_Set8Bytes` serta `DeviceId_Output`. Descriptor hardware tetap harus mengonfirmasi pasangan ini.
 
-## Transport Linux
+## Transport lintas platform
 
-Aplikasi Windows memakai native addon berbasis HIDAPI. Wrapper meneruskan byte pertama buffer sebagai report ID. Implementasi Linux memakai `hidraw` dan ioctl `HIDIOCSFEATURE(length)`, dengan report ID tetap menjadi byte pertama.
+Aplikasi vendor Windows memakai native addon berbasis HIDAPI. Wrapper meneruskan
+byte pertama buffer sebagai report ID. Implementasi proyek memakai `hidraw` dan
+ioctl `HIDIOCSFEATURE(length)` di Linux, serta `hidapi` di Windows/macOS. Kedua
+backend mempertahankan report ID sebagai byte pertama.
 
 CLI memilih interface berdasarkan seluruh kondisi berikut:
 
@@ -59,7 +62,10 @@ CLI memilih interface berdasarkan seluruh kondisi berikut:
 3. Pasangan usage page/usage yang sesuai.
 4. Feature report ID dan panjang report yang cocok dengan descriptor.
 
-Tidak ada fallback yang menulis berdasarkan nomor `/dev/hidrawN` saja.
+Windows/macOS membaca report descriptor melalui HIDAPI lalu menjalankan parser
+yang sama dengan Linux. Jika descriptor tidak dapat dibaca, collection boleh
+ditampilkan oleh `probe`, tetapi tidak memiliki report shape sehingga semua write
+ditolak. Tidak ada fallback yang menulis berdasarkan path atau VID/PID saja.
 
 ## Report utama ID 0x07
 
@@ -163,7 +169,8 @@ Pilihan timer berasal langsung dari profil default vendor:
 - Light-off: 1, 2, 5, 10, 15, 20, 25, 30 menit.
 - Hibernate: 3, 5, 10, 15, 20, 25, 30, 60 menit.
 
-Kode vendor melewati pengiriman timer saat state adalah kabel USB. Implementasi Linux karena itu membatasi perintah `sleep` ke PID dongle `0356`.
+Kode vendor melewati pengiriman timer saat state adalah kabel USB. Implementasi
+proyek karena itu membatasi perintah `sleep` ke PID dongle `0356` pada seluruh OS.
 
 ## Streaming RGB output
 
