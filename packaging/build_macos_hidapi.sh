@@ -20,7 +20,7 @@ if ! file "$resolved_python" | grep -q 'Mach-O'; then
   exit 1
 fi
 file "$resolved_python"
-lipo -verify_arch x86_64 arm64 "$resolved_python"
+lipo "$resolved_python" -verify_arch x86_64 arm64
 
 # cython-hidapi publishes separate thin macOS wheels. Build its sdist with a
 # universal2 interpreter instead; do not let pip silently fall back to a wheel
@@ -57,6 +57,6 @@ esac
 hid_extension=$("$build_python" -c \
   'import hid, pathlib; print(pathlib.Path(hid.__file__).resolve())')
 file "$hid_extension"
-lipo -verify_arch x86_64 arm64 "$hid_extension"
+lipo "$hid_extension" -verify_arch x86_64 arm64
 "$build_python" -c \
   'import hid; assert hid.__version__ == "0.15.0", hid.__version__'

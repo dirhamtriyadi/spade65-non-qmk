@@ -29,7 +29,7 @@ test -x "$application/Contents/MacOS/Spade65"
 mach_o_count=0
 while IFS= read -r -d '' candidate; do
   if file "$candidate" | grep -q 'Mach-O'; then
-    lipo -verify_arch x86_64 arm64 "$candidate"
+    lipo "$candidate" -verify_arch x86_64 arm64
     mach_o_count=$((mach_o_count + 1))
   fi
 done < <(find "$application" -type f -print0)

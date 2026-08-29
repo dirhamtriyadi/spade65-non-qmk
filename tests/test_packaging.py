@@ -204,7 +204,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertIn("shasum -a 256 -c -", prepare)
         self.assertGreaterEqual(
-            prepare.count("lipo -verify_arch x86_64 arm64"), 3
+            prepare.count("-verify_arch x86_64 arm64"), 3
         )
 
         test_workflow = (
@@ -225,7 +225,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("shasum -a 256 -c -", hid_build)
         self.assertIn("macosx_11_0_universal2.whl", hid_build)
         self.assertGreaterEqual(
-            hid_build.count("lipo -verify_arch x86_64 arm64"), 2
+            hid_build.count("-verify_arch x86_64 arm64"), 2
         )
 
 

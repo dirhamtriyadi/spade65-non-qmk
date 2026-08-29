@@ -34,8 +34,8 @@ case $mode in
     test -x "$framework_python"
     test -f "$framework_library"
     file "$framework_python" "$framework_library"
-    lipo -verify_arch x86_64 arm64 "$framework_python"
-    lipo -verify_arch x86_64 arm64 "$framework_library"
+    lipo "$framework_python" -verify_arch x86_64 arm64
+    lipo "$framework_library" -verify_arch x86_64 arm64
     ;;
   venv)
     : "${GITHUB_PATH:?GITHUB_PATH is required}"
@@ -47,7 +47,7 @@ case $mode in
     resolved_python=$("$venv_python" -c \
       'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')
     file "$resolved_python"
-    lipo -verify_arch x86_64 arm64 "$resolved_python"
+    lipo "$resolved_python" -verify_arch x86_64 arm64
     echo "$venv_bin" >> "$GITHUB_PATH"
     echo "SPADE65_BUILD_PYTHON=$venv_python" >> "$GITHUB_ENV"
     ;;

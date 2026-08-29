@@ -83,7 +83,7 @@ thin result before packaging:
 ```sh
 resolved_python=$(python -c \
   'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')
-lipo -verify_arch x86_64 arm64 "$resolved_python"
+lipo "$resolved_python" -verify_arch x86_64 arm64
 bash packaging/build_macos_hidapi.sh
 python packaging/build.py
 ```
