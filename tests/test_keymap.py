@@ -5,6 +5,7 @@ from spade65.keymap import (
     DEFAULT_USAGES,
     MATRIX_KEY_NAMES,
     UI_KEY_NAMES,
+    USAGE_GROUPS,
     compile_profile,
     default_keymap_report,
     export_default,
@@ -35,6 +36,19 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(exported["device"], "0603:0351")
         self.assertEqual(len(exported["matrix"]), 102)
         self.assertEqual(exported["report"]["length"], 620)
+
+    def test_vendor_assignment_categories_are_named(self) -> None:
+        profile = profile_template()
+        profile["layers"]["normal"]["a"] = "play-pause"
+        profile["layers"]["normal"]["b"] = "mouse-left"
+        profile["layers"]["normal"]["c"] = "profile-next"
+        profile["layers"]["normal"]["d"] = "disabled"
+        compiled = compile_profile(profile)["keymap"]
+        self.assertEqual(compiled[8 + 2 * BUTTON_TO_SLOT["a"] + 1], 0xA1)
+        self.assertEqual(compiled[8 + 2 * BUTTON_TO_SLOT["b"] + 1], 0xB4)
+        self.assertEqual(compiled[8 + 2 * BUTTON_TO_SLOT["c"] + 1], 0xB2)
+        self.assertEqual(compiled[8 + 2 * BUTTON_TO_SLOT["d"] + 1], 0x00)
+        self.assertIn("Media", USAGE_GROUPS)
 
     def test_compiles_complete_profile(self) -> None:
         profile = profile_template()

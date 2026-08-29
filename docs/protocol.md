@@ -10,7 +10,9 @@ pendek `0x08` sepanjang 8 byte. Pengiriman RGB `fixed` (brightness 2, speed 3)
 mengembalikan hasil ioctl 620, dan debounce 5 ms mengembalikan hasil ioctl 8.
 Per-key RGB opcode `0x07` dan satu frame streaming (aktivasi ditambah lima output
 report 64 byte) juga berhasil dikirim, lalu efek `fixed` berhasil dipulihkan.
-Mode dongle, keymap write, macro, reset, serta firmware update belum diuji.
+Mode dongle, keymap write, macro, dan reset belum diuji. Firmware update tidak
+diimplementasikan karena dapat menyebabkan brick dan tidak ada recovery procedure
+yang terverifikasi.
 
 ## Sumber analisis
 
@@ -171,7 +173,11 @@ Untuk sinkronisasi real-time, aplikasi terlebih dahulu mengirim feature report p
 - Byte 1: nomor chunk 1 sampai 5.
 - Byte 2..63: 62 byte data RGB.
 
-Fitur ini belum diimplementasikan karena streaming perlu diuji untuk latency dan tidak diperlukan untuk konfigurasi tersimpan dasar.
+Builder dan transport streaming telah diimplementasikan. Pada unit USB
+`0603:0351`, aktivasi dan lima output report berhasil dikirim, kemudian efek
+`fixed` berhasil dipulihkan. GUI memakai jalur ini untuk satu frame, sepuluh pola
+animasi AP-mode, dan modulasi audio reactive. Streaming tetap dibatasi ke PID USB
+dan descriptor output report `0x06` sepanjang 64 byte.
 
 ## Data yang masih diperlukan
 

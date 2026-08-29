@@ -1,0 +1,111 @@
+.layout-picker {
+  display: flex;
+  align-items: center;
+  grid-template-columns: auto 210px;
+  gap: 10px;
+  margin: 0;
+}
+
+.layout-picker select {
+  min-width: 210px;
+}
+
+.keyboard {
+  position: relative;
+  display: block;
+  width: min(100%, 1050px);
+  aspect-ratio: 757 / 236;
+  margin: 0 auto 18px;
+  padding: 0;
+  overflow: hidden;
+  background: linear-gradient(145deg, #d8d0be, #9f988b);
+  border: 2px solid #6e695f;
+  border-radius: 2.2% / 7%;
+  box-shadow:
+    inset 0 0 0 4px #bdb5a6,
+    inset 0 0 20px rgb(0 0 0 / 36%),
+    0 18px 30px rgb(0 0 0 / 18%);
+}
+
+.keyboard::before {
+  content: "";
+  position: absolute;
+  inset: 6.2% 8.1% 7.3% 8.2%;
+  background: #201f1c;
+  border: 2px solid #0b0d0b;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 2px #5e5a52;
+}
+
+.keyboard::after {
+  content: "";
+  position: absolute;
+  left: 86.3%;
+  top: 6.5%;
+  width: 5.7%;
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at 37% 32%, #eee8da 0 15%, #c9c1b2 48%, #8f887d 100%);
+  border: 1px solid #777064;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px #161814;
+}
+
+.keyboard .key {
+  position: absolute;
+  z-index: 1;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  height: var(--h);
+  padding: 2px;
+  overflow: hidden;
+  color: #f8f7f2;
+  font-size: clamp(7px, 1.05vw, 12px);
+  line-height: 1;
+  text-shadow: 0 1px #37342f;
+  background: linear-gradient(145deg, #b5b0a8, #817d76);
+  border: 1px solid #d8d4cc;
+  border-radius: 4px;
+  box-shadow: inset 0 -3px rgb(46 43 39 / 38%), 0 2px 2px #070807;
+}
+
+.keyboard .key:hover {
+  z-index: 3;
+  filter: brightness(1.2);
+}
+
+.keyboard .key.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), inset 0 -3px rgb(46 43 39 / 38%);
+}
+
+.keyboard .key .swatch {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.keyboard.compact {
+  width: min(100%, 900px);
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .layout-picker {
+    justify-content: space-between;
+  }
+
+  .layout-picker select {
+    width: 60%;
+    min-width: 0;
+  }
+}

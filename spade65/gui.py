@@ -1,0 +1,327 @@
+"""Dependency-free localhost web GUI for Spade65 configuration."""
+
+from __future__ import annotations
+
+import json
+import secrets
+import threading
+import time
+import webbrowser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+from . import __version__
+from .hidraw import (
+    HidrawDevice,
+    choose_device,
+    discover_hidraw,
+    send_feature_report,
+    send_output_report,
+)
+from .keymap import (
+    BUTTON_TO_SLOT,
+    HID_USAGES,
+    USAGE_GROUPS,
+    compile_profile,
+    profile_template,
+)
+from .protocol import (
+    EFFECTS,
+    MAIN_REPORT_ID,
+    MAIN_REPORT_LENGTH,
+    MAIN_USAGE,
+    OUTPUT_USAGE,
+    PRODUCT_IDS,
+    SHORT_REPORT_ID,
+    SHORT_REPORT_LENGTH,
+    SHORT_USAGE,
+    VENDOR_ID,
+    debounce_report,
+    reset_report,
+    rgb_effect_report,
+    sleep_report,
+    streaming_activation_report,
+    streaming_rgb_reports,
+)
+
+
+WRITE_LOCK = threading.Lock()
+MAX_REQUEST_BYTES = 1_000_000
+SAFE_ACTIONS = frozenset(
+    {"validate", "rgb", "per-key", "profile", "stream", "debounce", "sleep", "reset"}
+)
+
+
+def _device_summary(device: HidrawDevice) -> dict[str, object]:
+    return {
+        "path": str(device.path),
+        "vid": f"{device.vendor_id:04x}",
+        "pid": f"{device.product_id:04x}",
+        "transport": PRODUCT_IDS.get(device.product_id, "unknown"),
+        "name": device.name,
+        "usages": [f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)],
+        "reports": [
+            {"kind": report.kind, "id": report.report_id, "bytes": report.byte_length}
+            for report in device.reports
+        ],
+    }
+
+
+def gui_metadata() -> dict[str, object]:
+    devices = [
+        device
+        for device in discover_hidraw()
+        if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
+    ]
+    return {
+        "version": __version__,
+        "devices": [_device_summary(device) for device in devices],
+        "effects": sorted(EFFECTS),
+        "buttons": list(BUTTON_TO_SLOT),
+        "usages": HID_USAGES,
+        "usage_groups": USAGE_GROUPS,
+        "profile": profile_template(),
+        "firmware_update": False,
+        "safe_actions": sorted(SAFE_ACTIONS),
+    }
+
+
+def _choose(
+    usage: tuple[int, int],
+    *,
+    product_ids: set[int] | None = None,
+    explicit_path: str | None = None,
+) -> HidrawDevice:
+    return choose_device(
+        discover_hidraw(),
+        vendor_id=VENDOR_ID,
+        product_ids=product_ids or set(PRODUCT_IDS),
+        usage=usage,
+        explicit_path=Path(explicit_path) if explicit_path else None,
+    )
+
+
+def _send_features(device: HidrawDevice, reports: list[bytes]) -> list[int]:
+    allowed_shapes = {
+        MAIN_REPORT_ID: MAIN_REPORT_LENGTH,
+        SHORT_REPORT_ID: SHORT_REPORT_LENGTH,
+    }
+    for report in reports:
+        if not report or report[0] not in allowed_shapes:
+            raise RuntimeError("refusing unknown feature report")
+        required = allowed_shapes[report[0]]
+        if len(report) != required:
+            raise RuntimeError(
+                f"invalid report 0x{report[0]:02x} length: {len(report)}/{required}"
+            )
+        advertised = device.report_length("feature", report[0])
+        if advertised != required:
+            raise RuntimeError(
+                f"report 0x{report[0]:02x} mismatch: "
+                f"descriptor={advertised}, expected={required}"
+            )
+    results = []
+    with WRITE_LOCK:
+        for index, report in enumerate(reports):
+            result = send_feature_report(device.path, report)
+            if result != len(report):
+                raise RuntimeError(f"short feature write: {result}/{len(report)}")
+            results.append(result)
+            if index + 1 < len(reports):
+                time.sleep(0.1)
+    return results
+
+
+def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
+    if action not in SAFE_ACTIONS:
+        raise ValueError(f"unknown or unsafe GUI action: {action}")
+    path = payload.get("device") or None
+    if action == "validate":
+        compiled = compile_profile(payload["profile"])
+        return {
+            "keymap_bytes": len(compiled["keymap"]),
+            "macros": len(compiled["macros"]),
+            "colors": len(payload["profile"].get("colors", {})),
+        }
+    if action == "rgb":
+        report = rgb_effect_report(
+            str(payload["effect"]),
+            brightness=int(payload.get("brightness", 4)),
+            speed=int(payload.get("speed", 5)),
+            color_index=int(payload.get("color_index", 0)),
+            multicolor=bool(payload.get("multicolor", False)),
+        )
+        device = _choose(MAIN_USAGE, explicit_path=path)
+        return {"device": str(device.path), "results": _send_features(device, [report])}
+    if action == "per-key":
+        compiled = compile_profile(payload["profile"])
+        reports = [
+            rgb_effect_report(
+                "custom",
+                brightness=int(payload.get("brightness", 4)),
+                speed=int(payload.get("speed", 5)),
+            ),
+            compiled["colors"],
+        ]
+        device = _choose(MAIN_USAGE, explicit_path=path)
+        return {"device": str(device.path), "results": _send_features(device, reports)}
+    if action == "profile":
+        if payload.get("confirmation") != "APPLY PROFILE":
+            raise RuntimeError("type APPLY PROFILE to confirm profile overwrite")
+        compiled = compile_profile(payload["profile"])
+        reports = [compiled["keymap"], *compiled["macros"]]
+        if payload["profile"].get("colors"):
+            reports.extend((rgb_effect_report("custom"), compiled["colors"]))
+        device = _choose(MAIN_USAGE, explicit_path=path)
+        return {"device": str(device.path), "results": _send_features(device, reports)}
+    if action == "stream":
+        compiled = compile_profile(payload["profile"])
+        activation = streaming_activation_report()
+        chunks = streaming_rgb_reports(compiled["matrix_colors"])
+        device = _choose(OUTPUT_USAGE, product_ids={0x0351}, explicit_path=path)
+        if device.report_length("feature", SHORT_REPORT_ID) != SHORT_REPORT_LENGTH:
+            raise RuntimeError("missing streaming activation report")
+        if device.report_length("output", 0x06) != 64:
+            raise RuntimeError("missing streaming output report")
+        with WRITE_LOCK:
+            feature_result = send_feature_report(device.path, activation)
+            if feature_result != SHORT_REPORT_LENGTH:
+                raise RuntimeError(
+                    f"short streaming activation: {feature_result}/{SHORT_REPORT_LENGTH}"
+                )
+            output_results = []
+            for chunk in chunks:
+                result = send_output_report(device.path, chunk)
+                if result != 64:
+                    raise RuntimeError(f"short streaming output: {result}/64")
+                output_results.append(result)
+        return {
+            "device": str(device.path),
+            "results": [feature_result, *output_results],
+        }
+    if action == "debounce":
+        report = debounce_report(int(payload["milliseconds"]))
+        device = _choose(SHORT_USAGE, explicit_path=path)
+        return {"device": str(device.path), "results": _send_features(device, [report])}
+    if action == "sleep":
+        report = sleep_report(
+            light_off_minutes=int(payload["light_off"]),
+            hibernate_minutes=int(payload["hibernate"]),
+        )
+        device = _choose(SHORT_USAGE, product_ids={0x0356}, explicit_path=path)
+        return {"device": str(device.path), "results": _send_features(device, [report])}
+    if action == "reset":
+        if payload.get("confirmation") != "RESET SPADE65":
+            raise RuntimeError("type RESET SPADE65 to confirm")
+        device = _choose(SHORT_USAGE, explicit_path=path)
+        return {
+            "device": str(device.path),
+            "results": _send_features(device, [reset_report()]),
+        }
+    raise AssertionError("unreachable safe action")
+
+
+class GuiServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], token: str):
+        super().__init__(address, GuiHandler)
+        self.token = token
+
+
+class GuiHandler(BaseHTTPRequestHandler):
+    server: GuiServer
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def _json(self, status: int, data: object) -> None:
+        encoded = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _authorized(self) -> bool:
+        return secrets.compare_digest(
+            self.headers.get("X-Spade65-Token", ""), self.server.token
+        )
+
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+        if path == "/api/status":
+            if not self._authorized():
+                self._json(HTTPStatus.FORBIDDEN, {"error": "invalid session token"})
+                return
+            self._json(HTTPStatus.OK, gui_metadata())
+            return
+        asset = "index.html" if path == "/" else path.removeprefix("/")
+        if asset not in {
+            "index.html",
+            "app.css",
+            "keyboard.css",
+            "effects.css",
+            "app.js",
+        }:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        content = files("spade65.web").joinpath(asset).read_bytes()
+        if asset == "index.html":
+            content = content.replace(b"__SPADE65_TOKEN__", self.server.token.encode())
+        content_type = {
+            "index.html": "text/html; charset=utf-8",
+            "app.css": "text/css; charset=utf-8",
+            "keyboard.css": "text/css; charset=utf-8",
+            "effects.css": "text/css; charset=utf-8",
+            "app.js": "text/javascript; charset=utf-8",
+        }[asset]
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(content)
+
+    def do_POST(self) -> None:
+        if not self._authorized():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "invalid session token"})
+            return
+        path = urlparse(self.path).path
+        if not path.startswith("/api/"):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 <= length <= MAX_REQUEST_BYTES:
+                raise ValueError("request is too large")
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(payload, dict):
+                raise ValueError("request body must be an object")
+            result = execute_action(path.removeprefix("/api/"), payload)
+            self._json(HTTPStatus.OK, {"ok": True, **result})
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as error:
+            self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(error)})
+
+
+def run_gui(*, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("GUI may only bind to localhost")
+    token = secrets.token_urlsafe(24)
+    server = GuiServer((host, port), token)
+    url = f"http://{host}:{server.server_port}/"
+    print(f"Spade65 GUI: {url}")
+    print("Tekan Ctrl+C untuk berhenti.")
+    if open_browser:
+        threading.Timer(0.2, webbrowser.open, args=(url,)).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()

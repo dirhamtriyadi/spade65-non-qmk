@@ -6,7 +6,8 @@
 spade65ctl.py
   └── spade65.cli
         ├── spade65.protocol   # konstanta dan builder paket murni
-        └── spade65.hidraw     # discovery sysfs, parser descriptor, ioctl
+        ├── spade65.hidraw     # discovery sysfs, parser descriptor, ioctl
+        └── spade65.gui        # API localhost + asset web tanpa dependency
 ```
 
 Pemisahan ini disengaja:
@@ -16,6 +17,10 @@ Pemisahan ini disengaja:
 - `cli.py` menangani validasi keselamatan dan UX.
 
 Tidak ada dependency runtime eksternal. Hindari menambahkan `hidapi` hanya untuk convenience sebelum terbukti diperlukan; ioctl Linux sudah menyediakan feature report yang dibutuhkan.
+
+Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
+yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan
+implementasi HTML/CSS orisinal; gambar PNG vendor tidak boleh disalin ke Git.
 
 ## Menjalankan quality checks
 
@@ -34,9 +39,13 @@ Untuk perubahan transport, tambahkan descriptor sintetis ke `tests/test_hidraw.p
 2. Semua command write harus memiliki `--dry-run`.
 3. Interface harus dipilih berdasarkan VID, PID, usage, report ID, dan report length.
 4. Perbedaan descriptor adalah error, bukan warning.
-5. Jangan implementasikan firmware update sebelum ada prosedur recovery yang telah diuji.
+5. Firmware update, raw flash, dan bootloader berada di luar scope sampai ada
+   prosedur recovery yang telah diuji; jangan membuat endpoint atau builder-nya.
 6. Jangan menulis report ke interface keyboard boot/consumer biasa.
 7. Jika sebuah command hanya valid untuk dongle, batasi PID-nya di code.
+8. GUI hanya boleh bind ke loopback, memakai token sesi, dan mengekspos allowlist
+   tindakan konfigurasi yang sudah memiliki builder tervalidasi.
+9. Profil JSON adalah data deklaratif; jangan pernah menerima byte/report mentah.
 
 ## Workflow pengujian hardware
 
@@ -62,7 +71,7 @@ Setelah setiap write, uji input keyboard dengan tool seperti `evtest` atau halam
 5. Tentukan usage dan PID yang paling sempit.
 6. Dokumentasikan statusnya sebagai belum diuji sampai hardware test selesai.
 
-## Rencana key remapping
+## Status key remapping
 
 Hal yang sudah diketahui:
 

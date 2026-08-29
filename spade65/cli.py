@@ -312,6 +312,13 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_gui(args: argparse.Namespace) -> int:
+    from .gui import run_gui
+
+    run_gui(host=args.host, port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
 def _add_write_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--device", type=Path, help="explicit /dev/hidrawN path")
     parser.add_argument("--dry-run", action="store_true", help="print packet; do not write")
@@ -334,6 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="include HID serial/unique value in JSON output",
     )
     probe.set_defaults(handler=command_probe)
+
+    gui = subparsers.add_parser("gui", help="launch the local graphical interface")
+    gui.add_argument("--host", default="127.0.0.1")
+    gui.add_argument("--port", type=int, default=8765)
+    gui.add_argument("--no-browser", action="store_true")
+    gui.set_defaults(handler=command_gui)
 
     rgb = subparsers.add_parser("rgb", help="set a built-in RGB effect")
     rgb.add_argument("effect", choices=sorted(EFFECTS))

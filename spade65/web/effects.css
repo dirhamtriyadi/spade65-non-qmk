@@ -1,0 +1,60 @@
+.checks.wrap {
+  flex-wrap: wrap;
+}
+
+.button-row.flush {
+  margin-top: 0;
+}
+
+.compact-fields {
+  gap: 8px;
+}
+
+.compact-fields label {
+  margin: 4px 0;
+}
+
+.inline-fields,
+.palette-row {
+  display: flex;
+  gap: 8px;
+}
+
+.effect-layers {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+
+.effect-layer {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #111914;
+  flex: 0 0 auto;
+}
+
+.effect-layer.active {
+  border-color: var(--accent);
+}
+
+.effect-layer input {
+  margin: 0 0 0 8px;
+}
+
+.effect-layer button {
+  border: 0;
+  background: transparent;
+  padding: 8px;
+}
+
+.palette-row {
+  margin: 12px 0;
+}
+
+.palette-row input {
+  flex: 1;
+  width: auto;
+}

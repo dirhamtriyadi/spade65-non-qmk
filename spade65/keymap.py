@@ -104,6 +104,74 @@ HID_USAGES = {
     "right-alt": 0xE6,
     "right-gui": 0xE7,
     "fn": 0xFE,
+    "fn2": 0xFF,
+    "disabled": 0x00,
+    "num-lock": 0x53,
+    "num-divide": 0x54,
+    "num-multiply": 0x55,
+    "num-minus": 0x56,
+    "num-plus": 0x57,
+    "num-enter": 0x58,
+    **{f"num-{number}": 0x62 if number == 0 else 0x58 + number for number in range(10)},
+    "num-dot": 0x63,
+    # The vendor firmware uses private one-byte function codes for these
+    # assignments. Names and values mirror SupportData.AllFunctionMapping.
+    "media-player": 0xA0,
+    "play-pause": 0xA1,
+    "mute": 0xA2,
+    "volume-up": 0xA3,
+    "volume-down": 0xA4,
+    "media-stop": 0xA5,
+    "previous-track": 0xA6,
+    "next-track": 0xA7,
+    "browser-home": 0xA8,
+    "browser-refresh": 0xA9,
+    "browser-back": 0xAB,
+    "browser-forward": 0xAC,
+    "browser-favorites": 0xAD,
+    "my-computer": 0xAF,
+    "email": 0xB1,
+    "profile-next": 0xB2,
+    "profile-previous": 0xB3,
+    "mouse-left": 0xB4,
+    "mouse-right": 0xB5,
+    "mouse-middle": 0xB6,
+    "mouse-back": 0xB7,
+    "mouse-forward": 0xB8,
+    "copy": 0xD6,
+    "paste": 0xD7,
+}
+
+USAGE_GROUPS = {
+    "Keyboard": tuple(
+        [*(chr(ord("a") + index) for index in range(26))]
+        + [*(str(number) for number in range(10))]
+        + [*(f"f{number}" for number in range(1, 13))]
+        + [
+            "enter", "esc", "backspace", "tab", "space", "minus", "equal",
+            "left-bracket", "right-bracket", "backslash", "semicolon", "quote",
+            "grave", "comma", "dot", "slash", "caps-lock", "print-screen",
+            "scroll-lock", "pause", "insert", "home", "page-up", "delete",
+            "end", "page-down", "right", "left", "down", "up", "menu",
+            "left-ctrl", "left-shift", "left-alt", "left-gui", "right-ctrl",
+            "right-shift", "right-alt", "right-gui",
+        ]
+    ),
+    "Numpad": tuple(
+        ["num-lock", "num-divide", "num-multiply", "num-minus", "num-plus", "num-enter"]
+        + [*(f"num-{number}" for number in range(10))]
+        + ["num-dot"]
+    ),
+    "Media": (
+        "media-player", "play-pause", "media-stop", "previous-track",
+        "next-track", "volume-up", "volume-down", "mute",
+    ),
+    "Browser/System": (
+        "browser-back", "browser-forward", "browser-refresh", "browser-favorites",
+        "browser-home", "email", "my-computer", "copy", "paste",
+    ),
+    "Mouse": ("mouse-left", "mouse-right", "mouse-middle", "mouse-back", "mouse-forward"),
+    "Keyboard control": ("profile-next", "profile-previous", "fn", "fn2", "disabled"),
 }
 
 
@@ -136,6 +204,7 @@ def profile_template() -> dict[str, object]:
         "layers": {name: {} for name in LAYER_NAMES},
         "macros": [],
         "colors": {},
+        "settings": {"win_lock": False, "wasd_arrows": False},
     }
 
 

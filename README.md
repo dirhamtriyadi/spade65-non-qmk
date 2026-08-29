@@ -2,7 +2,7 @@
 
 Utilitas Linux eksperimental untuk mengatur keyboard **Noir Spade65 non-QMK** tanpa menjalankan software Windows resmi.
 
-Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_20240403.exe`. Implementasi saat ini belum pernah diuji pada perangkat fisik. Selalu mulai dari perintah `probe` dan `--dry-run` ketika keyboard sudah tersedia.
+Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_20240403.exe`. Jalur USB telah diuji bertahap pada unit fisik; fitur yang belum diuji tetap ditandai secara eksplisit di bawah.
 
 ## Status
 
@@ -15,10 +15,23 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 | Debounce | Ya | Ya, 5 ms via USB |
 | Timer lampu/sleep untuk dongle | Ya | Belum |
 | Reset pengaturan | Ya, dengan konfirmasi tambahan | Belum |
-| Remap tombol/layer | Ya, melalui profil tiga layer | Belum |
-| Macro | Ya, maksimal 10 macro/84 event | Belum |
+| Remap tombol/layer | Ya, seluruh kategori assignment vendor + tiga layer | Belum |
+| Macro | Ya, maksimal 10 macro/84 event, recorder, repeat dan binding | Belum |
 | Per-key RGB | Ya, tersimpan dan streaming | Ya, mode USB `0603:0351` |
-| Firmware update | Sengaja tidak diimplementasikan | Tidak |
+| GUI lokal | Ya, tanpa dependency eksternal | Ya, browser lokal + deteksi hardware |
+| Animasi app/AP mode | Ya, 10 pola/layer + range, palet, parameter lanjut dan audio | Streaming USB tervalidasi |
+| Firmware/raw flash/bootloader | Sengaja tidak diimplementasikan | Tidak; risiko brick |
+
+Fitur konfigurasi keyboard yang aman dari aplikasi vendor sudah tersedia melalui
+CLI dan GUI. Fitur host Windows yang bukan konfigurasi keyboard—updater aplikasi,
+login/telemetri, dan asosiasi otomatis profil dengan executable Windows—tidak
+direplikasi. Tidak ada endpoint, builder paket, atau fallback raw HID untuk flash
+firmware dan bootloader.
+
+Matriks audit terhadap halaman dan backend software original tersedia di
+[`docs/parity.md`](docs/parity.md). Komponen generik yang tersembunyi, dikomentari,
+atau tidak pernah diserialisasi oleh backend Jupeng tidak dihitung sebagai fitur
+Spade65 aktif.
 
 ## Persyaratan
 
@@ -97,6 +110,24 @@ Cabut dan pasang kembali keyboard/dongle setelah itu. Jalankan CLI sebagai user 
 CLI menolak menulis jika ukuran report yang dibaca dari descriptor berbeda dari ukuran hasil reverse engineering. Validasi ini disengaja untuk menghindari pengiriman paket ke interface yang salah.
 
 ## Penggunaan
+
+### GUI lokal
+
+```bash
+python spade65ctl.py gui
+```
+
+Browser akan membuka `http://127.0.0.1:8765/`. GUI menyediakan pemilihan device,
+editor tiga layer dengan geometri asli empat varian Spade65 (ANSI/ISO dan
+standard/split spacebar), seluruh kategori assignment vendor, macro recorder,
+import/export profil, seluruh efek RGB bawaan, warna per-key, kompositor 10 layer
+animasi streaming dengan parameter original, audio reactive, debounce, timer dongle, reset,
+serta diagnostics. Server hanya menerima koneksi localhost dan setiap API call
+memerlukan token sesi acak.
+
+Apply profil meminta dua konfirmasi karena menimpa seluruh keymap. Reset meminta
+teks `RESET SPADE65`. Firmware update, raw flash, dan bootloader ditampilkan dalam
+keadaan nonaktif dan tidak memiliki endpoint backend.
 
 ### Efek RGB
 
@@ -220,7 +251,10 @@ python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
 ```
 
-Tes yang ada memvalidasi builder paket dan parser HID menggunakan descriptor sintetis. Tes belum membuktikan bahwa firmware menerima paket.
+Tes otomatis memvalidasi builder paket, parser HID, profil, safety allowlist GUI,
+dan penolakan operasi flash. Validasi hardware yang sudah dilakukan tercantum di
+tabel Status; tes otomatis tidak menggantikan pengujian fisik untuk fitur yang
+masih bertanda belum diuji.
 
 ## Troubleshooting
 
