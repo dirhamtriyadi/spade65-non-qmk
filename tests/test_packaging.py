@@ -187,15 +187,31 @@ class PackagingTests(unittest.TestCase):
         macos_job = workflow.split("  macos:\n", 1)[1].split(
             "\n  publish:\n", 1
         )[0]
-        self.assertIn("python-3.13.15-macos11.pkg", macos_job)
-        self.assertIn(
-            "3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3",
-            macos_job,
-        )
-        self.assertIn("shasum -a 256 -c -", macos_job)
-        self.assertIn("lipo -verify_arch x86_64 arm64", macos_job)
+        for mode in ("download", "install", "verify", "venv"):
+            self.assertIn(
+                f"bash packaging/prepare_macos_ci.sh {mode}", macos_job
+            )
         self.assertIn("bash packaging/build_macos_hidapi.sh", macos_job)
         self.assertNotIn("actions/setup-python@", macos_job)
+
+        prepare = (ROOT / "packaging" / "prepare_macos_ci.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("python-3.13.15-macos11.pkg", prepare)
+        self.assertIn(
+            "3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3",
+            prepare,
+        )
+        self.assertIn("shasum -a 256 -c -", prepare)
+        self.assertGreaterEqual(
+            prepare.count("lipo -verify_arch x86_64 arm64"), 3
+        )
+
+        test_workflow = (
+            ROOT / ".github" / "workflows" / "test.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("  macos-package:", test_workflow)
+        self.assertIn("python packaging/build.py", test_workflow)
 
         hid_build = (ROOT / "packaging" / "build_macos_hidapi.sh").read_text(
             encoding="utf-8"

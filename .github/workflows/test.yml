@@ -23,3 +23,28 @@ jobs:
       - run: python -m unittest discover -v
       - run: python -m compileall -q spade65 spade65ctl.py tests
       - run: node --check spade65/web/app.js
+
+  macos-package:
+    if: github.event_name == 'push'
+    runs-on: macos-15
+    env:
+      ARCHFLAGS: "-arch x86_64 -arch arm64"
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Download and verify Python.org universal2 installer
+        run: bash packaging/prepare_macos_ci.sh download
+      - name: Install Python.org universal2 interpreter
+        run: bash packaging/prepare_macos_ci.sh install
+      - name: Verify universal2 framework interpreter
+        run: bash packaging/prepare_macos_ci.sh verify
+      - name: Create and verify universal2 build environment
+        run: bash packaging/prepare_macos_ci.sh venv
+      - name: Install pinned build dependencies
+        run: |
+          python -m pip install -r requirements-build.txt
+          python -m pip install --no-deps --no-build-isolation .
+      - name: Build and verify universal2 HID extension
+        run: bash packaging/build_macos_hidapi.sh
+      - name: Build and smoke-test universal macOS disk image
+        run: python packaging/build.py

@@ -47,7 +47,9 @@ class StartupTests(unittest.TestCase):
             launcher = render_startup(
                 Path("/tmp/service.json"), platform="linux", frozen=True
             )
-        self.assertIn('/home/user/Spade65.AppImage" service run', launcher)
+        self.assertIn(
+            '/home/user/Spade65.AppImage" service run', launcher.replace("\\", "/")
+        )
 
     def test_windows_cli_generates_hidden_gui_service_launcher(self):
         launcher = render_startup(
