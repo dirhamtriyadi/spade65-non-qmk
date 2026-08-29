@@ -10,6 +10,13 @@ spade65ctl.py
         ├── spade65.transport  # pemilih backend lintas platform
         ├── spade65.hidraw     # backend Linux: sysfs + ioctl
         └── spade65.gui        # API localhost + asset web tanpa dependency
+              └── web/locales # manifest + katalog JSON GUI
+
+packaging/
+  ├── build.py                 # dispatcher build manual sesuai OS host
+  ├── launcher.py              # entry point executable + smoke test
+  ├── spade65.spec             # data/entry point PyInstaller bersama
+  └── build_*                  # paket native Windows, Linux, dan macOS
 ```
 
 Pemisahan ini disengaja:
@@ -19,6 +26,10 @@ Pemisahan ini disengaja:
 - `transport.py` mempertahankan hidraw di Linux dan memakai HIDAPI yang dapat
   membaca descriptor pada Windows/macOS.
 - `cli.py` menangani validasi keselamatan dan UX.
+- `web/locales/index.json` mendaftarkan bahasa; `en.json` adalah canonical
+  catalog/default dan locale lain harus memiliki key yang sama.
+- `packaging/launcher.py` membuka GUI pada port stabil 8765 tanpa argumen dan
+  meneruskan argumen lain ke CLI.
 
 Linux tidak memiliki dependency runtime eksternal. Extra `cross-platform`
 memasang `hidapi` untuk Windows/macOS; jangan membuat fallback write bila HIDAPI
@@ -33,11 +44,22 @@ implementasi HTML/CSS orisinal; gambar PNG vendor tidak boleh disalin ke Git.
 ```bash
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
+node --check spade65/web/app.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```
 
 Untuk perubahan transport, tambahkan descriptor sintetis ke `tests/test_hidraw.py`. Untuk perubahan paket, tambahkan assertion offset-by-offset ke `tests/test_protocol.py`.
+
+Perubahan locale harus mempertahankan key parity terhadap `en.json`, placeholder
+bernama `{...}`, serta fallback English. Ikuti
+[`localization.md`](localization.md) dan uji teks statis maupun renderer dinamis.
+
+Perubahan desktop packaging harus diuji pada OS target. Setiap executable wajib
+lulus `--smoke-test` tanpa browser dan tanpa HID sebelum dikemas. Workflow tag
+menjalankan build native, memeriksa universal Mach-O pada macOS, dan baru
+memublikasikan tiga asset setelah semuanya tersedia. Lihat
+[`releasing.md`](releasing.md).
 
 ## Aturan keselamatan implementasi
 

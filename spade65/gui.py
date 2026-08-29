@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import threading
 import time
@@ -281,10 +282,14 @@ class GuiHandler(BaseHTTPRequestHandler):
             "keyboard.css",
             "effects.css",
             "app.js",
-        }:
+        } and not re.fullmatch(r"locales/[A-Za-z0-9_-]+\.json", asset):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
-        content = files("spade65.web").joinpath(asset).read_bytes()
+        try:
+            content = files("spade65.web").joinpath(asset).read_bytes()
+        except (FileNotFoundError, IsADirectoryError):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
         if asset == "index.html":
             content = content.replace(b"__SPADE65_TOKEN__", self.server.token.encode())
         content_type = {
@@ -293,7 +298,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "keyboard.css": "text/css; charset=utf-8",
             "effects.css": "text/css; charset=utf-8",
             "app.js": "text/javascript; charset=utf-8",
-        }[asset]
+        }.get(asset, "application/json; charset=utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
@@ -306,6 +311,10 @@ class GuiHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.FORBIDDEN, {"error": "invalid session token"})
             return
         path = urlparse(self.path).path
+        if path == "/api/quit":
+            self._json(HTTPStatus.OK, {"ok": True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
         if not path.startswith("/api/"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -329,7 +338,7 @@ def run_gui(*, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = T
     server = GuiServer((host, port), token)
     url = f"http://{host}:{server.server_port}/"
     print(f"Spade65 GUI: {url}")
-    print("Tekan Ctrl+C untuk berhenti.")
+    print("Press Ctrl+C to stop.")
     if open_browser:
         threading.Timer(0.2, webbrowser.open, args=(url,)).start()
     try:

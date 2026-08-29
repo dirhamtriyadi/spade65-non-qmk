@@ -1,7 +1,10 @@
 import unittest
-from unittest.mock import patch
+from http import HTTPStatus
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from spade65.gui import (
+    GuiHandler,
     SAFE_ACTIONS,
     _send_features,
     execute_action,
@@ -53,6 +56,32 @@ class GuiTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "report 0x08 mismatch"):
                 _send_features(device, [bytes([8]) + bytes(7)])
         send.assert_not_called()
+
+    def test_authenticated_quit_stops_only_the_local_server(self) -> None:
+        handler = GuiHandler.__new__(GuiHandler)
+        handler.headers = {"X-Spade65-Token": "test-token"}
+        handler.path = "/api/quit"
+        handler.server = SimpleNamespace(token="test-token", shutdown=MagicMock())
+        handler._json = MagicMock()
+        with patch("spade65.gui.threading.Thread") as thread:
+            handler.do_POST()
+        handler._json.assert_called_once_with(HTTPStatus.OK, {"ok": True})
+        thread.assert_called_once_with(target=handler.server.shutdown, daemon=True)
+        thread.return_value.start.assert_called_once_with()
+
+    def test_quit_rejects_an_invalid_session_token(self) -> None:
+        handler = GuiHandler.__new__(GuiHandler)
+        handler.headers = {"X-Spade65-Token": "wrong-token"}
+        handler.path = "/api/quit"
+        handler.server = SimpleNamespace(token="test-token", shutdown=MagicMock())
+        handler._json = MagicMock()
+        with patch("spade65.gui.threading.Thread") as thread:
+            handler.do_POST()
+        handler._json.assert_called_once_with(
+            HTTPStatus.FORBIDDEN, {"error": "invalid session token"}
+        )
+        handler.server.shutdown.assert_not_called()
+        thread.assert_not_called()
 
 
 if __name__ == "__main__":

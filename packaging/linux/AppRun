@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+APP_ROOT=${APPDIR:-"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"}
+exec "$APP_ROOT/usr/lib/spade65/Spade65" "$@"

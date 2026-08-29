@@ -22,4 +22,4 @@ spade65ctl = "spade65.cli:main"
 packages = ["spade65", "spade65.web"]
 
 [tool.setuptools.package-data]
-spade65 = ["web/*.html", "web/*.css", "web/*.js"]
+spade65 = ["web/*.html", "web/*.css", "web/*.js", "web/locales/*.json"]

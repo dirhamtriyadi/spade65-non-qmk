@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Spade65
+Comment=Configure the non-QMK Noir Spade65 keyboard
+Exec=Spade65
+Icon=spade65
+Terminal=false
+Categories=Settings;HardwareSettings;
+StartupNotify=true

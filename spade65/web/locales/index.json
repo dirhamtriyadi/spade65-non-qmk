@@ -1,0 +1,7 @@
+{
+  "default": "en",
+  "languages": [
+    {"code": "en", "name": "English"},
+    {"code": "id", "name": "Bahasa Indonesia"}
+  ]
+}

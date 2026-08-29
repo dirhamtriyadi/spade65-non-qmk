@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import os
 import sys
 from pathlib import Path
 
@@ -29,10 +30,22 @@ def startup_filename(platform: str | None = None) -> str:
 def render_startup(
     config: Path, *, platform: str | None = None,
     python_executable: Path | None = None,
+    frozen: bool | None = None,
 ) -> str:
     family = platform_family(platform)
-    executable = (python_executable or Path(sys.executable)).resolve()
+    is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    selected_executable = python_executable
+    if selected_executable is None and is_frozen and family == "linux":
+        selected_executable = Path(os.environ.get("APPIMAGE", sys.executable))
+    executable = (selected_executable or Path(sys.executable)).resolve()
+    if (
+        is_frozen
+        and family == "windows"
+        and executable.name.casefold() == "spade65cli.exe"
+    ):
+        executable = executable.with_name("Spade65.exe")
     config = config.expanduser().resolve()
+    module_args = "" if is_frozen else " -m spade65"
     if family == "linux":
         return f"""[Unit]
 Description=Spade65 background effects and application profile service
@@ -40,7 +53,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart="{executable}" -m spade65 service run "{config}"
+ExecStart="{executable}"{module_args} service run "{config}"
 Restart=on-failure
 RestartSec=2
 
@@ -48,13 +61,17 @@ RestartSec=2
 WantedBy=default.target
 """
     if family == "windows":
-        pythonw = executable.with_name("pythonw.exe")
+        launcher = executable if is_frozen else executable.with_name("pythonw.exe")
         return (
             "@echo off\n"
-            f'start "Spade65" /b "{pythonw}" -m spade65 service run "{config}"\n'
+            f'start "Spade65" /b "{launcher}"{module_args} service run "{config}"\n'
         )
     executable_xml = html.escape(str(executable))
     config_xml = html.escape(str(config))
+    module_xml = (
+        "" if is_frozen
+        else "<string>-m</string><string>spade65</string>\n    "
+    )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -62,8 +79,8 @@ WantedBy=default.target
   <key>Label</key><string>com.spade65.background</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{executable_xml}</string><string>-m</string><string>spade65</string>
-    <string>service</string><string>run</string><string>{config_xml}</string>
+    <string>{executable_xml}</string>{module_xml}<string>service</string>
+    <string>run</string><string>{config_xml}</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

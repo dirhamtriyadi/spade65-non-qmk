@@ -78,3 +78,26 @@
 .timeline-frame button:first-child {
   text-align: left;
 }
+
+.language-picker {
+  margin-top: auto;
+  padding: 10px;
+}
+
+.language-picker select {
+  padding: 7px;
+}
+
+.sidebar-quit {
+  margin: 0 10px 8px;
+}
+
+.sidebar-quit + .sidebar-foot {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .language-picker {
+    margin-top: 12px;
+  }
+}

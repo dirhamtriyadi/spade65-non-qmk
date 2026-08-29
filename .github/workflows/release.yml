@@ -1,0 +1,206 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing unpublished vMAJOR.MINOR.PATCH tag to build/update
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.sha }}
+      - name: Resolve immutable source commit
+        id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Verify release version
+        run: python packaging/check_version.py "${RELEASE_TAG}"
+      - name: Refuse an already-published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          state=$(gh release view "${RELEASE_TAG}" --json isDraft \
+            --jq .isDraft 2>/dev/null || printf 'missing')
+          if [[ "$state" == "false" ]]; then
+            echo "Release ${RELEASE_TAG} is already published; refusing overwrite." >&2
+            exit 1
+          fi
+      - name: Install and test
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[cross-platform]"
+          python -m unittest discover -v
+          python -m compileall -q spade65 spade65ctl.py packaging tests
+          node --check spade65/web/app.js
+
+  windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt ".[cross-platform]"
+      - name: Build Windows package
+        run: python packaging/build.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-release
+          path: artifacts/Spade65-Windows-x64.zip
+          if-no-files-found: error
+
+  linux:
+    needs: validate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt ".[cross-platform]"
+      - name: Build Linux AppImage
+        run: python packaging/build.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-release
+          path: artifacts/Spade65-Linux-x86_64.AppImage
+          if-no-files-found: error
+
+  macos:
+    needs: validate
+    runs-on: macos-15
+    env:
+      ARCHFLAGS: "-arch x86_64 -arch arm64"
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          architecture: arm64
+          cache: pip
+      - name: Install universal2 build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+          python -m pip install . --no-deps
+          python -m pip install --no-cache-dir --no-binary=hidapi "hidapi==0.15.0"
+          lipo -verify_arch x86_64 arm64 "$(python -c 'import hid; print(hid.__file__)')"
+      - name: Build universal macOS disk image
+        run: |
+          export SPADE65_VERSION="${RELEASE_TAG#v}"
+          python packaging/build.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-release
+          path: artifacts/Spade65-macOS-universal.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: [validate, windows, linux, macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ format('refs/tags/{0}', env.RELEASE_TAG) }}
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          path: release-assets
+          pattern: "*-release"
+          merge-multiple: true
+      - name: Verify release assets
+        run: |
+          test -s release-assets/Spade65-Windows-x64.zip
+          test -s release-assets/Spade65-Linux-x86_64.AppImage
+          test -s release-assets/Spade65-macOS-universal.dmg
+          test "$(find release-assets -maxdepth 1 -type f | wc -l)" -eq 3
+      - name: Verify tag still names the built commit
+        env:
+          EXPECTED_COMMIT: ${{ needs.validate.outputs.commit }}
+        run: |
+          actual_commit=$(git rev-parse HEAD)
+          if [[ "$actual_commit" != "$EXPECTED_COMMIT" ]]; then
+            echo "Tag ${RELEASE_TAG} moved after validation; refusing publish." >&2
+            exit 1
+          fi
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          state=$(gh release view "${RELEASE_TAG}" --json isDraft \
+            --jq .isDraft 2>/dev/null || printf 'missing')
+          if [[ "$state" == "false" ]]; then
+            echo "Release ${RELEASE_TAG} is already published; refusing overwrite." >&2
+            exit 1
+          fi
+          if [[ "$state" == "missing" ]]; then
+            gh release create "${RELEASE_TAG}" --verify-tag --generate-notes \
+              --title "Spade65 ${RELEASE_TAG}" --draft
+          fi
+          draft_state=$(gh release view "${RELEASE_TAG}" --json isDraft \
+            --jq .isDraft)
+          if [[ "$draft_state" != "true" ]]; then
+            echo "Release must remain a draft until every asset is verified." >&2
+            exit 1
+          fi
+          unexpected=$(gh release view "${RELEASE_TAG}" --json assets --jq \
+            '.assets[].name | select(. != "Spade65-Windows-x64.zip" and . != "Spade65-Linux-x86_64.AppImage" and . != "Spade65-macOS-universal.dmg")')
+          if [[ -n "$unexpected" ]]; then
+            echo "Draft contains unexpected assets; refusing destructive cleanup:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+          gh release upload "${RELEASE_TAG}" \
+            release-assets/Spade65-Windows-x64.zip \
+            release-assets/Spade65-Linux-x86_64.AppImage \
+            release-assets/Spade65-macOS-universal.dmg \
+            --clobber
+          asset_count=$(gh release view "${RELEASE_TAG}" --json assets \
+            --jq '.assets | length')
+          test "$asset_count" -eq 3
+          gh release edit "${RELEASE_TAG}" --draft=false

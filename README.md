@@ -44,6 +44,28 @@ Spade65 aktif.
 - Linux: `hidraw` dan `sysfs` standar, tanpa dependency runtime tambahan.
 - Windows/macOS: package `hidapi` melalui extra `cross-platform`.
 
+Persyaratan Python di atas hanya berlaku untuk instalasi dari source. Setelah
+workflow tag berhasil, pengguna dapat mengunduh paket siap jalan dari halaman
+GitHub Releases:
+
+- `Spade65-Windows-x64.zip`
+- `Spade65-Linux-x86_64.AppImage`
+- `Spade65-macOS-universal.dmg`
+
+Ketiga paket dibuat otomatis pada runner OS masing-masing ketika tag semantik,
+misalnya `v0.6.0`, dikirim. Versi tag harus sama dengan versi project. Paket
+Windows belum ditandatangani dan aplikasi macOS baru memiliki ad-hoc signature,
+belum Developer ID/notarization; SmartScreen atau Gatekeeper karena itu dapat
+menampilkan peringatan. Lihat [panduan rilis](docs/releasing.md) dan
+[panduan lintas platform](docs/cross-platform.md) untuk instalasi, verifikasi,
+serta fallback menjalankan dari source.
+
+Build tanpa CI juga didukung pada komputer target dengan
+`python packaging/build.py`; command ini memakai script dan smoke test native
+yang sama dengan GitHub Actions serta menulis file bernama sama ke `artifacts/`.
+ZIP Windows berisi `Spade65.exe` untuk GUI dan `Spade65CLI.exe` untuk command
+terminal dengan output yang terlihat.
+
 ## Menjalankan
 
 Langsung dari checkout:
@@ -138,6 +160,11 @@ import/export profil, seluruh efek RGB bawaan, warna per-key, kompositor 10 laye
 animasi streaming dengan parameter original, audio reactive, debounce, timer dongle, reset,
 serta diagnostics. Server hanya menerima koneksi localhost dan setiap API call
 memerlukan token sesi acak.
+
+Antarmuka tersedia dalam English dan Bahasa Indonesia. English adalah bahasa
+default; pilihan pengguna disimpan di browser. Katalog dipisahkan per bahasa
+agar bahasa baru dapat ditambahkan tanpa mengubah protokol atau backend. Panduan
+kontributor tersedia di [`docs/localization.md`](docs/localization.md).
 
 GUI juga menyediakan konversi file ekspor original, backup/restore seluruh
 library profil, serta custom-effect timeline. Panduan service background dan
@@ -329,6 +356,9 @@ Cabut dan pasang kembali kabel/dongle. Jangan menjalankan reset berulang dan jan
 
 - [docs/protocol.md](docs/protocol.md) — hasil reverse engineering dan format report.
 - [docs/development.md](docs/development.md) — arsitektur, workflow pengembangan, dan rencana key remapping.
+- [docs/cross-platform.md](docs/cross-platform.md) — instalasi dan batas validasi per OS.
+- [docs/releasing.md](docs/releasing.md) — build desktop dan rilis otomatis dari tag.
+- [docs/localization.md](docs/localization.md) — struktur katalog dan cara menambah bahasa.
 - [tools/extract_asar.py](tools/extract_asar.py) — extractor minimal untuk arsip Electron ASAR.
 - [tools/deobfuscate_jupeng.py](tools/deobfuscate_jupeng.py) — resolver tabel string modul protokol vendor.
 
