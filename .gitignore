@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.agents/
+.codex/
+probe-*.json
+
+# Official vendor artifacts used only for local reverse engineering.
+Spade65_SETUP_*.exe
+extracted/
+reverse_engineered/

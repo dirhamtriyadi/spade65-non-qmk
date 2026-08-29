@@ -1,0 +1,5 @@
+# Noir Spade65, wired USB mode
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0603", ATTRS{idProduct}=="0351", TAG+="uaccess", MODE="0660"
+
+# Noir Spade65, 2.4 GHz dongle mode
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0603", ATTRS{idProduct}=="0356", TAG+="uaccess", MODE="0660"
