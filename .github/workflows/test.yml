@@ -24,8 +24,46 @@ jobs:
       - run: python -m compileall -q spade65 spade65ctl.py tests
       - run: node --check spade65/web/app.js
 
+  windows-package:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+      - name: Install pinned desktop build dependencies
+        run: |
+          python -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
+          python -m pip check
+          python -m pip freeze
+      - name: Build and smoke-test Windows package
+        run: python packaging/build.py
+
+  linux-package:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    env:
+      SPADE65_STRICT_LINUX_LEGAL: "1"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+      - name: Install pinned desktop build dependencies
+        run: |
+          python -m pip install -r requirements-build.txt ".[desktop]"
+          python -m pip check
+          python -m pip freeze
+      - name: Build and smoke-test Linux AppImage
+        run: python packaging/build.py
+
   macos-package:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     env:
       ARCHFLAGS: "-arch x86_64 -arch arm64"
@@ -43,7 +81,9 @@ jobs:
       - name: Install pinned build dependencies
         run: |
           python -m pip install -r requirements-build.txt
-          python -m pip install --no-deps --no-build-isolation .
+          python -m pip install --no-build-isolation ".[desktop]"
+          python -m pip check
+          python -m pip freeze
       - name: Build and verify universal2 HID extension
         run: bash packaging/build_macos_hidapi.sh
       - name: Build and smoke-test universal macOS disk image

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spade65-non-qmk"
-version = "0.6.2"
+version = "0.7.0"
 description = "Cross-platform configuration utility for the non-QMK Noir Spade65"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,24 @@ dependencies = []
 
 [project.optional-dependencies]
 cross-platform = ["hidapi>=0.14,<1"]
+desktop = [
+    "pywebview==6.2.1",
+    "bottle==0.13.4",
+    "proxy_tools==0.1.0",
+    "typing_extensions==4.16.0",
+    "QtPy==2.4.3; sys_platform == 'linux'",
+    "PySide6==6.11.2; sys_platform == 'linux'",
+    "pythonnet==3.1.0; sys_platform == 'win32'",
+    "clr_loader==0.3.1; sys_platform == 'win32'",
+    "cffi==2.1.1; sys_platform == 'win32'",
+    "pycparser==3.0; sys_platform == 'win32'",
+    "pyobjc-core==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-WebKit==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-security==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-UniformTypeIdentifiers==12.2.2; sys_platform == 'darwin'",
+]
 
 [project.scripts]
 spade65ctl = "spade65.cli:main"

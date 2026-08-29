@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import multiprocessing
+import os
 import re
 import sys
 import threading
@@ -16,6 +17,20 @@ from pathlib import Path
 from spade65.settings import GUI_HOST, GUI_PORT, GUI_URL
 
 
+LOCALHOST_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+_DEVNULL_STREAMS: list[object] = []
+
+
+def ensure_standard_streams() -> None:
+    """Give windowed PyInstaller processes harmless non-null text streams."""
+
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is None:
+            stream = open(os.devnull, "w", encoding="utf-8")
+            setattr(sys, name, stream)
+            _DEVNULL_STREAMS.append(stream)
+
+
 def verify_native_hid_load(platform_name: str | None = None) -> None:
     """Load the packaged native HID extension without touching a device."""
 
@@ -24,27 +39,60 @@ def verify_native_hid_load(platform_name: str | None = None) -> None:
         importlib.import_module("hid")
 
 
-def reopen_running_gui(url: str = GUI_URL) -> bool:
-    """Reopen an existing verified Spade65 GUI without probing HID."""
+def running_gui_token(url: str = GUI_URL) -> str | None:
+    """Return the token of an existing verified Spade65 GUI session."""
 
     try:
-        with urllib.request.urlopen(url, timeout=1) as response:
+        with LOCALHOST_OPENER.open(url, timeout=1) as response:
             if response.status != 200:
-                return False
+                return None
             contents = response.read(1_000_000).decode("utf-8", errors="replace")
         marker = re.search(
             r'<meta\s+name="spade65-token"\s+content="([A-Za-z0-9_-]{20,})"',
             contents,
         )
         if marker is None or "<title>Spade65 Control Center</title>" not in contents:
-            return False
+            return None
     except (OSError, UnicodeError, ValueError):
+        return None
+    return marker.group(1)
+
+
+def activate_running_gui(url: str = GUI_URL) -> bool:
+    """Ask an existing authenticated desktop session to restore its window."""
+
+    token = running_gui_token(url)
+    if token is None:
+        return False
+    request = urllib.request.Request(
+        f"{url.rstrip('/')}/api/activate",
+        data=b"{}",
+        headers={
+            "Content-Type": "application/json",
+            "X-Spade65-Token": token,
+        },
+        method="POST",
+    )
+    try:
+        with LOCALHOST_OPENER.open(request, timeout=1) as response:
+            result = json.loads(response.read(1_000_000))
+        return (
+            response.status == 200
+            and isinstance(result, dict)
+            and result.get("ok") is True
+        )
+    except (AttributeError, OSError, TypeError, UnicodeError, ValueError):
+        return False
+
+
+def reopen_running_gui_in_browser(url: str = GUI_URL) -> bool:
+    """Compatibility fallback for an older verified browser-only session."""
+
+    if running_gui_token(url) is None:
         return False
     try:
         webbrowser.open(url)
     except (OSError, webbrowser.Error):
-        # The verified server is already healthy; do not start a conflicting
-        # second instance merely because this desktop has no browser handler.
         pass
     return True
 
@@ -53,6 +101,14 @@ def smoke_test() -> int:
     """Exercise bundled web resources and routing without probing USB HID."""
 
     verify_native_hid_load()
+    from spade65.desktop import verify_desktop_runtime
+
+    verify_desktop_runtime()
+    desktop_root = files("webview")
+    for relative_path in ("js/api.js", "js/finish.js"):
+        resource = desktop_root.joinpath(*relative_path.split("/"))
+        if not resource.read_bytes():
+            raise RuntimeError(f"empty packaged WebView resource: {relative_path}")
     web_root = files("spade65.web")
     for relative_path in ("index.html", "app.js"):
         resource = web_root.joinpath(*relative_path.split("/"))
@@ -97,7 +153,7 @@ def smoke_test() -> int:
             "locales/index.json",
             *(f"locales/{code}.json" for code in locale_codes),
         ):
-            with urllib.request.urlopen(
+            with LOCALHOST_OPENER.open(
                 f"http://127.0.0.1:{server.server_port}/{relative_path}", timeout=5
             ) as response:
                 if response.status != 200 or not json.loads(response.read()):
@@ -117,6 +173,7 @@ def smoke_test() -> int:
 def main() -> int:
     """Open the GUI by default, while retaining access to every CLI command."""
 
+    ensure_standard_streams()
     multiprocessing.freeze_support()
     arguments = sys.argv[1:]
 
@@ -141,18 +198,24 @@ def main() -> int:
 
         return cli_main(["--help"])
 
-    if reopen_running_gui():
+    if activate_running_gui() or reopen_running_gui_in_browser():
         return 0
 
-    from spade65.gui import run_gui
+    from spade65.desktop import DesktopUnavailable, run_desktop
 
     # Keep a stable origin so browser-local profile and language preferences
-    # survive restarts of the desktop launcher.
+    # survive restarts inside the persistent desktop WebView profile.
     try:
+        run_desktop(host=GUI_HOST, port=GUI_PORT)
+    except DesktopUnavailable:
+        from spade65.gui import run_gui
+
         run_gui(host=GUI_HOST, port=GUI_PORT, open_browser=True)
     except OSError:
         # Cover the race where another launcher binds the port after our probe.
-        if not reopen_running_gui():
+        if not (
+            activate_running_gui() or reopen_running_gui_in_browser()
+        ):
             raise
     return 0
 

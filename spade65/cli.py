@@ -318,7 +318,24 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
 def command_gui(args: argparse.Namespace) -> int:
     from .gui import run_gui
 
-    run_gui(host=args.host, port=args.port, open_browser=not args.no_browser)
+    if args.no_browser:
+        run_gui(host=args.host, port=args.port, open_browser=False)
+        return 0
+    if args.browser:
+        run_gui(host=args.host, port=args.port, open_browser=True)
+        return 0
+
+    from .desktop import DesktopUnavailable, run_desktop
+
+    try:
+        run_desktop(host=args.host, port=args.port)
+    except DesktopUnavailable as error:
+        if sys.stderr is not None:
+            print(
+                f"desktop GUI unavailable ({error}); opening browser GUI",
+                file=sys.stderr,
+            )
+        run_gui(host=args.host, port=args.port, open_browser=True)
     return 0
 
 
@@ -419,7 +436,17 @@ def build_parser() -> argparse.ArgumentParser:
     gui = subparsers.add_parser("gui", help="launch the local graphical interface")
     gui.add_argument("--host", default=GUI_HOST)
     gui.add_argument("--port", type=int, default=GUI_PORT)
-    gui.add_argument("--no-browser", action="store_true")
+    gui_mode = gui.add_mutually_exclusive_group()
+    gui_mode.add_argument(
+        "--browser",
+        action="store_true",
+        help="open the local GUI in the default browser instead of a desktop window",
+    )
+    gui_mode.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="run only the localhost GUI server",
+    )
     gui.set_defaults(handler=command_gui)
 
     rgb = subparsers.add_parser("rgb", help="set a built-in RGB effect")
@@ -539,5 +566,6 @@ def main(argv: list[str] | None = None) -> int:
         args = build_parser().parse_args(argv)
         return int(args.handler(args))
     except (OSError, RuntimeError, ValueError) as error:
-        print(f"error: {error}", file=sys.stderr)
+        if sys.stderr is not None:
+            print(f"error: {error}", file=sys.stderr)
         return 1

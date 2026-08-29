@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import socket
+import sys
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -243,9 +246,29 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
 class GuiServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], token: str):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        token: str,
+        *,
+        on_activate: Callable[[], None] | None = None,
+        on_quit: Callable[[], None] | None = None,
+    ):
         super().__init__(address, GuiHandler)
         self.token = token
+        quoted_host = f"[{address[0]}]" if ":" in address[0] else address[0]
+        self.allowed_authority = (
+            quoted_host
+            if self.server_port == 80
+            else f"{quoted_host}:{self.server_port}"
+        )
+        self.allowed_origin = f"http://{self.allowed_authority}"
+        self.on_activate = on_activate
+        self.on_quit = on_quit
+
+
+class GuiIPv6Server(GuiServer):
+    address_family = socket.AF_INET6
 
 
 class GuiHandler(BaseHTTPRequestHandler):
@@ -268,7 +291,37 @@ class GuiHandler(BaseHTTPRequestHandler):
             self.headers.get("X-Spade65-Token", ""), self.server.token
         )
 
+    def _single_header(self, name: str) -> str | None:
+        get_all = getattr(self.headers, "get_all", None)
+        if callable(get_all):
+            values = get_all(name, [])
+            return values[0] if len(values) == 1 else None
+        return self.headers.get(name)
+
+    def _host_allowed(self) -> bool:
+        host = self._single_header("Host")
+        return host is not None and secrets.compare_digest(
+            host.casefold(), self.server.allowed_authority.casefold()
+        )
+
+    def _origin_allowed(self) -> bool:
+        origin = self._single_header("Origin")
+        return origin is None or secrets.compare_digest(
+            origin.casefold(), self.server.allowed_origin.casefold()
+        )
+
+    def _reject_invalid_host(self) -> bool:
+        if self._host_allowed():
+            return False
+        self._json(
+            HTTPStatus.MISDIRECTED_REQUEST,
+            {"error": "request host is not the Spade65 localhost authority"},
+        )
+        return True
+
     def do_GET(self) -> None:
+        if self._reject_invalid_host():
+            return
         path = urlparse(self.path).path
         if path == "/api/status":
             if not self._authorized():
@@ -308,13 +361,39 @@ class GuiHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def do_POST(self) -> None:
+        if self._reject_invalid_host():
+            return
+        if not self._origin_allowed():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "invalid request origin"})
+            return
         if not self._authorized():
             self._json(HTTPStatus.FORBIDDEN, {"error": "invalid session token"})
             return
         path = urlparse(self.path).path
+        if path == "/api/activate":
+            if self.server.on_activate is None:
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"ok": False, "error": "GUI activation is unavailable"},
+                )
+                return
+            self._json(HTTPStatus.OK, {"ok": True})
+            threading.Thread(
+                target=self.server.on_activate,
+                daemon=True,
+            ).start()
+            return
         if path == "/api/quit":
             self._json(HTTPStatus.OK, {"ok": True})
-            threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+            def stop() -> None:
+                try:
+                    if self.server.on_quit is not None:
+                        self.server.on_quit()
+                finally:
+                    self.server.shutdown()
+
+            threading.Thread(target=stop, daemon=True).start()
             return
         if not path.startswith("/api/"):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -332,15 +411,23 @@ class GuiHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(error)})
 
 
-def run_gui(*, host: str = GUI_HOST, port: int = GUI_PORT, open_browser: bool = True) -> None:
+def create_gui_server(*, host: str, port: int) -> tuple[GuiServer, str]:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("GUI may only bind to localhost")
     token = secrets.token_urlsafe(24)
-    server = GuiServer((host, port), token)
-    url = f"http://{host}:{server.server_port}/"
-    print(f"Spade65 GUI: {url}")
-    print("Press Ctrl+C to stop.")
+    server_class = GuiIPv6Server if host == "::1" else GuiServer
+    server = server_class((host, port), token)
+    url = f"{server.allowed_origin}/"
+    return server, url
+
+
+def run_gui(*, host: str = GUI_HOST, port: int = GUI_PORT, open_browser: bool = True) -> None:
+    server, url = create_gui_server(host=host, port=port)
+    if sys.stdout is not None:
+        print(f"Spade65 GUI: {url}")
+        print("Press Ctrl+C to stop.")
     if open_browser:
+        server.on_activate = lambda: webbrowser.open(url)
         threading.Timer(0.2, webbrowser.open, args=(url,)).start()
     try:
         server.serve_forever()

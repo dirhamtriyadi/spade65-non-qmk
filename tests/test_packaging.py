@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import tempfile
 import unittest
@@ -26,6 +27,18 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(launcher.GUI_HOST, "127.0.0.1")
         self.assertEqual(launcher.GUI_PORT, 8765)
         self.assertEqual(launcher.GUI_URL, "http://127.0.0.1:8765/")
+
+    def test_windowed_launcher_replaces_missing_standard_streams(self):
+        with (
+            patch.object(launcher.sys, "stdout", None),
+            patch.object(launcher.sys, "stderr", None),
+        ):
+            launcher.ensure_standard_streams()
+            streams = (launcher.sys.stdout, launcher.sys.stderr)
+            self.assertTrue(all(stream is not None for stream in streams))
+            for stream in streams:
+                stream.close()
+        launcher._DEVNULL_STREAMS.clear()
 
     def test_native_commands_use_platform_scripts(self):
         root = Path("/source")
@@ -122,13 +135,133 @@ class PackagingTests(unittest.TestCase):
             script,
         )
         self.assertIn('--runtime-file "$runtime_file"', script)
+        for forbidden in (
+            "Qt6Graphs",
+            "Qt6DataVisualization",
+            "Qt6Quick3D",
+            "Qt6QuickTimeline",
+            "Qt6VirtualKeyboard",
+            "Qt6WaylandCompositor",
+        ):
+            self.assertIn(forbidden, script)
+        self.assertIn("Forbidden GPL-only Qt module", script)
+        self.assertIn("Unexpected HIDAPI payload", script)
+        self.assertIn("hidapi.libs", script)
 
-    def test_running_gui_is_reopened_only_with_spade65_marker(self):
+    def test_release_artifacts_include_legal_notices_and_qt_license_texts(self):
+        notice = (ROOT / "THIRD-PARTY-NOTICES.md").read_text(encoding="utf-8")
+        self.assertIn("| PySide6 | 6.11.2 | LGPL-3.0-only |", notice)
+        self.assertIn("pyside-setup.git/tag/?h=v6.11.2", notice)
+        self.assertIn("--appimage-extract", notice)
+        expected_hashes = {
+            "GPL-3.0.txt": (
+                "3972dc9744f6499f0f9b2dbf76696f2"
+                "ae7ad8af9b23dde66d6af86c9dfb36986"
+            ),
+            "LGPL-3.0.txt": (
+                "e3a994d82e644b03a792a930f5740026"
+                "58412f62407f5fee083f2555c5f23118"
+            ),
+            "LGPL-2.1.txt": (
+                "1ccf09bf2f598308df4bed9cd8e9657d"
+                "c5cd0973d2800318f2e241486e2edf3f"
+            ),
+            "Qt-6.11.2-LICENSE.Chromium": (
+                "368cca1106be99d39ecd32a38d8305585"
+                "d802a475effb66380b91ffc9bcf709b"
+            ),
+            "QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html": (
+                "5955053bf94c385b85ab38c2c8ea016a"
+                "ac72f4c5828fc346838f3066ac1f25fb"
+            ),
+            "GFDL-1.3-no-invariants-only.txt": (
+                "110535522396708cea37c72a802c5e7e"
+                "81391139f5f7985631c93ef242b206a4"
+            ),
+            "PERMISSIVE-LICENSES.txt": (
+                "b017f481b152d00b1824efcafa3cbbd9"
+                "a665ac200c5609083dc6fcb0f62410b9"
+            ),
+            "PYTHON-3.13.txt": (
+                "93c2662e7c314ed238efd37a7cc6b8c4"
+                "349f3257a1ef06858795af71a66692cd"
+            ),
+            "PYINSTALLER.txt": (
+                "84ab6847d0967ab916f0e9580a53b66e"
+                "51c9e45afb21a53b0ad2c89f6af26ffd"
+            ),
+        }
+        for filename, expected_hash in expected_hashes.items():
+            contents = (ROOT / "licenses" / filename).read_bytes()
+            self.assertEqual(hashlib.sha256(contents).hexdigest(), expected_hash)
+
+        permissive = (ROOT / "licenses" / "PERMISSIVE-LICENSES.txt").read_text(
+            encoding="utf-8"
+        )
+        for component in (
+            "pywebview 6.2.1",
+            "Bottle 0.13.4",
+            "proxy_tools 0.1.0",
+            "cython-hidapi 0.15.0",
+            "QtPy 2.4.3",
+            "pythonnet 3.1.0",
+            "clr_loader 0.3.1",
+            "cffi 2.1.1",
+            "pycparser 3.0",
+            "PyObjC 12.2.2",
+            "Microsoft WebView2 SDK 1.0.3856.49",
+        ):
+            self.assertIn(component, permissive)
+        self.assertIn(
+            "CPython 3.13.15",
+            (ROOT / "licenses" / "PYTHON-3.13.txt").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "Bootloader Exception",
+            (ROOT / "licenses" / "PYINSTALLER.txt").read_text(encoding="utf-8"),
+        )
+        qtwebengine_notices = (
+            ROOT / "licenses" / "QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("all 126 unique third-party attribution", qtwebengine_notices)
+        self.assertEqual(qtwebengine_notices.count("Primary source:"), 126)
+        self.assertIn("GNU LIBRARY GENERAL PUBLIC LICENSE", qtwebengine_notices)
+        self.assertIn("Chromium License", qtwebengine_notices)
+
+        windows = (ROOT / "packaging" / "build_windows.ps1").read_text(
+            encoding="utf-8"
+        )
+        linux = (ROOT / "packaging" / "build_linux.sh").read_text(
+            encoding="utf-8"
+        )
+        macos = (ROOT / "packaging" / "build_macos.sh").read_text(
+            encoding="utf-8"
+        )
+        for filename in (
+            "THIRD-PARTY-NOTICES.md",
+            "GPL-3.0.txt",
+            "LGPL-3.0.txt",
+            "LGPL-2.1.txt",
+            "Qt-6.11.2-LICENSE.Chromium",
+            "QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html",
+            "GFDL-1.3-no-invariants-only.txt",
+            "PERMISSIVE-LICENSES.txt",
+            "PYTHON-3.13.txt",
+            "PYINSTALLER.txt",
+        ):
+            self.assertIn(filename, windows)
+            self.assertIn(filename, linux)
+            self.assertIn(filename, macos)
+        self.assertIn("usr/share/doc/spade65", linux)
+        self.assertIn("Contents/Resources/Legal", macos)
+        self.assertIn("$SmokeDirectory $RelativePath", windows)
+        self.assertIn("$mount_dir/THIRD-PARTY-NOTICES.md", macos)
+
+    def test_running_gui_is_activated_only_with_spade65_marker(self):
         class Response:
-            status = 200
-
-            def __init__(self, contents: bytes):
+            def __init__(self, contents: bytes, status: int = 200):
                 self.contents = contents
+                self.status = status
 
             def __enter__(self):
                 return self
@@ -144,22 +277,112 @@ class PackagingTests(unittest.TestCase):
             b'content="abcdefghijklmnopqrstuvwxyz123456">'
             b'<title>Spade65 Control Center</title>'
         )
-        with (
-            patch.object(launcher.urllib.request, "urlopen", return_value=Response(valid)),
-            patch.object(launcher.webbrowser, "open") as open_browser,
+        with patch.object(
+            launcher.LOCALHOST_OPENER,
+            "open",
+            side_effect=(Response(valid), Response(b'{"ok": true}')),
+        ) as open_local:
+            self.assertTrue(launcher.activate_running_gui())
+        request = open_local.call_args_list[1].args[0]
+        self.assertEqual(request.full_url, f"{launcher.GUI_URL}api/activate")
+        self.assertEqual(
+            request.get_header("X-spade65-token"),
+            "abcdefghijklmnopqrstuvwxyz123456",
+        )
+
+        for response in (
+            Response(b"<title>another app</title>"),
+            Response(valid, status=503),
         ):
-            self.assertTrue(launcher.reopen_running_gui())
-            open_browser.assert_called_once_with(launcher.GUI_URL)
+            with (
+                self.subTest(status=response.status),
+                patch.object(
+                    launcher.LOCALHOST_OPENER,
+                    "open",
+                    return_value=response,
+                ),
+                patch.object(launcher.webbrowser, "open") as open_browser,
+            ):
+                self.assertFalse(launcher.activate_running_gui())
+                self.assertFalse(launcher.reopen_running_gui_in_browser())
+                open_browser.assert_not_called()
+
+    def test_launcher_local_requests_never_use_environment_proxies(self):
+        self.assertFalse(
+            any(
+                isinstance(handler, launcher.urllib.request.ProxyHandler)
+                for handler in launcher.LOCALHOST_OPENER.handlers
+            )
+        )
+
+    def test_verified_legacy_session_uses_browser_compatibility_fallback(self):
         with (
             patch.object(
-                launcher.urllib.request,
-                "urlopen",
-                return_value=Response(b"<title>another app</title>"),
+                launcher,
+                "running_gui_token",
+                return_value="abcdefghijklmnopqrstuvwxyz123456",
             ),
             patch.object(launcher.webbrowser, "open") as open_browser,
         ):
-            self.assertFalse(launcher.reopen_running_gui())
-            open_browser.assert_not_called()
+            self.assertTrue(launcher.reopen_running_gui_in_browser())
+        open_browser.assert_called_once_with(launcher.GUI_URL)
+
+    def test_release_builds_install_and_bundle_the_desktop_runtime(self):
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        spec = (ROOT / "packaging" / "spade65.spec").read_text(encoding="utf-8")
+        release = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        test_workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"pywebview==6.2.1"', project)
+        self.assertIn("PySide6==6.11.2", project)
+        self.assertIn("pythonnet==3.1.0", project)
+        self.assertIn(
+            '"clr_loader==0.3.1; sys_platform == \'win32\'"', project
+        )
+        self.assertIn('"cffi==2.1.1; sys_platform == \'win32\'"', project)
+        self.assertIn('"pycparser==3.0; sys_platform == \'win32\'"', project)
+        self.assertIn("pyobjc-core==12.2.2", project)
+        self.assertNotIn("pywebview[qt6]", project)
+        self.assertIn('"linux": ["webview.platforms.qt"]', spec)
+        self.assertIn('"webview.platforms.winforms"', spec)
+        self.assertIn('"webview.platforms.cocoa"', spec)
+        self.assertIn('"darwin": ["hid", "webview.platforms.cocoa"]', spec)
+        self.assertNotIn('hiddenimports=["hid"', spec)
+        self.assertIn('"qtpy.QtDataVisualization"', spec)
+        self.assertIn('"PySide6.QtDataVisualization"', spec)
+        self.assertIn('ROOT / "packaging" / "hooks"', spec)
+        hook_root = ROOT / "packaging" / "hooks"
+        qml_hook = (hook_root / "hook-PySide6.QtQml.py").read_text(
+            encoding="utf-8"
+        )
+        gui_hook = (hook_root / "hook-PySide6.QtGui.py").read_text(
+            encoding="utf-8"
+        )
+        positioning_hook = (
+            hook_root / "hook-PySide6.QtPositioning.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("add_qt6_dependencies", qml_hook)
+        self.assertNotIn("collect_qtqml_files", qml_hook)
+        self.assertIn("/plugins/qmltooling/", qml_hook)
+        self.assertIn("_allowed_plugins", gui_hook)
+        self.assertNotIn("virtualkeyboard", gui_hook.casefold())
+        self.assertIn("binaries = []", positioning_hook)
+        self.assertIn("NSMicrophoneUsageDescription", spec)
+        self.assertIn("NSAllowsLocalNetworking", spec)
+        self.assertEqual(release.count(".[cross-platform,desktop]"), 1)
+        self.assertGreaterEqual(release.count(".[desktop]"), 2)
+        self.assertIn("  windows-package:", test_workflow)
+        self.assertIn("  linux-package:", test_workflow)
+        self.assertIn("  macos-package:", test_workflow)
+
+        javascript = (ROOT / "spade65" / "web" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("structuredClone", javascript)
+        self.assertNotIn("Object.hasOwn(", javascript)
 
     def test_windows_package_contains_console_cli_and_archive_smoke(self):
         spec = (ROOT / "packaging" / "spade65.spec").read_text(encoding="utf-8")
@@ -169,6 +392,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name="Spade65CLI"', spec)
         self.assertIn("console=True", spec)
         self.assertIn("Expand-Archive", script)
+        self.assertIn("$ArchivedGui --smoke-test", script)
         self.assertIn("$ArchivedCli --smoke-test", script)
 
     def test_native_hid_smoke_only_loads_extension_on_required_platforms(self):

@@ -19,7 +19,7 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 | Remap tombol/layer | Ya, seluruh kategori assignment vendor + tiga layer | Belum |
 | Macro | Ya, maksimal 10 macro/84 event, recorder, repeat dan binding | Belum |
 | Per-key RGB | Ya, tersimpan dan streaming | Ya, mode USB `0603:0351` |
-| GUI lokal | Ya, frontend web lokal yang sama di seluruh OS | Ya, browser lokal + deteksi hardware Linux |
+| GUI lokal | Ya, jendela desktop PyWebView; HTML/CSS/JS lokal dengan fallback browser | Ya, browser lokal + deteksi hardware Linux |
 | Animasi app/AP mode | Ya, 10 pola/layer + range, palet, parameter lanjut dan audio | Streaming USB tervalidasi |
 | Custom timeline | Ya, 200 frame + playback/background streaming | Service mengirim frame via USB |
 | Import file vendor | Ya, KeyAssign/Macro/APMode JSON | Diuji offline |
@@ -41,8 +41,13 @@ Spade65 aktif.
 ## Persyaratan
 
 - Python 3.10 atau lebih baru.
-- Linux: `hidraw` dan `sysfs` standar, tanpa dependency runtime tambahan.
-- Windows/macOS: package `hidapi` melalui extra `cross-platform`.
+- Linux: `hidraw` dan `sysfs` standar untuk CLI; extra `desktop` memasang
+  PySide6/QtWebEngine untuk jendela desktop.
+- Windows/macOS: package `hidapi` melalui extra `cross-platform`; gabungkan
+  dengan extra `desktop` untuk GUI standalone dari source.
+- Windows memerlukan Microsoft Edge WebView2 Runtime. Windows 10/11 yang mutakhir
+  biasanya sudah memilikinya; bila runtime tidak tersedia, GUI beralih ke
+  browser default.
 
 Persyaratan Python di atas hanya berlaku untuk instalasi dari source. Setelah
 workflow tag berhasil, pengguna dapat mengunduh paket siap jalan dari halaman
@@ -53,18 +58,35 @@ GitHub Releases:
 - `Spade65-macOS-universal.dmg`
 
 Ketiga paket dibuat otomatis pada runner OS masing-masing ketika tag semantik,
-misalnya `v0.6.0`, dikirim. Versi tag harus sama dengan versi project. Paket
+misalnya `v0.7.0`, dikirim. Versi tag harus sama dengan versi project. Paket
 Windows belum ditandatangani dan aplikasi macOS baru memiliki ad-hoc signature,
 belum Developer ID/notarization; SmartScreen atau Gatekeeper karena itu dapat
 menampilkan peringatan. Lihat [panduan rilis](docs/releasing.md) dan
 [panduan lintas platform](docs/cross-platform.md) untuk instalasi, verifikasi,
 serta fallback menjalankan dari source.
 
+AppImage v0.7.0 membundel PySide6/QtWebEngine dan karena itu lebih besar daripada
+rilis browser-only. Asset Linux resmi dibangun dan di-smoke-test pada runner
+Ubuntu 22.04 x86_64 (glibc 2.35); itulah baseline Linux yang didukung. Distribusi
+yang lebih baru biasanya kompatibel, tetapi kompatibilitas tidak disimpulkan
+hanya dari nomor glibc. Pada macOS, jendela memakai Cocoa/WebKit sistem; bundle
+mengizinkan koneksi localhost dan meminta izin mikrofon hanya ketika efek
+audio-reactive diaktifkan.
+
 Build tanpa CI juga didukung pada komputer target dengan
 `python packaging/build.py`; command ini memakai script dan smoke test native
 yang sama dengan GitHub Actions serta menulis file bernama sama ke `artifacts/`.
+Portabilitas AppImage hasil build manual mengikuti OS/glibc mesin build; gunakan
+asset resmi bila membutuhkan baseline Ubuntu 22.04.
+Setiap push ke `main` juga menjalankan package preflight native terpisah untuk
+Windows, Linux, dan macOS tanpa memublikasikan release; workflow tag membangun
+ulang ketiganya dari commit tag sebelum publish.
 ZIP Windows berisi `Spade65.exe` untuk GUI dan `Spade65CLI.exe` untuk command
-terminal dengan output yang terlihat.
+terminal dengan output yang terlihat. Menjalankan aplikasi paket tanpa argumen
+membuka jendela standalone. Peluncuran kedua mengaktifkan dan memulihkan jendela
+yang sudah ada. Menutup jendela atau memilih **Quit application** menghentikan
+server localhost; aplikasi tidak memiliki system tray atau mode
+minimize-to-tray.
 
 ## Menjalankan
 
@@ -87,8 +109,15 @@ spade65ctl probe
 Pada Windows atau macOS:
 
 ```bash
-python -m pip install -e ".[cross-platform]"
+python -m pip install -e ".[cross-platform,desktop]"
 spade65ctl probe
+spade65ctl gui
+```
+
+Untuk jendela desktop dari source pada Linux:
+
+```bash
+python -m pip install -e ".[desktop]"
 spade65ctl gui
 ```
 
@@ -106,6 +135,10 @@ sudo udevadm trigger
 ```
 
 Cabut dan pasang kembali keyboard/dongle setelah itu. Jalankan CLI sebagai user biasa; jangan memakai `sudo` kecuali hanya untuk diagnosis izin.
+
+AppImage resmi menggunakan backend `hidraw` dan tidak membundel HIDAPI yang
+tidak diperlukan di Linux. Override HIDAPI tetap tersedia untuk instalasi dari
+source dengan extra `cross-platform`.
 
 ## Urutan pengujian pertama di kantor
 
@@ -147,23 +180,38 @@ CLI menolak menulis jika ukuran report yang dibaca dari descriptor berbeda dari 
 
 ## Penggunaan
 
-### GUI lokal
+### GUI desktop dan browser
 
 ```bash
 python spade65ctl.py gui
+python spade65ctl.py gui --browser
+python spade65ctl.py gui --no-browser
 ```
 
-Browser akan membuka `http://127.0.0.1:8765/`. GUI menyediakan pemilihan device,
-editor tiga layer dengan geometri asli empat varian Spade65 (ANSI/ISO dan
-standard/split spacebar), seluruh kategori assignment vendor, macro recorder,
-import/export profil, seluruh efek RGB bawaan, warna per-key, kompositor 10 layer
-animasi streaming dengan parameter original, audio reactive, debounce, timer dongle, reset,
-serta diagnostics. Server hanya menerima koneksi localhost dan setiap API call
-memerlukan token sesi acak.
+Mode default membuka `http://127.0.0.1:8765/` di jendela PyWebView standalone.
+Jika extra/runtime desktop tidak dapat dimuat, aplikasi menjelaskan kegagalannya
+di stderr lalu otomatis membuka browser default. `--browser` memilih browser
+secara eksplisit, sedangkan `--no-browser` hanya menjalankan server localhost
+untuk otomasi atau akses manual. GUI tetap dibuat dengan HTML, CSS, dan
+JavaScript di dalam WebView—bukan kumpulan widget native penuh—sementara backend
+dan asset tetap lokal. Server hanya menerima koneksi loopback dan setiap API
+call memerlukan token sesi acak; `Host` asing dan `Origin` browser yang tidak
+sesuai ditolak untuk mencegah DNS rebinding ke server lokal.
+
+GUI menyediakan pemilihan device, editor tiga layer dengan geometri asli empat
+varian Spade65 (ANSI/ISO dan standard/split spacebar), seluruh kategori
+assignment vendor, macro recorder, import/export profil, seluruh efek RGB
+bawaan, warna per-key, kompositor 10 layer animasi streaming dengan parameter
+original, audio reactive, debounce, timer dongle, reset, serta diagnostics.
+Ekspor profil dan backup library memakai dialog Save native pada Linux/macOS,
+handler download WebView2 pada Windows, serta download biasa ketika GUI sengaja
+dijalankan di browser.
 
 Antarmuka tersedia dalam English dan Bahasa Indonesia. English adalah bahasa
-default; pilihan pengguna disimpan di browser. Katalog dipisahkan per bahasa
-agar bahasa baru dapat ditambahkan tanpa mengubah protokol atau backend. Panduan
+default; pilihan bahasa, layout, dan profil tersimpan memakai profil WebView
+khusus aplikasi sehingga bertahan setelah jendela ditutup. Mode browser memakai
+storage milik browser dan karena itu terpisah. Katalog dipisahkan per bahasa agar
+bahasa baru dapat ditambahkan tanpa mengubah protokol atau backend. Panduan
 kontributor tersedia di [`docs/localization.md`](docs/localization.md).
 
 GUI juga menyediakan konversi file ekspor original, backup/restore seluruh
@@ -368,4 +416,18 @@ Repository tidak menyertakan installer, firmware, source vendor hasil ekstraksi,
 
 ## Lisensi
 
-Kode asli dalam repository ini menggunakan lisensi MIT. Software, firmware, nama merek, dan asset vendor tetap menjadi milik pemegang hak masing-masing.
+Kode asli dalam repository ini menggunakan lisensi MIT. Runtime desktop
+membundel atau memakai komponen third-party dengan ketentuan lisensinya
+masing-masing, termasuk
+[pywebview](https://github.com/r0x0r/pywebview/blob/master/LICENSE.md),
+[Qt for Python/PySide6](https://doc.qt.io/qtforpython-6/licenses.html),
+[Microsoft Edge WebView2](https://www.microsoft.com/legal/webview2terms), dan
+[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt).
+Daftar versi, copyright, source, dan petunjuk penggantian library tersedia di
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) dan disertakan dalam setiap
+paket rilis.
+Salinan teks [GPL-3.0](licenses/GPL-3.0.txt) dan
+[LGPL-3.0](licenses/LGPL-3.0.txt) juga tersedia di repository untuk komponen Qt
+yang didistribusikan berdasarkan pilihan lisensi tersebut.
+Software, firmware, nama merek, dan asset vendor tetap menjadi milik pemegang
+hak masing-masing.

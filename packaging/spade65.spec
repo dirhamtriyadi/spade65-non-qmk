@@ -10,17 +10,33 @@ from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = Path(SPECPATH).parent
 TARGET_ARCH = os.environ.get("SPADE65_TARGET_ARCH") or None
+DESKTOP_HIDDEN_IMPORTS = {
+    "linux": ["webview.platforms.qt"],
+    "win32": [
+        "hid",
+        "webview.platforms.winforms",
+        "webview.platforms.edgechromium",
+        "clr",
+    ],
+    "darwin": ["hid", "webview.platforms.cocoa"],
+}.get(sys.platform, [])
+PLATFORM_EXCLUDES = {
+    # QtPy imports this compatibility module from a suppressed optional block.
+    # It is unrelated to the QtWebEngine widgets backend and pulls GPL-only Qt
+    # Graphs/Data Visualization modules into an otherwise LGPL distribution.
+    "linux": ["qtpy.QtDataVisualization", "PySide6.QtDataVisualization"],
+}.get(sys.platform, [])
 
 analysis = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=collect_data_files("spade65.web"),
-    hiddenimports=["hid"],
-    hookspath=[],
+    hiddenimports=["webview", *DESKTOP_HIDDEN_IMPORTS],
+    hookspath=[str(ROOT / "packaging" / "hooks")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=PLATFORM_EXCLUDES,
     noarchive=False,
     optimize=1,
 )
@@ -85,9 +101,16 @@ if sys.platform == "darwin":
             ),
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
+            "NSAppTransportSecurity": {
+                "NSAllowsLocalNetworking": True,
+            },
             "NSAppleEventsUsageDescription": (
                 "Spade65 reads the foreground application name to switch "
                 "locally configured keyboard profiles."
+            ),
+            "NSMicrophoneUsageDescription": (
+                "Spade65 uses microphone input only when you enable an "
+                "audio-reactive lighting effect."
             ),
         },
     )

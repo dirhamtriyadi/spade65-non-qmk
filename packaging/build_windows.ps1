@@ -23,6 +23,12 @@ if (-not (Test-Path $CliExecutable -PathType Leaf)) {
     throw "PyInstaller did not produce $CliExecutable"
 }
 
+Copy-Item (Join-Path $RepositoryRoot "LICENSE") $Distribution
+Copy-Item (Join-Path $RepositoryRoot "THIRD-PARTY-NOTICES.md") $Distribution
+$LegalDirectory = Join-Path $Distribution "licenses"
+New-Item -ItemType Directory -Force -Path $LegalDirectory | Out-Null
+Copy-Item (Join-Path $RepositoryRoot "licenses\*") $LegalDirectory -Recurse
+
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 if (Test-Path $Output) { Remove-Item -Force $Output }
 Compress-Archive -Path (Join-Path $Distribution "*") -DestinationPath $Output
@@ -41,6 +47,25 @@ try {
     if (-not (Test-Path $ArchivedCli -PathType Leaf)) {
         throw "Windows ZIP is missing Spade65CLI.exe"
     }
+    foreach ($RelativePath in @(
+        "LICENSE",
+        "THIRD-PARTY-NOTICES.md",
+        "licenses\GPL-3.0.txt",
+        "licenses\LGPL-3.0.txt",
+        "licenses\LGPL-2.1.txt",
+        "licenses\Qt-6.11.2-LICENSE.Chromium",
+        "licenses\QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html",
+        "licenses\GFDL-1.3-no-invariants-only.txt",
+        "licenses\PERMISSIVE-LICENSES.txt",
+        "licenses\PYTHON-3.13.txt",
+        "licenses\PYINSTALLER.txt"
+    )) {
+        if (-not (Test-Path (Join-Path $SmokeDirectory $RelativePath) -PathType Leaf)) {
+            throw "Windows ZIP is missing $RelativePath"
+        }
+    }
+    & $ArchivedGui --smoke-test
+    if ($LASTEXITCODE -ne 0) { throw "Archived Windows GUI smoke test failed" }
     & $ArchivedCli --smoke-test
     if ($LASTEXITCODE -ne 0) { throw "Archived Windows smoke test failed" }
 }

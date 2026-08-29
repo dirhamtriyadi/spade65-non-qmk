@@ -3,10 +3,18 @@
 GUI memakai katalog JSON yang dibundel bersama aplikasi. English (`en`) adalah
 bahasa canonical sekaligus default, dan Bahasa Indonesia (`id`) tersedia sejak
 versi `0.6.0`. Pilihan pada sidebar disimpan di `localStorage` dengan key
-`spade65-language`, sehingga tetap digunakan saat GUI dibuka kembali pada origin
-localhost yang sama. Backup library juga menyimpan code bahasa dan restore akan
-menerapkannya kembali bila locale tersebut masih didukung. Bahasa browser tidak
-dideteksi otomatis.
+`spade65-language`. Sejak v0.7.0, jendela standalone memakai profil WebView
+khusus aplikasi dengan `private_mode=False`, sehingga pilihan tetap digunakan
+saat GUI dibuka kembali pada origin localhost yang sama. Storage desktop berada
+di Local AppData Windows dan XDG data Linux; pada macOS, Cocoa WebKit memakai
+default website data store persisten yang dikelola OS untuk bundle ID aplikasi.
+
+Mode `gui --browser` dan fallback browser memakai `localStorage` profil browser,
+yang terpisah dari storage WebView. Backup library menyimpan code bahasa dan
+download ekspor tetap didukung di jendela desktop; restore akan menerapkan bahasa
+kembali bila locale tersebut masih didukung. Backup/restore juga merupakan cara
+yang aman untuk memindahkan profil dan pilihan bahasa antara WebView dan browser.
+Bahasa browser tidak dideteksi otomatis.
 
 Jika manifest atau locale terpilih gagal dimuat, GUI kembali ke English. Teks
 English yang tertanam di HTML juga menjadi fallback paling awal agar halaman
@@ -95,8 +103,10 @@ Contoh menambahkan bahasa Jepang dengan code `ja`:
 3. Tambahkan `{"code": "ja", "name": "日本語"}` ke array `languages` dalam
    `locales/index.json`. Nama ini adalah nama bahasa yang tampil pada selector.
 4. Jalankan test dan pemeriksaan katalog di bawah.
-5. Buka GUI, ganti bahasa, muat ulang halaman, lalu periksa semua page, dialog,
-   toast, placeholder, title, serta label aksesibilitas.
+5. Buka jendela desktop, ganti bahasa, tutup dan jalankan ulang aplikasi, lalu
+   pastikan pilihan tetap tersimpan.
+6. Ulangi dengan `gui --browser`, lalu periksa semua page, dialog, toast,
+   placeholder, title, download ekspor, serta label aksesibilitas.
 
 Tidak perlu mengubah backend, daftar route, `pyproject.toml`, atau spec
 PyInstaller untuk setiap bahasa baru selama file memakai pola nama di atas.

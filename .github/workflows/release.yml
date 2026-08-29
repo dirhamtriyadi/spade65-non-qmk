@@ -73,7 +73,9 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-build.txt ".[cross-platform]"
+          python -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
+          python -m pip check
+          python -m pip freeze
       - name: Build Windows package
         run: python packaging/build.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -85,6 +87,8 @@ jobs:
   linux:
     needs: validate
     runs-on: ubuntu-22.04
+    env:
+      SPADE65_STRICT_LINUX_LEGAL: "1"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -97,7 +101,9 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-build.txt ".[cross-platform]"
+          python -m pip install -r requirements-build.txt ".[desktop]"
+          python -m pip check
+          python -m pip freeze
       - name: Build Linux AppImage
         run: python packaging/build.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -128,7 +134,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install -r requirements-build.txt
-          python -m pip install --no-deps --no-build-isolation .
+          python -m pip install --no-build-isolation ".[desktop]"
+          python -m pip check
+          python -m pip freeze
           python -m pip --version
           python -m PyInstaller --version
       - name: Build and verify universal2 HID extension

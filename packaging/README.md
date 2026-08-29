@@ -13,22 +13,47 @@ Manual workflow dispatch may resume or replace assets on an unpublished draft
 for an existing tag. It deliberately refuses to overwrite a published release.
 Runs for the same tag are serialized so draft creation and uploads cannot race.
 
-The frozen `Spade65` launcher opens the localhost GUI in the default browser
-when started without arguments. A second launch verifies the existing Spade65
-session on port 8765, reopens it, and exits instead of failing on the occupied
-port. Linux and macOS pass CLI arguments to this executable. The Windows ZIP
-contains both windowed `Spade65.exe` for the GUI and console
-`Spade65CLI.exe` for visible CLI output and errors.
-The sidebar's **Quit application** action shuts down the authenticated local
-server; merely closing the browser tab keeps it available for a later launch.
+Starting with v0.7.0, the frozen `Spade65` launcher starts the authenticated
+localhost GUI on port 8765 inside a standalone PyWebView window. The interface
+is still the repository's local HTML, CSS, and JavaScript—not a rewrite as fully
+native widgets. If the platform WebView cannot load, the launcher reports the
+failure and falls back to the default browser.
+
+A second packaged-app launch verifies the existing Spade65 token, calls its
+authenticated activation route, restores the existing window, and exits instead
+of failing on the occupied port. Closing the desktop window or using **Quit
+application** closes the window and localhost server. There is no tray icon or
+minimize-to-tray process. In browser mode, closing only the tab leaves the server
+running until **Quit application**, Ctrl+C, or process termination.
+
+PyWebView uses a persistent, app-specific profile. Profile exports and library
+backups use a native Save-dialog bridge on Linux/macOS; Windows uses WebView2's
+UI-thread download handler, and explicit browser mode retains normal downloads. Its
+custom storage roots are `%LOCALAPPDATA%\Spade65\WebView` on Windows and
+`${XDG_DATA_HOME:-~/.local/share}/spade65/webview` on Linux. On macOS, Cocoa
+WebKit persists the default website data store in an OS-managed location for
+bundle ID `io.github.dirhamtriyadi.spade65`; pywebview does not expose a custom
+path for that backend. Browser mode has a separate browser-owned storage
+profile; backup/restore is the portable bridge between the two.
+
+Linux and macOS pass CLI arguments to the packaged executable. The Windows ZIP
+contains both windowed `Spade65.exe` for the GUI and console `Spade65CLI.exe`
+for visible CLI output and errors. The CLI `gui --browser` flag forces browser
+mode; `gui --no-browser` runs only the loopback server.
 
 ## Local builds
 
-Install the project HID dependency and the build tools first:
+Install the HID, desktop, and build dependencies first:
 
 ```sh
-python -m pip install -r requirements-build.txt ".[cross-platform]"
+python -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
+python -m pip check
 ```
+
+For editable source installs that are not building release artifacts, Linux can
+use `python -m pip install -e ".[desktop]"`; Windows and macOS use
+`python -m pip install -e ".[cross-platform,desktop]"`. A base install can still
+run `gui --browser` or `gui --no-browser` without the native desktop extra.
 
 Build on the target computer with one cross-platform command. It automatically
 selects the native script and uses the same Python interpreter that invoked it:
@@ -58,15 +83,62 @@ execution. A custom `APPIMAGETOOL_URL` must be paired with the corresponding
 immutable GitHub asset ID and hash-checked; overriding `APPIMAGE_RUNTIME_URL`
 requires the matching `APPIMAGE_RUNTIME_SHA256`. Verification is never skipped,
 and `--runtime-file` prevents appimagetool from fetching its mutable
-`continuous` runtime. macOS requires Xcode command-line tools and a universal2
-Python plus universal2 native dependencies. The release workflow builds
+`continuous` runtime.
+
+The Linux x86_64 package bundles PySide6 and QtWebEngine. This materially
+increases the AppImage size compared with the earlier browser-only package. The
+official artifact is built and smoke-tested on the `ubuntu-22.04` x86_64 runner
+(glibc 2.35), which is the supported Linux baseline. Newer distributions are
+usually compatible, but glibc's version alone is not a complete compatibility
+guarantee. A manual artifact inherits libc requirements from its build host, so
+build on the oldest target environment you intend to support. A graphical
+session and the normal Qt display dependencies are required to open the window,
+while the packaged smoke test remains headless.
+
+The PyInstaller build uses local hooks for the widgets-only QtWebEngine backend.
+They omit the unused QML tree, Qt Data Visualization, and optional virtual
+keyboard/Quick 3D tooling that would otherwise pull GPL-only Qt modules into the
+AppImage. `build_linux.sh` independently rejects Qt Graphs, Data Visualization,
+Quick 3D, Quick Timeline, Virtual Keyboard, and Wayland Compositor filenames
+before packaging. Do not remove this check when upgrading PySide6 or
+PyInstaller; rebuild, inspect, and re-license the actual payload instead.
+
+The AppImage supports the verified Linux `hidraw` transport and intentionally
+does not bundle the optional HIDAPI extension or its vendored native libraries.
+Developers can still test the HIDAPI override from a source installation with
+the `cross-platform` extra; that override is not part of the released AppImage.
+
+After PyInstaller finishes, `linux_legal_inventory.py` reads the generated
+`COLLECT-00.toc`. Official Ubuntu jobs set `SPADE65_STRICT_LINUX_LEGAL=1`, so
+every native binary collected from `/usr`, `/lib`, `/bin`, or `/sbin` must map
+to an installed dpkg package and an available Debian copyright file. The
+AppImage stores the resulting manifest and copied files under
+`usr/share/doc/spade65/linux-system-libraries`. Manual builds on non-dpkg hosts
+remain supported and receive a source-path-only manifest whose warning makes
+the unverified system attribution explicit. The exact upstream license files
+for the pinned type-2 runtime commit and appimagetool 1.9.1 are included in the
+normal offline license directory.
+
+Windows uses the Edge Chromium backend and requires Microsoft Edge WebView2
+Runtime on both build/smoke-test hosts and end-user systems. Current Windows
+10/11 installations commonly include it, but the runtime is not silently
+replaced with legacy MSHTML; failure activates the documented browser fallback.
+
+macOS requires Xcode command-line tools and a universal2 Python plus universal2
+native dependencies. The release workflow builds
 with the SHA-256-verified Python.org 3.13.15 universal2 installer instead of
 assuming that an architecture-selected CI interpreter is fat. It then builds
 `hidapi` from source for both macOS architectures and scans every Mach-O file in
-the finished application to reject thin native binaries. Every packaged
-executable also runs a no-browser/no-device-enumeration smoke test before its
-artifact is uploaded; Windows/macOS still load the native HID extension so
-missing linked libraries fail the build without touching a keyboard.
+the finished application to reject thin native binaries. The desktop renderer
+uses Cocoa/WebKit through PyObjC. The bundle permits local networking for the
+loopback UI and includes a microphone usage description; microphone access is
+only requested when an audio-reactive effect is enabled.
+
+Every packaged executable runs a no-window/no-browser/no-device-enumeration
+smoke test before upload. It imports the selected PyWebView backend and checks
+the packaged HTTP resources without creating an interactive window.
+Windows/macOS still load the native HID extension so missing linked libraries
+fail the build without touching a keyboard.
 
 The Windows script validates both executables, creates the ZIP, extracts it to
 a temporary directory, and runs `Spade65CLI.exe --smoke-test` from the extracted
@@ -92,6 +164,16 @@ GitHub Actions installs the pinned Python.org package after verifying SHA-256.
 For a manual build, install a current Python.org universal2 distribution first;
 the helper fails closed if the interpreter or resulting HID extension is thin.
 
+CI has two native-package layers. Every push to `main` runs non-publishing
+Windows, Linux, and macOS package preflight jobs. A release tag rebuilds all
+three artifacts from the immutable tag commit and only then permits publishing;
+preflight artifacts are not reused as release assets. Both layers use the same
+dependency contract as manual builds: Windows installs
+`.[cross-platform,desktop]`, Linux installs `.[desktop]` for its hidraw-only
+AppImage, and macOS installs the `desktop` extra then builds HIDAPI universal2
+separately. Each also installs `requirements-build.txt`. All three run `pip
+check`, the packaged smoke test, and native artifact verification.
+
 The macOS script reads the application version from `pyproject.toml`, verifies
 it against `spade65.__version__`, and embeds it in the app automatically.
 
@@ -100,3 +182,16 @@ receives only an ad-hoc signature and is not notarized, so downloaded releases
 can show SmartScreen or Gatekeeper warnings. Production trust requires private
 Windows code-signing and Apple Developer ID/notarization credentials configured
 as repository secrets; no signing keys should be committed.
+
+PyWebView and its platform runtimes retain their upstream license terms. Review
+[`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md), which is copied into
+every release artifact, together with
+the licensing material for
+[pywebview](https://github.com/r0x0r/pywebview/blob/master/LICENSE.md),
+[Qt for Python/PySide6](https://doc.qt.io/qtforpython-6/licenses.html),
+[Microsoft Edge WebView2](https://www.microsoft.com/legal/webview2terms), and
+[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt) when
+redistributing the release artifacts. Repository copies of the relevant
+[GPL-3.0](../licenses/GPL-3.0.txt) and
+[LGPL-3.0](../licenses/LGPL-3.0.txt) texts are also available for Qt components
+distributed under those license options.

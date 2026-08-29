@@ -25,6 +25,22 @@ SPADE65_TARGET_ARCH=universal2 "$build_python" -m PyInstaller \
   --noconfirm --clean "$repo_root/packaging/spade65.spec"
 
 test -x "$application/Contents/MacOS/Spade65"
+app_legal_dir="$application/Contents/Resources/Legal"
+mkdir -p "$app_legal_dir"
+install -m 0644 "$repo_root/LICENSE" "$app_legal_dir/LICENSE"
+install -m 0644 "$repo_root/THIRD-PARTY-NOTICES.md" \
+  "$app_legal_dir/THIRD-PARTY-NOTICES.md"
+cp -R "$repo_root/licenses" "$app_legal_dir/licenses"
+test -s "$app_legal_dir/THIRD-PARTY-NOTICES.md"
+test -s "$app_legal_dir/licenses/GPL-3.0.txt"
+test -s "$app_legal_dir/licenses/LGPL-3.0.txt"
+test -s "$app_legal_dir/licenses/LGPL-2.1.txt"
+test -s "$app_legal_dir/licenses/Qt-6.11.2-LICENSE.Chromium"
+test -s "$app_legal_dir/licenses/QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html"
+test -s "$app_legal_dir/licenses/GFDL-1.3-no-invariants-only.txt"
+test -s "$app_legal_dir/licenses/PERMISSIVE-LICENSES.txt"
+test -s "$app_legal_dir/licenses/PYTHON-3.13.txt"
+test -s "$app_legal_dir/licenses/PYINSTALLER.txt"
 
 mach_o_count=0
 while IFS= read -r -d '' candidate; do
@@ -48,6 +64,10 @@ codesign --verify --deep --strict "$application"
 
 cp -R "$application" "$staging_dir/Spade65.app"
 ln -s /Applications "$staging_dir/Applications"
+install -m 0644 "$repo_root/LICENSE" "$staging_dir/LICENSE"
+install -m 0644 "$repo_root/THIRD-PARTY-NOTICES.md" \
+  "$staging_dir/THIRD-PARTY-NOTICES.md"
+cp -R "$repo_root/licenses" "$staging_dir/licenses"
 rm -f "$output"
 hdiutil create -quiet -volname "Spade65" -srcfolder "$staging_dir" \
   -format UDZO -ov "$output"
@@ -62,6 +82,18 @@ cleanup_mount() {
 trap cleanup_mount EXIT
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_dir" "$output"
 test -x "$mount_dir/Spade65.app/Contents/MacOS/Spade65"
+test -s "$mount_dir/THIRD-PARTY-NOTICES.md"
+test -s "$mount_dir/licenses/GPL-3.0.txt"
+test -s "$mount_dir/licenses/LGPL-3.0.txt"
+test -s "$mount_dir/licenses/LGPL-2.1.txt"
+test -s "$mount_dir/licenses/Qt-6.11.2-LICENSE.Chromium"
+test -s "$mount_dir/licenses/QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html"
+test -s "$mount_dir/licenses/GFDL-1.3-no-invariants-only.txt"
+test -s "$mount_dir/licenses/PERMISSIVE-LICENSES.txt"
+test -s "$mount_dir/licenses/PYTHON-3.13.txt"
+test -s "$mount_dir/licenses/PYINSTALLER.txt"
+test -s \
+  "$mount_dir/Spade65.app/Contents/Resources/Legal/THIRD-PARTY-NOTICES.md"
 "$mount_dir/Spade65.app/Contents/MacOS/Spade65" --smoke-test
 cleanup_mount
 trap - EXIT

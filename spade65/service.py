@@ -358,7 +358,8 @@ class BackgroundService:
             except (OSError, RuntimeError) as error:
                 if once:
                     raise
-                print(f"Spade65 service warning: {error}", file=sys.stderr)
+                if sys.stderr is not None:
+                    print(f"Spade65 service warning: {error}", file=sys.stderr)
                 status = "idle"
             if once:
                 return

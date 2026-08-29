@@ -182,6 +182,7 @@ class I18nTests(unittest.TestCase):
             "localStorage.setItem(I18N_STORAGE_KEY,currentLanguage)", javascript
         )
         self.assertIn("document.documentElement.lang=currentLanguage", javascript)
+        self.assertIn("window.pywebview?.api?.save_json", javascript)
 
 
 if __name__ == "__main__":
