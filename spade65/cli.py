@@ -13,6 +13,7 @@ from .hidraw import (
     HidrawDevice,
     choose_device,
     discover_hidraw,
+    readonly_device_info,
     send_feature_report,
     send_output_report,
 )
@@ -319,6 +320,59 @@ def command_gui(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_info(args: argparse.Namespace) -> int:
+    devices = [
+        device for device in discover_hidraw()
+        if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
+    ]
+    summaries = []
+    seen: set[tuple[int, int, str]] = set()
+    for device in devices:
+        identity = (device.vendor_id, device.product_id, device.unique)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        summaries.append({**_device_dict(device), **readonly_device_info(device)})
+    print(json.dumps(summaries, indent=2))
+    return 0 if summaries else 2
+
+
+def command_vendor_import(args: argparse.Namespace) -> int:
+    from .vendor import convert_vendor_file
+
+    base = load_profile(args.base) if args.base else None
+    profile, imported = convert_vendor_file(args.input, base_profile=base)
+    if args.output.exists() and not args.force:
+        raise RuntimeError(f"refusing to overwrite {args.output}; use --force")
+    args.output.write_text(json.dumps(profile, indent=2) + "\n", encoding="utf-8")
+    print(f"Imported {', '.join(imported)} into {args.output}.")
+    return 0
+
+
+def command_service_example(args: argparse.Namespace) -> int:
+    from .service import service_template
+
+    if args.output.exists() and not args.force:
+        raise RuntimeError(f"refusing to overwrite {args.output}; use --force")
+    args.output.write_text(
+        json.dumps(service_template(), indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Service config template ditulis ke {args.output}.")
+    return 0
+
+
+def command_service_run(args: argparse.Namespace) -> int:
+    from .service import BackgroundService
+
+    service = BackgroundService(
+        args.config,
+        allow_profile_writes=args.allow_profile_writes,
+        device=args.device,
+    )
+    service.run(once=args.once)
+    return 0
+
+
 def _add_write_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--device", type=Path, help="explicit /dev/hidrawN path")
     parser.add_argument("--dry-run", action="store_true", help="print packet; do not write")
@@ -341,6 +395,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="include HID serial/unique value in JSON output",
     )
     probe.set_defaults(handler=command_probe)
+
+    info = subparsers.add_parser(
+        "info", help="read-only USB revision and kernel battery information"
+    )
+    info.set_defaults(handler=command_info)
 
     gui = subparsers.add_parser("gui", help="launch the local graphical interface")
     gui.add_argument("--host", default="127.0.0.1")
@@ -419,6 +478,33 @@ def build_parser() -> argparse.ArgumentParser:
     apply.add_argument("--i-understand-profile-overwrite", action="store_true")
     _add_write_options(apply)
     apply.set_defaults(handler=command_profile_apply)
+
+    vendor_import = subparsers.add_parser(
+        "vendor-import", help="convert original KeyAssign/Macro/APMode JSON export"
+    )
+    vendor_import.add_argument("input", type=Path)
+    vendor_import.add_argument("output", type=Path)
+    vendor_import.add_argument("--base", type=Path, help="merge into an existing profile")
+    vendor_import.add_argument("--force", action="store_true")
+    vendor_import.set_defaults(handler=command_vendor_import)
+
+    service = subparsers.add_parser(
+        "service", help="background AP effects and Linux application associations"
+    )
+    service_subparsers = service.add_subparsers(dest="service_command", required=True)
+    service_example = service_subparsers.add_parser("example", help="write a config template")
+    service_example.add_argument("output", type=Path)
+    service_example.add_argument("--force", action="store_true")
+    service_example.set_defaults(handler=command_service_example)
+    service_run = service_subparsers.add_parser("run", help="run the background service")
+    service_run.add_argument("config", type=Path)
+    service_run.add_argument("--device", type=Path)
+    service_run.add_argument("--once", action="store_true")
+    service_run.add_argument(
+        "--allow-profile-writes", action="store_true",
+        help="required in addition to allow_profile_writes in config",
+    )
+    service_run.set_defaults(handler=command_service_run)
     return parser
 
 

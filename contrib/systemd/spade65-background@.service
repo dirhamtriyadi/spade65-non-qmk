@@ -1,0 +1,12 @@
+[Unit]
+Description=Spade65 background effects and application profile service (%i)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/spade65ctl service run %h/.config/spade65/%i.json
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -19,6 +19,7 @@ from .hidraw import (
     HidrawDevice,
     choose_device,
     discover_hidraw,
+    readonly_device_info,
     send_feature_report,
     send_output_report,
 )
@@ -52,7 +53,10 @@ from .protocol import (
 WRITE_LOCK = threading.Lock()
 MAX_REQUEST_BYTES = 1_000_000
 SAFE_ACTIONS = frozenset(
-    {"validate", "rgb", "per-key", "profile", "stream", "debounce", "sleep", "reset"}
+    {
+        "validate", "vendor-convert", "rgb", "per-key", "profile", "stream",
+        "debounce", "sleep", "reset",
+    }
 )
 
 
@@ -68,6 +72,7 @@ def _device_summary(device: HidrawDevice) -> dict[str, object]:
             {"kind": report.kind, "id": report.report_id, "bytes": report.byte_length}
             for report in device.reports
         ],
+        "readonly": readonly_device_info(device),
     }
 
 
@@ -140,6 +145,13 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
     if action not in SAFE_ACTIONS:
         raise ValueError(f"unknown or unsafe GUI action: {action}")
     path = payload.get("device") or None
+    if action == "vendor-convert":
+        from .vendor import convert_vendor_document
+
+        profile, imported = convert_vendor_document(
+            payload["document"], base_profile=payload.get("profile")
+        )
+        return {"profile": profile, "imported": imported}
     if action == "validate":
         compiled = compile_profile(payload["profile"])
         return {

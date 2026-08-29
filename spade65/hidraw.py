@@ -30,6 +30,7 @@ class HidrawDevice:
     usages: set[tuple[int, int]] = field(default_factory=set)
     reports: list[ReportShape] = field(default_factory=list)
     descriptor: bytes = b""
+    sysfs_path: Path | None = None
 
     def report_length(self, kind: str, report_id: int) -> int | None:
         matches = [
@@ -155,6 +156,7 @@ def discover_hidraw(sys_class: Path = Path("/sys/class/hidraw")) -> list[HidrawD
                 usages=usages,
                 reports=reports,
                 descriptor=descriptor,
+                sysfs_path=device_path.resolve(),
             )
         )
     return devices
@@ -224,3 +226,55 @@ def send_output_report(path: Path, report: bytes) -> int:
     finally:
         os.close(descriptor)
     return result
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def readonly_device_info(device: HidrawDevice) -> dict[str, object | None]:
+    """Read USB metadata and a kernel-exported battery without sending HID data."""
+
+    usb_parent = None
+    current = device.sysfs_path
+    while current is not None and current != current.parent:
+        if _read_text(current / "idVendor") and _read_text(current / "idProduct"):
+            usb_parent = current
+            break
+        current = current.parent
+    revision = _read_text(usb_parent / "bcdDevice") if usb_parent else None
+    if revision and len(revision) == 4:
+        revision = f"{revision[:2]}.{revision[2:]}"
+
+    battery = None
+    battery_source = None
+    power_supply = Path("/sys/class/power_supply")
+    if usb_parent and power_supply.exists():
+        for candidate in power_supply.iterdir():
+            try:
+                resolved = candidate.resolve()
+            except OSError:
+                continue
+            if usb_parent in resolved.parents:
+                capacity = _read_text(candidate / "capacity")
+                if capacity and capacity.isdigit():
+                    battery = int(capacity)
+                    battery_source = candidate.name
+                    break
+    return {
+        "usb_revision": revision,
+        # The vendor calls a closed native GetFWVersion function. bcdDevice is
+        # exposed separately and is deliberately not mislabeled as firmware.
+        "firmware_version": None,
+        "firmware_status": "native vendor read method is not verified",
+        "battery_percent": battery,
+        "battery_source": battery_source,
+        "battery_status": (
+            "reported by Linux power_supply" if battery is not None
+            else "not exposed by the current transport/kernel"
+        ),
+    }

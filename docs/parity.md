@@ -32,10 +32,11 @@ tanpa mengarang opcode profile baru.
 
 Beberapa komponen ada di bundle generik tetapi bukan halaman aktif perangkat:
 
-- `RELATEDPROGRAM` adalah integrasi host Windows untuk mengganti profil menurut
-  executable aktif. Ini bukan konfigurasi keyboard dan tidak portabel ke Linux.
-- `Custom Effect` timeline ada pada framework vendor, tetapi tidak terdapat di
-  daftar halaman aktif Spade65. Custom per-key firmware yang benar tetap tersedia.
+- `RELATEDPROGRAM` adalah integrasi host Windows. Proyek sekarang menyediakan
+  ekuivalen Linux opt-in melalui background service (X11 dan fallback Wayland),
+  tanpa menyalin integrasi executable Windows.
+- `Custom Effect` timeline tidak terdapat di daftar halaman aktif Spade65, tetapi
+  ekuivalen aman berbasis streaming lokal sekarang tersedia hingga 200 frame.
 - UI polling rate dikomentari dan `reportRateIndex` tidak pernah diserialisasi
   oleh backend Jupeng.
 - Model UI menyimpan long/instant press, tetapi `KeyAssigntoData` Jupeng hanya
@@ -54,8 +55,9 @@ yang belum selesai.
 
 ## Status pengujian hardware
 
-Deteksi descriptor, built-in RGB, per-key RGB, streaming/AP mode, dan debounce
-sudah divalidasi melalui USB pada `0603:0351`. Keymap/macro, timer dongle, dan
-reset sudah cocok dengan frame backend original dan memiliki pengujian offline,
-tetapi belum dieksekusi pada hardware karena perubahan tersebut lebih sulit
-dipulihkan dibanding pengujian RGB.
+Deteksi descriptor, built-in RGB, per-key RGB, streaming/AP mode, custom timeline,
+background service, dan debounce sudah divalidasi melalui USB pada `0603:0351`.
+Keymap/macro, timer dongle, dan reset sudah cocok dengan frame backend original
+dan memiliki pengujian offline, tetapi belum dieksekusi pada hardware: keymap dan
+reset tidak memiliki readback untuk membuat backup kondisi sekarang, sedangkan
+dongle `0603:0356` tidak terhubung pada pengujian terakhir.

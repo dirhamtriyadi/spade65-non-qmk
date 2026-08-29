@@ -45,6 +45,26 @@ class CliTests(unittest.TestCase):
                 )
             self.assertEqual(output.getvalue().count("report_id=0x06"), 5)
 
+    def test_vendor_import_converts_apmode_export(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "APMode.json"
+            output = root / "profile.json"
+            source.write_text(json.dumps({
+                "filename": "APMode",
+                "value": {"Light_Export": [{
+                    "name": "Static", "check": True,
+                    "colors": ["#123456"],
+                    "frame_selection_range": [True],
+                }]},
+            }))
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    main(["vendor-import", str(source), str(output)]), 0
+                )
+            profile = json.loads(output.read_text())
+            self.assertEqual(profile["settings"]["app_effects"][0]["mode"], "static")
+
 
 if __name__ == "__main__":
     unittest.main()

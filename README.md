@@ -20,13 +20,17 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 | Per-key RGB | Ya, tersimpan dan streaming | Ya, mode USB `0603:0351` |
 | GUI lokal | Ya, tanpa dependency eksternal | Ya, browser lokal + deteksi hardware |
 | Animasi app/AP mode | Ya, 10 pola/layer + range, palet, parameter lanjut dan audio | Streaming USB tervalidasi |
+| Custom timeline | Ya, 200 frame + playback/background streaming | Service mengirim frame via USB |
+| Import file vendor | Ya, KeyAssign/Macro/APMode JSON | Diuji offline |
+| Asosiasi aplikasi/background service | Ya, X11 + fallback proses Wayland | Seleksi diuji offline; output service via USB |
+| Informasi read-only | USB revision + baterai jika diekspos kernel | Ya, tanpa HID write |
 | Firmware/raw flash/bootloader | Sengaja tidak diimplementasikan | Tidak; risiko brick |
 
 Fitur konfigurasi keyboard yang aman dari aplikasi vendor sudah tersedia melalui
-CLI dan GUI. Fitur host Windows yang bukan konfigurasi keyboard—updater aplikasi,
-login/telemetri, dan asosiasi otomatis profil dengan executable Windows—tidak
-direplikasi. Tidak ada endpoint, builder paket, atau fallback raw HID untuk flash
-firmware dan bootloader.
+CLI dan GUI. Asosiasi profil Windows `RELATEDPROGRAM` digantikan service Linux
+opt-in. Updater aplikasi, login, dan telemetri vendor tidak direplikasi karena
+bukan konfigurasi keyboard. Tidak ada endpoint, builder paket, atau fallback raw
+HID untuk flash firmware dan bootloader.
 
 Matriks audit terhadap halaman dan backend software original tersedia di
 [`docs/parity.md`](docs/parity.md). Komponen generik yang tersembunyi, dikomentari,
@@ -124,6 +128,32 @@ import/export profil, seluruh efek RGB bawaan, warna per-key, kompositor 10 laye
 animasi streaming dengan parameter original, audio reactive, debounce, timer dongle, reset,
 serta diagnostics. Server hanya menerima koneksi localhost dan setiap API call
 memerlukan token sesi acak.
+
+GUI juga menyediakan konversi file ekspor original, backup/restore seluruh
+library profil, serta custom-effect timeline. Panduan service background dan
+asosiasi aplikasi ada di [`docs/host-features.md`](docs/host-features.md).
+Hasil verifikasi perangkat terakhir ada di
+[`docs/hardware-verification.md`](docs/hardware-verification.md).
+
+### Import file software original
+
+```bash
+spade65ctl vendor-import original.KeyAssign profile.json
+spade65ctl vendor-import original.Macro profile.json --base profile.json --force
+spade65ctl vendor-import original.APMode profile.json --base profile.json --force
+```
+
+### Background service dan informasi read-only
+
+```bash
+spade65ctl service example ~/.config/spade65/default.json
+spade65ctl service run ~/.config/spade65/default.json
+spade65ctl info
+```
+
+Service dapat menjalankan AP effect/timeline setelah GUI ditutup dan memilih
+profil menurut aplikasi Linux. Write keymap otomatis nonaktif secara default dan
+memerlukan izin ganda. `info` tidak mengirim paket HID.
 
 Apply profil meminta dua konfirmasi karena menimpa seluruh keymap. Reset meminta
 teks `RESET SPADE65`. Firmware update, raw flash, dan bootloader ditampilkan dalam
