@@ -213,3 +213,14 @@ def send_feature_report(path: Path, report: bytes) -> int:
     finally:
         os.close(descriptor)
     return int(result)
+
+
+def send_output_report(path: Path, report: bytes) -> int:
+    if not report:
+        raise ValueError("output report cannot be empty")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CLOEXEC)
+    try:
+        result = os.write(descriptor, report)
+    finally:
+        os.close(descriptor)
+    return result

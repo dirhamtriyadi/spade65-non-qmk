@@ -3,13 +3,19 @@ import unittest
 from spade65.protocol import (
     EFFECTS,
     KeyAssignment,
+    MacroEvent,
+    MacroReference,
     MAIN_REPORT_LENGTH,
     SHORT_REPORT_LENGTH,
     debounce_report,
+    custom_rgb_report,
     keymap_report,
+    macro_report,
     reset_report,
     rgb_effect_report,
     sleep_report,
+    streaming_activation_report,
+    streaming_rgb_reports,
 )
 
 
@@ -49,6 +55,41 @@ class ProtocolTests(unittest.TestCase):
             bytes((0x83, 0x05)),
         )
         self.assertEqual(report[-2:], bytes((0, 101)))
+
+    def test_keymap_report_encodes_macro_reference(self) -> None:
+        layers = [[None] * 102 for _ in range(3)]
+        layers[2][5] = MacroReference(3)
+        report = keymap_report(layers, default_usages=bytes(102))
+        offset = 8 + 2 * 102 * 2 + 2 * 5
+        self.assertEqual(report[offset : offset + 2], bytes((0x80, 0xF3)))
+
+    def test_macro_report_layout_and_minimum_delay(self) -> None:
+        report = macro_report(
+            2,
+            (
+                MacroEvent(delay_ms=5, usage=0x04, pressed=True),
+                MacroEvent(delay_ms=300, usage=0x04, pressed=False),
+            ),
+            repeat=3,
+        )
+        self.assertEqual(report[:4], bytes((0x07, 0x05, 0x01, 0x02)))
+        self.assertEqual(report[8:10], bytes((0, 3)))
+        self.assertEqual(report[10:16], bytes((0x80, 20, 4, 1, 44, 4)))
+
+    def test_custom_and_streaming_rgb_layout(self) -> None:
+        colors = [(0, 0, 0)] * 102
+        colors[17] = (1, 2, 3)
+        custom = custom_rgb_report(colors)
+        self.assertEqual(custom[:2], bytes((0x07, 0x07)))
+        self.assertEqual(custom[8 + 17 * 3 : 11 + 17 * 3], bytes((1, 2, 3)))
+        self.assertEqual(
+            streaming_activation_report(), bytes((0x08, 0x06, 0, 0, 0, 0, 0, 0))
+        )
+        chunks = streaming_rgb_reports(colors)
+        self.assertEqual(len(chunks), 5)
+        self.assertTrue(all(len(chunk) == 64 for chunk in chunks))
+        payload = b"".join(chunk[2:] for chunk in chunks)
+        self.assertEqual(payload[17 * 3 : 17 * 3 + 3], bytes((1, 2, 3)))
 
     def test_keymap_report_validates_shape(self) -> None:
         with self.assertRaises(ValueError):

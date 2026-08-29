@@ -79,9 +79,9 @@ Langkah implementasi berikutnya:
 2. Selesai: konversi mapping menjadi konstanta orisinal 102 slot di `spade65/keymap.py`.
 3. Selesai: tambahkan model `KeyAssignment(modifiers, usage)` dan builder tiga layer.
 4. Selesai: buat `keymap export-default` yang hanya menghasilkan JSON/frame offline.
-5. Berikutnya: bandingkan frame untuk satu perubahan dengan USB capture Windows.
-6. Implementasikan import/edit assignment keyboard biasa, tanpa macro/combo.
-7. Baru aktifkan write dengan backup profil dan konfirmasi tambahan.
+5. Selesai: implementasikan profil JSON untuk assignment keyboard, macro, dan warna.
+6. Selesai: aktifkan write dengan dry-run, validasi descriptor, dan konfirmasi tambahan.
+7. Berikutnya: bandingkan satu remap dengan USB capture dan validasi macro pada hardware.
 
 Jangan membangun keymap dari urutan fisik 70 tombol saja. Firmware menggunakan slot kosong dalam matrix 102 elemen, sehingga menghilangkan slot kosong dapat menggeser semua assignment.
 

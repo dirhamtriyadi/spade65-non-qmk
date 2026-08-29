@@ -62,6 +62,30 @@ class KeyAssignment:
             raise ValueError("key usage must be between 0x00 and 0xff")
 
 
+@dataclass(frozen=True)
+class MacroReference:
+    """Reference one of the ten macro reports from a keymap slot."""
+
+    index: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.index <= 9:
+            raise ValueError("macro index must be between 0 and 9")
+
+
+@dataclass(frozen=True)
+class MacroEvent:
+    delay_ms: int
+    usage: int
+    pressed: bool
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.delay_ms <= 0x7FFF:
+            raise ValueError("macro delay must be between 0 and 32767 ms")
+        if not 0 <= self.usage <= 0xFF:
+            raise ValueError("macro usage must be between 0x00 and 0xff")
+
+
 def rgb_effect_report(
     effect: str,
     *,
@@ -91,7 +115,7 @@ def rgb_effect_report(
 
 
 def keymap_report(
-    layers: Sequence[Sequence[KeyAssignment | None]],
+    layers: Sequence[Sequence[KeyAssignment | MacroReference | None]],
     *,
     default_usages: Sequence[int],
     fn_mode_index: int = 0,
@@ -121,11 +145,79 @@ def keymap_report(
         for slot, assignment in enumerate(layer):
             if assignment is None:
                 report[offset + 1] = default_usages[slot]
+            elif isinstance(assignment, MacroReference):
+                report[offset] = 0x80
+                report[offset + 1] = 0xF0 + assignment.index
             else:
                 report[offset] = 0x80 | assignment.modifiers
                 report[offset + 1] = assignment.usage
             offset += 2
     return bytes(report)
+
+
+def macro_report(
+    index: int,
+    events: Sequence[MacroEvent],
+    *,
+    repeat: int = 1,
+) -> bytes:
+    if not 0 <= index <= 9:
+        raise ValueError("macro index must be between 0 and 9")
+    if not 0 <= repeat <= 0xFFFF:
+        raise ValueError("macro repeat must be between 0 and 65535")
+    if len(events) > 84:
+        raise ValueError("macro supports at most 84 events")
+
+    data = bytearray(256)
+    data[0:2] = repeat.to_bytes(2, "big")
+    for event_index, event in enumerate(events):
+        delay = max(20, event.delay_ms)
+        offset = 2 + event_index * 3
+        data[offset] = (delay >> 8) | (0x80 if event.pressed else 0)
+        data[offset + 1] = delay & 0xFF
+        data[offset + 2] = event.usage
+
+    report = bytearray(MAIN_REPORT_LENGTH)
+    report[0:4] = bytes((MAIN_REPORT_ID, 0x05, 0x01, index))
+    report[8:264] = data
+    return bytes(report)
+
+
+def custom_rgb_report(colors: Sequence[tuple[int, int, int]]) -> bytes:
+    if len(colors) != 102:
+        raise ValueError("custom RGB must contain exactly 102 matrix slots")
+    report = bytearray(MAIN_REPORT_LENGTH)
+    report[0:2] = bytes((MAIN_REPORT_ID, 0x07))
+    for slot, color in enumerate(colors):
+        if len(color) != 3 or any(not 0 <= channel <= 0xFF for channel in color):
+            raise ValueError(f"invalid RGB color at matrix slot {slot}")
+        report[8 + slot * 3 : 11 + slot * 3] = bytes(color)
+    return bytes(report)
+
+
+def streaming_activation_report() -> bytes:
+    report = bytearray(SHORT_REPORT_LENGTH)
+    report[0:2] = bytes((SHORT_REPORT_ID, 0x06))
+    return bytes(report)
+
+
+def streaming_rgb_reports(
+    colors: Sequence[tuple[int, int, int]],
+) -> tuple[bytes, ...]:
+    if len(colors) != 102:
+        raise ValueError("streaming RGB must contain exactly 102 matrix slots")
+    data = bytearray(310)
+    for slot, color in enumerate(colors):
+        if len(color) != 3 or any(not 0 <= channel <= 0xFF for channel in color):
+            raise ValueError(f"invalid RGB color at matrix slot {slot}")
+        data[slot * 3 : slot * 3 + 3] = bytes(color)
+    reports = []
+    for chunk in range(5):
+        report = bytearray(64)
+        report[0:2] = bytes((0x06, chunk + 1))
+        report[2:] = data[chunk * 62 : (chunk + 1) * 62]
+        reports.append(bytes(report))
+    return tuple(reports)
 
 
 def debounce_report(milliseconds: int) -> bytes:

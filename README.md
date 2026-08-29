@@ -15,9 +15,9 @@ Proyek ini dibuat melalui analisis statis installer resmi `Spade65_SETUP_2024040
 | Debounce | Ya | Ya, 5 ms via USB |
 | Timer lampu/sleep untuk dongle | Ya | Belum |
 | Reset pengaturan | Ya, dengan konfirmasi tambahan | Belum |
-| Remap tombol/layer | Mapping 102 slot dan generator frame offline | Write sengaja belum diaktifkan |
-| Macro | Protokol dasar ditemukan | Belum diimplementasikan |
-| Per-key RGB | Protokol dasar ditemukan | Belum diimplementasikan |
+| Remap tombol/layer | Ya, melalui profil tiga layer | Belum |
+| Macro | Ya, maksimal 10 macro/84 event | Belum |
+| Per-key RGB | Ya, tersimpan dan streaming | Ya, mode USB `0603:0351` |
 | Firmware update | Sengaja tidak diimplementasikan | Tidak |
 
 ## Persyaratan
@@ -134,20 +134,64 @@ python spade65ctl.py debounce 5 --dry-run
 python spade65ctl.py debounce 5 --confirm
 ```
 
-### Keymap offline
+### Profil lengkap, keymap, dan macro
 
-Mapping default kabel USB kini dapat diekspor tanpa membuka atau menulis ke
-perangkat. JSON memuat relasi 70 tombol UI ke 102 slot matrix dan frame opcode
-`0x03` sepanjang 620 byte:
+Buat profil yang dapat diedit, lalu validasi sebelum dry-run:
+
+```bash
+python spade65ctl.py profile create spade65-profile.json
+python spade65ctl.py profile validate spade65-profile.json
+python spade65ctl.py profile apply spade65-profile.json --dry-run
+```
+
+Bagian `layers` memakai nama `normal`, `fn1`, dan `fn2`. Assignment dapat berupa
+nama HID seperti `"b"`, nilai numerik seperti `5`, kombinasi
+`{"usage":"b","modifiers":2}`, atau referensi macro `{"macro":0}`.
+
+Macro menyimpan event key-down/key-up dengan delay:
+
+```json
+{
+  "index": 0,
+  "repeat": 1,
+  "events": [
+    {"delay_ms": 20, "usage": "a", "pressed": true},
+    {"delay_ms": 20, "usage": "a", "pressed": false}
+  ]
+}
+```
+
+Profil adalah sumber backup karena aplikasi vendor juga tidak menyediakan
+readback keymap dari firmware. Apply menimpa tiga layer lengkap dan karena itu
+memerlukan dua konfirmasi:
+
+```bash
+python spade65ctl.py profile apply spade65-profile.json \
+  --confirm --i-understand-profile-overwrite
+```
+
+Mapping/frame default tetap dapat diperiksa secara offline:
 
 ```bash
 python spade65ctl.py keymap export-default > keymap-default.json
 python spade65ctl.py keymap export-default --format hex
 ```
 
-Perintah keymap saat ini sengaja hanya bersifat offline. Write remap belum
-diaktifkan sampai frame hasil satu perubahan tombol dapat dibandingkan dengan
-capture USB dari aplikasi Windows.
+### Per-key dan streaming RGB
+
+Isi objek `colors` dalam profil dengan pasangan tombol dan warna, misalnya
+`{"esc":"#ff0000", "a":[0,255,0]}`. Kemudian:
+
+```bash
+python spade65ctl.py per-key-rgb spade65-profile.json --dry-run
+python spade65ctl.py per-key-rgb spade65-profile.json --confirm
+python spade65ctl.py stream-rgb spade65-profile.json --dry-run
+python spade65ctl.py stream-rgb spade65-profile.json --confirm
+```
+
+`stream-rgb` mengirim satu frame real-time; aplikasi yang membutuhkan animasi
+dapat memanggilnya berulang dengan profil/frame berbeda.
+Tombol yang tidak tercantum dalam `colors` bernilai hitam/mati.
 
 ### Timer mode dongle
 

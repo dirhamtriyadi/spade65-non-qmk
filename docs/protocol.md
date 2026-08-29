@@ -8,8 +8,9 @@ Pada 29 Agustus 2026, unit kabel USB `0603:0351` bernama `JP Spade65`
 memvalidasi descriptor feature report utama `0x07` sepanjang 620 byte dan report
 pendek `0x08` sepanjang 8 byte. Pengiriman RGB `fixed` (brightness 2, speed 3)
 mengembalikan hasil ioctl 620, dan debounce 5 ms mengembalikan hasil ioctl 8.
-Mode dongle, keymap write, macro, per-key RGB, reset, serta firmware update belum
-diuji.
+Per-key RGB opcode `0x07` dan satu frame streaming (aktivasi ditambah lima output
+report 64 byte) juga berhasil dikirim, lalu efek `fixed` berhasil dipulihkan.
+Mode dongle, keymap write, macro, reset, serta firmware update belum diuji.
 
 ## Sumber analisis
 
@@ -114,7 +115,7 @@ Struktur awal yang ditemukan:
 
 Kode vendor membangun data untuk layer normal dan dua layer Fn. Matrix kabel `0603:0351` memiliki 102 slot internal (`0x66`), sementara profil UI memiliki 70 tombol logis. Slot kosong penting untuk menjaga urutan matrix.
 
-Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...` dan dikirim terpisah. Mapping 102 slot dan builder frame tiga layer sudah diimplementasikan untuk ekspor offline. Pengiriman ke perangkat belum diaktifkan karena satu remap pada software Windows perlu dicapture dan dibandingkan dengan frame hasil analisis agar semantics byte pertama tidak merusak layer.
+Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...f9` dan dikirim terpisah. Mapping 102 slot, builder tiga layer, profil JSON, dan write dengan konfirmasi tambahan sudah diimplementasikan. Hardware validation untuk remap tetap memerlukan perbandingan satu perubahan dengan capture aplikasi Windows.
 
 ### Macro — opcode 0x05
 
@@ -128,13 +129,22 @@ Header yang ditemukan:
 
 Entry macro memakai tiga byte: delay high/status key-down, delay low, dan HID keycode. Delay minimum dipaksa menjadi 20 ms oleh software vendor.
 
+Implementasi menerima maksimal 84 event per macro agar header repeat dua byte dan
+seluruh triplet tetap berada dalam payload 256 byte. Maksimal sepuluh macro dapat
+direferensikan oleh keymap sebagai usage `f0` sampai `f9`.
+
 ### Custom/per-key RGB — opcode 0x07
 
 - Byte 0: `07`
 - Byte 1: `07`
 - Mulai byte 8: triplet R, G, B menurut urutan matrix internal.
 
-Pemetaan 70 tombol UI ke 102 slot matrix sudah berada dalam kode vendor, tetapi belum disalin ke implementasi agar tidak mengasumsikan revisi hardware yang salah.
+Pemetaan 70 tombol UI ke 102 slot matrix ditemukan dalam kode vendor dan
+divalidasi khusus untuk identitas perangkat `0603:0351`.
+
+Pemetaan tersebut kini dikonversi menjadi data interoperabilitas orisinal dalam
+`spade65/keymap.py`. CLI menerima warna berdasarkan nama tombol UI, lalu menaruh
+triplet pada slot matrix yang sesuai.
 
 ## Report pendek ID 0x08
 

@@ -5,8 +5,10 @@ from spade65.keymap import (
     DEFAULT_USAGES,
     MATRIX_KEY_NAMES,
     UI_KEY_NAMES,
+    compile_profile,
     default_keymap_report,
     export_default,
+    profile_template,
 )
 
 
@@ -33,6 +35,32 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(exported["device"], "0603:0351")
         self.assertEqual(len(exported["matrix"]), 102)
         self.assertEqual(exported["report"]["length"], 620)
+
+    def test_compiles_complete_profile(self) -> None:
+        profile = profile_template()
+        profile["layers"]["normal"]["a"] = "b"
+        profile["layers"]["fn1"]["esc"] = {"macro": 0}
+        profile["macros"] = [
+            {
+                "index": 0,
+                "repeat": 1,
+                "events": [
+                    {"delay_ms": 20, "usage": "a", "pressed": True},
+                    {"delay_ms": 20, "usage": "a", "pressed": False},
+                ],
+            }
+        ]
+        profile["colors"] = {"esc": "#123456"}
+        compiled = compile_profile(profile)
+        self.assertEqual(len(compiled["keymap"]), 620)
+        self.assertEqual(len(compiled["macros"]), 1)
+        self.assertEqual(compiled["matrix_colors"][17], (0x12, 0x34, 0x56))
+
+    def test_rejects_reference_to_undefined_macro(self) -> None:
+        profile = profile_template()
+        profile["layers"]["normal"]["a"] = {"macro": 4}
+        with self.assertRaisesRegex(ValueError, "undefined macros"):
+            compile_profile(profile)
 
 
 if __name__ == "__main__":

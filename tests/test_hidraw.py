@@ -1,8 +1,14 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from spade65.hidraw import choose_device, discover_hidraw, parse_report_descriptor
+from spade65.hidraw import (
+    choose_device,
+    discover_hidraw,
+    parse_report_descriptor,
+    send_output_report,
+)
 
 
 class HidrawTests(unittest.TestCase):
@@ -47,6 +53,15 @@ class HidrawTests(unittest.TestCase):
                 usage=(0xFF03, 1),
             )
             self.assertEqual(selected.name, "Noir SPADE65")
+
+    @patch("spade65.hidraw.os.close")
+    @patch("spade65.hidraw.os.write", return_value=64)
+    @patch("spade65.hidraw.os.open", return_value=12)
+    def test_sends_output_report(self, open_mock, write_mock, close_mock) -> None:
+        report = bytes((6, 1)) + bytes(62)
+        self.assertEqual(send_output_report(Path("/dev/hidraw4"), report), 64)
+        write_mock.assert_called_once_with(12, report)
+        close_mock.assert_called_once_with(12)
 
 
 if __name__ == "__main__":
