@@ -168,6 +168,13 @@ memperlemah batas firmware, raw write, descriptor, atau konfirmasi. Klaim
 pengujian fisik hanya boleh ditambahkan bersama catatan pengujian yang dapat
 direproduksi.
 
+## Arsip maintainer
+
+Installer vendor asli yang digunakan sebagai referensi reverse engineering
+disimpan di [repository private `spade65-vendor-archive`](https://github.com/dirhamtriyadi/spade65-vendor-archive).
+Arsip ini hanya untuk maintainer, tidak diperlukan saat runtime, dan harus
+tetap private.
+
 ## Hukum dan lisensi
 
 Ini adalah proyek independen dan bukan software resmi Noir. Repository tidak

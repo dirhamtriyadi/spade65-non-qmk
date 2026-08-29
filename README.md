@@ -164,6 +164,13 @@ Protocol changes should include offline tests and must not weaken the firmware,
 raw-write, descriptor, or confirmation boundaries. Physical test claims should
 be added only with a reproducible test record.
 
+## Maintainer archive
+
+The original vendor installer used as the reverse-engineering reference is
+preserved in the [private `spade65-vendor-archive` repository](https://github.com/dirhamtriyadi/spade65-vendor-archive).
+The archive is for maintainers only, is not required at runtime, and must
+remain private.
+
 ## Legal and license
 
 This is an independent project and is not official Noir software. The repository
