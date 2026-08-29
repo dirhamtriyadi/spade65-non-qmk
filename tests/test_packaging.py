@@ -1,7 +1,9 @@
 import hashlib
+import io
 import importlib.util
 import tempfile
 import unittest
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,16 +30,99 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(launcher.GUI_PORT, 8765)
         self.assertEqual(launcher.GUI_URL, "http://127.0.0.1:8765/")
 
-    def test_windowed_launcher_replaces_missing_standard_streams(self):
+    def test_no_argument_executable_uses_the_shared_gui_coordinator(self):
         with (
-            patch.object(launcher.sys, "stdout", None),
-            patch.object(launcher.sys, "stderr", None),
+            patch.object(launcher.sys, "argv", ["Spade65"]),
+            patch.object(launcher.multiprocessing, "freeze_support"),
+            patch.object(launcher, "has_visible_console", return_value=True),
+            patch.object(launcher, "launch_gui") as launch_gui,
         ):
-            launcher.ensure_standard_streams()
-            streams = (launcher.sys.stdout, launcher.sys.stderr)
-            self.assertTrue(all(stream is not None for stream in streams))
-            for stream in streams:
-                stream.close()
+            self.assertEqual(launcher.main(), 0)
+        launch_gui.assert_called_once_with(
+            host="127.0.0.1", port=8765, mode="desktop"
+        )
+
+    def test_no_argument_startup_error_is_reported_without_a_traceback_escape(self):
+        failure = RuntimeError("foreign service owns port")
+        with (
+            patch.object(launcher.sys, "argv", ["Spade65"]),
+            patch.object(launcher.multiprocessing, "freeze_support"),
+            patch.object(launcher, "has_visible_console", return_value=False),
+            patch.object(
+                launcher,
+                "ensure_standard_streams",
+                return_value=Path("/logs/launcher.log"),
+            ),
+            patch.object(launcher, "launch_gui", side_effect=failure),
+            patch.object(launcher, "report_windowed_failure") as report,
+        ):
+            self.assertEqual(launcher.main(), 1)
+        report.assert_called_once_with(failure, Path("/logs/launcher.log"))
+
+    def test_noninteractive_cli_failure_does_not_create_a_popup(self):
+        with (
+            patch.object(launcher.sys, "argv", ["Spade65", "probe"]),
+            patch.object(launcher.multiprocessing, "freeze_support"),
+            patch.object(launcher, "has_visible_console", return_value=False),
+            patch.object(launcher, "ensure_standard_streams", return_value=None),
+            patch("spade65.cli.main", return_value=2),
+            patch.object(launcher, "show_startup_error") as show_error,
+        ):
+            self.assertEqual(launcher.main(), 2)
+        show_error.assert_not_called()
+
+    def test_noninteractive_explicit_gui_failure_is_visible(self):
+        with (
+            patch.object(launcher.sys, "argv", ["Spade65", "gui"]),
+            patch.object(launcher.multiprocessing, "freeze_support"),
+            patch.object(launcher, "has_visible_console", return_value=False),
+            patch.object(
+                launcher,
+                "ensure_standard_streams",
+                return_value=Path("/logs/launcher.log"),
+            ),
+            patch("spade65.cli.main", return_value=1),
+            patch.object(launcher, "show_startup_error") as show_error,
+        ):
+            self.assertEqual(launcher.main(), 1)
+        show_error.assert_called_once()
+
+    def test_windowed_launcher_replaces_missing_standard_streams(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "launcher.log"
+            with (
+                patch.object(launcher.sys, "stdout", None),
+                patch.object(launcher.sys, "stderr", None),
+            ):
+                self.assertEqual(
+                    launcher.ensure_standard_streams(log_path=log_path), log_path
+                )
+                streams = (launcher.sys.stdout, launcher.sys.stderr)
+                self.assertTrue(all(stream is not None for stream in streams))
+                self.assertIs(streams[0], streams[1])
+                streams[0].close()
+            self.assertIn("Spade65 launcher", log_path.read_text(encoding="utf-8"))
+        launcher._DEVNULL_STREAMS.clear()
+
+    def test_non_tty_stream_is_preserved_and_mirrored_to_the_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "launcher.log"
+            inherited = io.StringIO()
+            with (
+                patch.object(launcher.sys, "stdout", inherited),
+                patch.object(launcher.sys, "stderr", inherited),
+            ):
+                self.assertFalse(launcher.has_visible_console())
+                launcher.ensure_standard_streams(
+                    log_path=log_path, force_log=True
+                )
+                print("visible diagnostic", file=launcher.sys.stderr)
+                launcher.sys.stderr.flush()
+                launcher._DEVNULL_STREAMS[-1].close()
+            self.assertIn("visible diagnostic", inherited.getvalue())
+            self.assertIn(
+                "visible diagnostic", log_path.read_text(encoding="utf-8")
+            )
         launcher._DEVNULL_STREAMS.clear()
 
     def test_native_commands_use_platform_scripts(self):
@@ -119,6 +204,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Tag ${RELEASE_TAG} moved after validation", workflow)
         self.assertIn("already published; refusing overwrite", workflow)
         self.assertIn("node --check spade65/web/app.js", workflow)
+        self.assertIn("node --check spade65/web/layout-state.js", workflow)
+        self.assertIn("node tests/layout_state.test.js", workflow)
         self.assertIn("group: release-${{", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
 
@@ -365,7 +452,7 @@ class PackagingTests(unittest.TestCase):
     def test_launcher_local_requests_never_use_environment_proxies(self):
         self.assertFalse(
             any(
-                isinstance(handler, launcher.urllib.request.ProxyHandler)
+                isinstance(handler, urllib.request.ProxyHandler)
                 for handler in launcher.LOCALHOST_OPENER.handlers
             )
         )
@@ -377,10 +464,20 @@ class PackagingTests(unittest.TestCase):
                 "running_gui_token",
                 return_value="abcdefghijklmnopqrstuvwxyz123456",
             ),
-            patch.object(launcher.webbrowser, "open") as open_browser,
+            patch.object(launcher.webbrowser, "open", return_value=True) as open_browser,
         ):
             self.assertTrue(launcher.reopen_running_gui_in_browser())
         open_browser.assert_called_once_with(launcher.GUI_URL)
+
+        with (
+            patch.object(
+                launcher,
+                "running_gui_token",
+                return_value="abcdefghijklmnopqrstuvwxyz123456",
+            ),
+            patch.object(launcher.webbrowser, "open", return_value=False),
+        ):
+            self.assertFalse(launcher.reopen_running_gui_in_browser())
 
     def test_release_builds_install_and_bundle_the_desktop_runtime(self):
         project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")

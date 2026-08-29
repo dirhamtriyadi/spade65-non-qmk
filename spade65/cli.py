@@ -51,6 +51,13 @@ def _number(value: str) -> int:
     return int(value, 0)
 
 
+def _port(value: str) -> int:
+    port = int(value, 10)
+    if not 0 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 0 and 65535")
+    return port
+
+
 def _device_dict(device: Device, *, include_unique: bool = False) -> dict[str, object]:
     result: dict[str, object] = {
         "path": str(device.path),
@@ -316,26 +323,10 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
 
 
 def command_gui(args: argparse.Namespace) -> int:
-    from .gui import run_gui
+    from .application import launch_gui
 
-    if args.no_browser:
-        run_gui(host=args.host, port=args.port, open_browser=False)
-        return 0
-    if args.browser:
-        run_gui(host=args.host, port=args.port, open_browser=True)
-        return 0
-
-    from .desktop import DesktopUnavailable, run_desktop
-
-    try:
-        run_desktop(host=args.host, port=args.port)
-    except DesktopUnavailable as error:
-        if sys.stderr is not None:
-            print(
-                f"desktop GUI unavailable ({error}); opening browser GUI",
-                file=sys.stderr,
-            )
-        run_gui(host=args.host, port=args.port, open_browser=True)
+    mode = "server" if args.no_browser else "browser" if args.browser else "desktop"
+    launch_gui(host=args.host, port=args.port, mode=mode)
     return 0
 
 
@@ -435,7 +426,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     gui = subparsers.add_parser("gui", help="launch the local graphical interface")
     gui.add_argument("--host", default=GUI_HOST)
-    gui.add_argument("--port", type=int, default=GUI_PORT)
+    gui.add_argument("--port", type=_port, default=GUI_PORT)
     gui_mode = gui.add_mutually_exclusive_group()
     gui_mode.add_argument(
         "--browser",

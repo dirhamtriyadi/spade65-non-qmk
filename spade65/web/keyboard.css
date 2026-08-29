@@ -10,6 +10,23 @@
   min-width: 210px;
 }
 
+.layout-control {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.layout-source {
+  max-width: 470px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.lighting-layout-toolbar {
+  justify-content: flex-end;
+}
+
 .keyboard {
   position: relative;
   display: block;
@@ -107,5 +124,14 @@
   .layout-picker select {
     width: 60%;
     min-width: 0;
+  }
+
+  .layout-control {
+    align-items: stretch;
+  }
+
+  .layout-source {
+    max-width: none;
+    text-align: left;
   }
 }

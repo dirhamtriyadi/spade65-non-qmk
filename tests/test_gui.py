@@ -1,4 +1,7 @@
+import errno
+import threading
 import unittest
+import urllib.request
 from http import HTTPStatus
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -7,6 +10,7 @@ from spade65.gui import (
     GuiHandler,
     SAFE_ACTIONS,
     _send_features,
+    create_gui_server,
     execute_action,
     gui_metadata,
     run_gui,
@@ -16,6 +20,29 @@ from spade65.keymap import profile_template
 
 
 class GuiTests(unittest.TestCase):
+    def test_gui_port_can_be_rebound_after_serving_a_request(self) -> None:
+        try:
+            server, url = create_gui_server(host="127.0.0.1", port=0)
+        except PermissionError as error:
+            if error.errno == errno.EPERM:
+                self.skipTest("test sandbox does not permit loopback sockets")
+            raise
+        port = server.server_port
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(url, timeout=5) as response:
+                self.assertEqual(response.status, HTTPStatus.OK)
+                self.assertIn(b"Spade65 Control Center", response.read())
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
+
+        replacement, _url = create_gui_server(host="127.0.0.1", port=port)
+        replacement.server_close()
+
     def test_browser_fallback_runs_without_a_console_stream(self) -> None:
         server = SimpleNamespace(
             serve_forever=MagicMock(),
@@ -137,14 +164,29 @@ class GuiTests(unittest.TestCase):
             on_activate=MagicMock(),
         )
         handler._json = MagicMock()
-        with patch("spade65.gui.threading.Thread") as thread:
-            handler.do_POST()
+        handler.do_POST()
         handler._json.assert_called_once_with(HTTPStatus.OK, {"ok": True})
-        thread.assert_called_once_with(
-            target=handler.server.on_activate,
-            daemon=True,
+        handler.server.on_activate.assert_called_once_with()
+
+    def test_activate_reports_a_browser_or_window_restore_failure(self) -> None:
+        handler = GuiHandler.__new__(GuiHandler)
+        handler.headers = {
+            "Host": "127.0.0.1:8765",
+            "X-Spade65-Token": "test-token",
+        }
+        handler.path = "/api/activate"
+        handler.server = SimpleNamespace(
+            token="test-token",
+            allowed_authority="127.0.0.1:8765",
+            allowed_origin="http://127.0.0.1:8765",
+            on_activate=MagicMock(return_value=False),
         )
-        thread.return_value.start.assert_called_once_with()
+        handler._json = MagicMock()
+        handler.do_POST()
+        handler._json.assert_called_once_with(
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            {"ok": False, "error": "GUI activation was not accepted"},
+        )
 
     def test_foreign_host_cannot_read_the_page_token(self) -> None:
         handler = GuiHandler.__new__(GuiHandler)

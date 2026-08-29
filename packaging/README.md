@@ -21,10 +21,20 @@ failure and falls back to the default browser.
 
 A second packaged-app launch verifies the existing Spade65 token, calls its
 authenticated activation route, restores the existing window, and exits instead
-of failing on the occupied port. Closing the desktop window or using **Quit
-application** closes the window and localhost server. There is no tray icon or
-minimize-to-tray process. In browser mode, closing only the tab leaves the server
-running until **Quit application**, Ctrl+C, or process termination.
+of failing on the occupied port. The explicit `gui` command uses the same
+coordinator. Port ownership is claimed before WebView initialization and an
+activation arriving during startup is queued until the window exists. A foreign
+service on 8765 is never killed or treated as Spade65. Closing the desktop
+window or using **Quit application** closes the window and localhost server.
+There is no tray icon or minimize-to-tray process. In browser mode, closing only
+the tab leaves the server running until **Quit application**, Ctrl+C, or process
+termination.
+
+Windowed processes without a console write stdout/stderr to a per-user launcher
+log and display a best-effort native startup error. Log roots are
+`%LOCALAPPDATA%\Spade65\Logs` on Windows,
+`${XDG_STATE_HOME:-~/.local/state}/spade65` on Linux, and
+`~/Library/Logs/Spade65` on macOS.
 
 PyWebView uses a persistent, app-specific profile. Profile exports and library
 backups use a native Save-dialog bridge on Linux/macOS; Windows uses WebView2's

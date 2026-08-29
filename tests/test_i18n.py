@@ -184,6 +184,26 @@ class I18nTests(unittest.TestCase):
         self.assertIn("document.documentElement.lang=currentLanguage", javascript)
         self.assertIn("window.pywebview?.api?.save_json", javascript)
 
+    def test_keyboard_and_lighting_share_device_aware_layout_state(self) -> None:
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="layoutVariant"', html)
+        self.assertIn('id="lightingLayoutVariant"', html)
+        self.assertLess(
+            html.index('<script src="/layout-state.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+        self.assertIn("spade65-device-layouts-v1", javascript)
+        self.assertIn("syncLayoutFromSelectedDevice(false)", javascript)
+        self.assertIn("$('deviceSelect').onchange", javascript)
+        self.assertIn("setInterval(pollDeviceChanges,2000)", javascript)
+        self.assertIn("snapshot===deviceSnapshot", javascript)
+        self.assertIn("device_layouts:storedDeviceLayouts()", javascript)
+        self.assertIn("Array.isArray(data.profiles)", javascript)
+        self.assertNotIn(
+            "layoutVariant=localStorage.getItem('spade65-layout')", javascript
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -86,9 +86,12 @@ ulang ketiganya dari commit tag sebelum publish.
 ZIP Windows berisi `Spade65.exe` untuk GUI dan `Spade65CLI.exe` untuk command
 terminal dengan output yang terlihat. Menjalankan aplikasi paket tanpa argumen
 membuka jendela standalone. Peluncuran kedua mengaktifkan dan memulihkan jendela
-yang sudah ada. Menutup jendela atau memilih **Quit application** menghentikan
-server localhost; aplikasi tidak memiliki system tray atau mode
-minimize-to-tray.
+yang sudah ada; subcommand `gui` memakai coordinator instance yang sama sehingga
+tidak lagi mencoba membuka port 8765 untuk kedua kalinya. Jika startup gagal
+ketika executable dibuka tanpa terminal, aplikasi menampilkan dialog/notifikasi
+dan menulis log diagnostik pengguna. Menutup jendela atau memilih **Quit
+application** menghentikan server localhost; aplikasi tidak memiliki system tray
+atau mode minimize-to-tray.
 
 ## Menjalankan
 
@@ -208,6 +211,16 @@ original, audio reactive, debounce, timer dongle, reset, serta diagnostics.
 Ekspor profil dan backup library memakai dialog Save native pada Linux/macOS,
 handler download WebView2 pada Windows, serta download biasa ketika GUI sengaja
 dijalankan di browser.
+
+Pemilih layout tersedia dan selalu sinkron pada halaman Keyboard serta Lighting.
+Saat interface konfigurasi Spade65 terdeteksi, GUI otomatis memulihkan layout
+yang terakhir dipilih secara lokal untuk model itu (USB dan dongle berbagi
+pilihan). Saat perangkat tidak terdeteksi, preview kembali ke layout default Noir
+`Spade65-04 · ANSI standard` tanpa menimpa pilihan tersimpan. Ini bukan readback
+firmware: software original juga menyimpan `layouttype` sebagai preferensi host,
+karena descriptor keyboard tidak membedakan keempat geometri tersebut.
+Perubahan koneksi diperiksa ringan setiap dua detik, sehingga kedua halaman ikut
+beralih otomatis saat keyboard disambungkan atau dilepas tanpa perlu reload GUI.
 
 Antarmuka tersedia dalam English dan Bahasa Indonesia. English adalah bahasa
 default; pilihan bahasa, layout, dan profil tersimpan memakai profil WebView

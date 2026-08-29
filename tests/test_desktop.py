@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from spade65.desktop import (
+    ActivationBridge,
     DesktopApi,
     DesktopUnavailable,
     desktop_backend,
@@ -15,6 +16,51 @@ from spade65.desktop import (
 
 
 class DesktopTests(unittest.TestCase):
+    def test_activation_is_queued_until_the_native_window_is_ready(self) -> None:
+        class ShownEvent:
+            def __init__(self):
+                self.handler = None
+
+            def __iadd__(self, handler):
+                self.handler = handler
+                return self
+
+            def is_set(self):
+                return False
+
+            def fire(self):
+                assert self.handler is not None
+                self.handler()
+
+        bridge = ActivationBridge()
+        shown = ShownEvent()
+        window = SimpleNamespace(
+            events=SimpleNamespace(shown=shown),
+            show=MagicMock(),
+            restore=MagicMock(),
+        )
+        with patch("spade65.desktop.threading.Thread") as thread:
+            self.assertTrue(bridge())
+            bridge.bind(window)
+            thread.assert_not_called()
+            shown.fire()
+        thread.assert_called_once()
+        thread.return_value.start.assert_called_once_with()
+        thread.call_args.kwargs["target"](*thread.call_args.kwargs["args"])
+        window.show.assert_called_once_with()
+        window.restore.assert_called_once_with()
+
+    def test_ready_window_activation_reports_renderer_failure(self) -> None:
+        bridge = ActivationBridge()
+        window = SimpleNamespace(
+            show=MagicMock(side_effect=RuntimeError("renderer is gone")),
+            restore=MagicMock(),
+        )
+        bridge.bind(window)
+        with self.assertRaisesRegex(RuntimeError, "renderer is gone"):
+            bridge()
+        window.restore.assert_not_called()
+
     def test_native_json_export_uses_save_dialog_and_sanitizes_name(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "profile.json"

@@ -3,8 +3,8 @@
 ## Hasil rilis
 
 Workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-berjalan saat tag berbentuk `vMAJOR.MINOR.PATCH` dikirim. Untuk versi `0.7.2`,
-tag yang benar adalah `v0.7.2`. Setelah validasi dan ketiga build berhasil,
+berjalan saat tag berbentuk `vMAJOR.MINOR.PATCH` dikirim. Untuk versi `0.7.3`,
+tag yang benar adalah `v0.7.3`. Setelah validasi dan ketiga build berhasil,
 workflow memublikasikan GitHub Release dengan tepat tiga asset:
 
 - `Spade65-Windows-x64.zip`
@@ -41,14 +41,14 @@ Linux dan macOS meneruskan argumen pada executable yang sama ke command
 
 Versi harus sama di tiga tempat:
 
-1. tag Git, misalnya `v0.7.2`;
-2. `project.version` di `pyproject.toml`, misalnya `0.7.2`;
-3. `spade65.__version__` di `spade65/__init__.py`, misalnya `0.7.2`.
+1. tag Git, misalnya `v0.7.3`;
+2. `project.version` di `pyproject.toml`, misalnya `0.7.3`;
+3. `spade65.__version__` di `spade65/__init__.py`, misalnya `0.7.3`.
 
 Periksa versi dan jalankan test sebelum membuat tag:
 
 ```bash
-python packaging/check_version.py v0.7.2
+python packaging/check_version.py v0.7.3
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py packaging tests
 git status --short
@@ -58,8 +58,8 @@ Setelah commit rilis sudah berada di remote dan worktree sesuai harapan, buat
 serta kirim tag:
 
 ```bash
-git tag -a v0.7.2 -m "Spade65 v0.7.2"
-git push origin v0.7.2
+git tag -a v0.7.3 -m "Spade65 v0.7.3"
+git push origin v0.7.3
 ```
 
 Jangan memindahkan tag yang telah dipublikasikan ke commit lain. Jika build

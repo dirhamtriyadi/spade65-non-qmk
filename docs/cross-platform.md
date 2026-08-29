@@ -61,8 +61,13 @@ Unduh asset yang sesuai dari GitHub Releases.
 
 Tanpa argumen, paket membuka GUI lokal `http://127.0.0.1:8765/` di jendela
 standalone. Peluncuran kedua memverifikasi token sesi lalu mengaktifkan,
-menampilkan, dan memulihkan jendela yang sudah ada. Menutup jendela desktop atau
-memilih **Quit application** menghentikan server localhost dan proses GUI.
+menampilkan, dan memulihkan jendela yang sudah ada. Perintah eksplisit `gui`
+melewati coordinator yang sama, sehingga invocation kedua tidak gagal dengan
+`Address already in use`. Port diklaim sebelum renderer dimuat dan request
+aktivasi yang datang selama startup ditunda sampai jendela siap. Layanan asing
+di port 8765 tidak pernah dihentikan atau diambil alih; startup gagal dengan
+pesan yang jelas. Menutup jendela desktop atau memilih **Quit application**
+menghentikan server localhost dan proses GUI.
 Spade65 tidak memiliki ikon system tray atau mode minimize-to-tray. Mode browser
 berbeda: menutup tab tidak menghentikan server; gunakan **Quit application** atau
 akhiri proses terminal.
@@ -72,6 +77,23 @@ dijalankan dengan argumen `probe`. Pada Windows gunakan `Spade65CLI.exe` agar
 output CLI tidak hilang di executable GUI tanpa console. Untuk memilih mode GUI
 secara eksplisit gunakan subcommand `gui --browser` atau `gui --no-browser`
 melalui executable CLI.
+
+Executable GUI yang dibuka lewat file manager tidak selalu mempunyai terminal.
+Dalam keadaan itu output/error ditulis ke log berikut dan startup failure juga
+ditampilkan melalui dialog/notifikasi native yang tersedia:
+
+- Windows: `%LOCALAPPDATA%\Spade65\Logs\launcher.log`;
+- Linux: `${XDG_STATE_HOME:-~/.local/state}/spade65/launcher.log`;
+- macOS: `~/Library/Logs/Spade65/launcher.log`.
+
+Layout Keyboard dan Lighting memakai satu state. Bila interface konfigurasi
+terdeteksi, aplikasi memulihkan pilihan host terakhir untuk Spade65; USB `0351`
+dan dongle `0356` dianggap dua transport untuk model yang sama. Bila interface
+tidak ada, kedua preview memakai default Noir Spade65-04 ANSI standard dan
+selector dinonaktifkan sementara. Firmware/descriptor tidak menyediakan varian
+geometri, sehingga aplikasi tidak mengklaim membaca layout fisik dari keyboard.
+Frontend memeriksa perubahan koneksi setiap dua detik dan menyinkronkan kedua
+preview otomatis tanpa mengubah isi editor profil yang sedang dikerjakan.
 
 PyWebView memakai profil storage khusus aplikasi dengan `private_mode=False`.
 Data `localStorage` untuk bahasa, layout, dan profil bertahan pada lokasi berikut:

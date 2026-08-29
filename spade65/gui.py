@@ -245,13 +245,23 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
 
 class GuiServer(ThreadingHTTPServer):
     daemon_threads = True
+    # Windows SO_REUSEADDR can let another process bind the same endpoint and
+    # intercept localhost traffic. Unix keeps reuse enabled for clean restarts.
+    allow_reuse_address = sys.platform != "win32"
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1
+            )
+        super().server_bind()
 
     def __init__(
         self,
         address: tuple[str, int],
         token: str,
         *,
-        on_activate: Callable[[], None] | None = None,
+        on_activate: Callable[[], bool | None] | None = None,
         on_quit: Callable[[], None] | None = None,
     ):
         super().__init__(address, GuiHandler)
@@ -335,6 +345,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "app.css",
             "keyboard.css",
             "effects.css",
+            "layout-state.js",
             "app.js",
         } and not re.fullmatch(r"locales/[A-Za-z0-9_-]+\.json", asset):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -351,6 +362,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "app.css": "text/css; charset=utf-8",
             "keyboard.css": "text/css; charset=utf-8",
             "effects.css": "text/css; charset=utf-8",
+            "layout-state.js": "text/javascript; charset=utf-8",
             "app.js": "text/javascript; charset=utf-8",
         }.get(asset, "application/json; charset=utf-8")
         self.send_response(HTTPStatus.OK)
@@ -377,11 +389,21 @@ class GuiHandler(BaseHTTPRequestHandler):
                     {"ok": False, "error": "GUI activation is unavailable"},
                 )
                 return
+            try:
+                activated = self.server.on_activate()
+            except Exception as error:
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"ok": False, "error": f"GUI activation failed: {error}"},
+                )
+                return
+            if activated is False:
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"ok": False, "error": "GUI activation was not accepted"},
+                )
+                return
             self._json(HTTPStatus.OK, {"ok": True})
-            threading.Thread(
-                target=self.server.on_activate,
-                daemon=True,
-            ).start()
             return
         if path == "/api/quit":
             self._json(HTTPStatus.OK, {"ok": True})

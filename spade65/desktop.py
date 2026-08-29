@@ -158,42 +158,80 @@ def _restore_window(window: object) -> None:
         restore()
 
 
-def run_desktop(
+class ActivationBridge:
+    """Queue a second-launch activation until the native window exists."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._window: object | None = None
+        self._pending = False
+        self._ready = False
+
+    @staticmethod
+    def _dispatch(window: object) -> None:
+        threading.Thread(
+            target=_restore_window,
+            args=(window,),
+            name="spade65-window-activation",
+            daemon=True,
+        ).start()
+
+    def __call__(self) -> bool:
+        with self._lock:
+            window = self._window
+            if window is None or not self._ready:
+                self._pending = True
+                return True
+        # Once the shown event has fired there is no startup wait to deadlock
+        # against. Run the restore synchronously so a broken/zombie backend is
+        # reported to the second launcher, which can then open the browser.
+        _restore_window(window)
+        return True
+
+    def bind(self, window: object) -> None:
+        with self._lock:
+            self._window = window
+        shown = getattr(getattr(window, "events", None), "shown", None)
+        if shown is None:
+            # Test doubles and alternate WebView implementations without the
+            # lifecycle event are already expected to be callable.
+            self.mark_ready()
+            return
+        shown += self.mark_ready
+        if callable(getattr(shown, "is_set", None)) and shown.is_set():
+            self.mark_ready()
+
+    def mark_ready(self) -> None:
+        with self._lock:
+            self._ready = True
+            pending = self._pending
+            self._pending = False
+            window = self._window
+        if pending and window is not None:
+            self._dispatch(window)
+
+
+def run_desktop_session(
     *,
-    host: str = GUI_HOST,
-    port: int = GUI_PORT,
+    server: object,
+    url: str,
+    activation: ActivationBridge,
     webview_module: ModuleType | None = None,
     platform_name: str | None = None,
 ) -> None:
-    """Run the local API and HTML UI inside a native desktop window."""
+    """Run only the native window around an already-serving GUI server."""
 
     current = platform_name or sys.platform
     if webview_module is None:
         webview = load_webview()
         if current.startswith("linux"):
-            # The Qt backend snapshots webview._state["storage_path"] when its
-            # module is imported.  Let webview.start() set the application-
-            # specific path before it initializes Qt, otherwise Linux silently
-            # falls back to ~/.pywebview and profile data leaks across apps.
             _backend_module(current)
         else:
-            # Windows must reject pywebview's legacy MSHTML fallback.  Its
-            # backend reads the storage path later during setup, so this early
-            # verification does not defeat persistent application storage.
             verify_desktop_runtime(current)
     else:
         webview = webview_module
-    server, url = create_gui_server(host=host, port=port)
-    worker = threading.Thread(
-        target=server.serve_forever,
-        name="spade65-gui-server",
-        daemon=True,
-    )
     try:
         webview.settings["ALLOW_DOWNLOADS"] = True
-        # PyWebView's WinForms file-dialog API is called from its JavaScript
-        # worker thread. Use WebView2's UI-thread download handler on Windows;
-        # Qt and Cocoa safely marshal DesktopApi dialogs to their UI threads.
         desktop_api = None if current == "win32" else DesktopApi(webview)
         window = webview.create_window(
             WINDOW_TITLE,
@@ -209,9 +247,8 @@ def run_desktop(
             raise DesktopUnavailable("native desktop window creation was cancelled")
         if desktop_api is not None:
             desktop_api._bind_window(window)
-        server.on_activate = lambda: _restore_window(window)
+        activation.bind(window)
         server.on_quit = window.destroy
-        worker.start()
         if sys.stdout is not None:
             print(f"Spade65 desktop GUI: {url}")
         storage_path = desktop_storage_path(platform_name)
@@ -225,6 +262,34 @@ def run_desktop(
         raise
     except Exception as error:
         raise DesktopUnavailable(f"native desktop window failed: {error}") from error
+
+
+def run_desktop(
+    *,
+    host: str = GUI_HOST,
+    port: int = GUI_PORT,
+    webview_module: ModuleType | None = None,
+    platform_name: str | None = None,
+) -> None:
+    """Run the local API and HTML UI inside a native desktop window."""
+
+    server, url = create_gui_server(host=host, port=port)
+    activation = ActivationBridge()
+    server.on_activate = activation
+    worker = threading.Thread(
+        target=server.serve_forever,
+        name="spade65-gui-server",
+        daemon=True,
+    )
+    try:
+        worker.start()
+        run_desktop_session(
+            server=server,
+            url=url,
+            activation=activation,
+            webview_module=webview_module,
+            platform_name=platform_name,
+        )
     finally:
         if worker.is_alive():
             server.shutdown()

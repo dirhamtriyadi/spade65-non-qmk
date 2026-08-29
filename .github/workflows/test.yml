@@ -22,7 +22,9 @@ jobs:
       - run: python -m pip install -e .
       - run: python -m unittest discover -v
       - run: python -m compileall -q spade65 spade65ctl.py tests
+      - run: node --check spade65/web/layout-state.js
       - run: node --check spade65/web/app.js
+      - run: node tests/layout_state.test.js
 
   windows-package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

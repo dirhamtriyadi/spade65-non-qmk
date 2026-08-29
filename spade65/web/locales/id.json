@@ -93,6 +93,8 @@
   "layout.ansiSplit": "Spade65-02 · ANSI terpisah",
   "layout.isoStandard": "Spade65-03 · ISO standar",
   "layout.isoSplit": "Spade65-01 · ISO terpisah",
+  "layout.detected": "Menggunakan layout yang terakhir dipilih secara lokal untuk Spade65 yang terdeteksi.",
+  "layout.noDevice": "Spade65 yang dapat dikonfigurasi tidak terdeteksi; menampilkan layout bawaan Noir.",
   "usageGroup.Keyboard": "Keyboard",
   "usageGroup.Numpad": "Numpad",
   "usageGroup.Media": "Media",

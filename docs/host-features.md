@@ -19,9 +19,10 @@ offline; file vendor tidak pernah berisi atau mengirim paket HID bebas.
 ## Backup library GUI
 
 **Backup library** mengunduh satu JSON berformat `spade65-library-v1` berisi
-seluruh profil localStorage, profil aktif, dan pilihan layout. **Restore library**
-memvalidasi setiap profil melalui backend sebelum meminta konfirmasi penggantian
-library lokal.
+seluruh profil localStorage, profil aktif, bahasa, dan map pilihan layout per
+model. **Restore library** memvalidasi setiap profil melalui backend sebelum
+meminta konfirmasi penggantian library lokal. Backup lama yang hanya memiliki
+field `layout` tetap dimigrasikan saat Spade65 berikutnya terdeteksi.
 
 ## Custom-effect timeline
 

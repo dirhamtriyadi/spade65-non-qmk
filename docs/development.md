@@ -9,6 +9,8 @@ spade65ctl.py
         ├── spade65.device     # model + parser descriptor netral OS
         ├── spade65.transport  # pemilih backend lintas platform
         ├── spade65.hidraw     # backend Linux: sysfs + ioctl
+        ├── spade65.application # ownership port + lifecycle GUI bersama
+        ├── spade65.instance   # identitas/aktivasi instance localhost
         ├── spade65.gui        # API HTTP loopback + asset web
         └── spade65.desktop    # lifecycle jendela PyWebView
               └── spade65.web # HTML/CSS/JS + katalog locale
@@ -32,6 +34,11 @@ Pemisahan ini disengaja:
   sama untuk WebView maupun browser.
 - `desktop.py` mengelola PyWebView, storage persisten, lifecycle server/window,
   download, dan aktivasi instance yang sudah berjalan.
+- `application.py` mengklaim port secara atomik, menyalakan server sebelum
+  renderer, mengantrekan aktivasi selama window startup, dan berbagi alur yang
+  sama antara executable tanpa argumen dan subcommand `gui`.
+- `instance.py` hanya menerima instance yang halaman dan token Spade65-nya
+  terverifikasi; layanan lain pada 8765 tidak diambil alih.
 - `web/locales/index.json` mendaftarkan bahasa; `en.json` adalah canonical
   catalog/default dan locale lain harus memiliki key yang sama.
 - `packaging/launcher.py` membuka jendela desktop pada port stabil 8765 tanpa
@@ -60,13 +67,19 @@ browser dan `--no-browser` tetap tersedia melalui CLI.
 Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
 yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan
 implementasi HTML/CSS orisinal; gambar PNG vendor tidak boleh disalin ke Git.
+`web/layout-state.js` adalah resolver murni untuk enum layout, migrasi storage,
+normalisasi USB/dongle, serta fallback disconnected. Firmware dan software
+original tidak menyediakan readback layout fisik; frontend karena itu hanya
+memulihkan preferensi host dan menyebutkannya secara eksplisit di UI.
 
 ## Menjalankan quality checks
 
 ```bash
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
+node --check spade65/web/layout-state.js
 node --check spade65/web/app.js
+node tests/layout_state.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```

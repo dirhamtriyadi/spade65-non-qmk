@@ -7,46 +7,33 @@ from pathlib import Path
 from unittest.mock import patch
 
 from spade65.cli import main
-from spade65.desktop import DesktopUnavailable
 
 
 class CliTests(unittest.TestCase):
+    def test_gui_port_is_validated_before_socket_creation(self) -> None:
+        for port in ("-1", "65536"):
+            with self.subTest(port=port), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["gui", "--port", port])
+            self.assertEqual(raised.exception.code, 2)
+
     def test_cli_error_path_tolerates_a_windowed_process_without_stderr(self) -> None:
         with patch("spade65.cli.sys.stderr", None):
             self.assertEqual(main(["profile", "validate", "/missing-profile"]), 1)
 
-    def test_gui_prefers_desktop_and_keeps_browser_fallback(self) -> None:
-        with (
-            patch("spade65.desktop.run_desktop") as run_desktop,
-            patch("spade65.gui.run_gui") as run_gui,
-        ):
+    def test_gui_prefers_the_shared_desktop_coordinator(self) -> None:
+        with patch("spade65.application.launch_gui") as launch_gui:
             self.assertEqual(main(["gui", "--port", "0"]), 0)
-        run_desktop.assert_called_once_with(host="127.0.0.1", port=0)
-        run_gui.assert_not_called()
-
-        with (
-            patch(
-                "spade65.desktop.run_desktop",
-                side_effect=DesktopUnavailable("missing"),
-            ),
-            patch("spade65.gui.run_gui") as run_gui,
-            patch("spade65.cli.sys.stderr", None),
-        ):
-            self.assertEqual(main(["gui", "--port", "0"]), 0)
-        run_gui.assert_called_once_with(
-            host="127.0.0.1", port=0, open_browser=True
+        launch_gui.assert_called_once_with(
+            host="127.0.0.1", port=0, mode="desktop"
         )
 
     def test_gui_can_force_browser_or_server_only_mode(self) -> None:
-        with (
-            patch("spade65.desktop.run_desktop") as run_desktop,
-            patch("spade65.gui.run_gui") as run_gui,
-        ):
+        with patch("spade65.application.launch_gui") as launch_gui:
             self.assertEqual(main(["gui", "--browser", "--port", "0"]), 0)
             self.assertEqual(main(["gui", "--no-browser", "--port", "0"]), 0)
-        run_desktop.assert_not_called()
-        self.assertEqual(run_gui.call_args_list[0].kwargs["open_browser"], True)
-        self.assertEqual(run_gui.call_args_list[1].kwargs["open_browser"], False)
+        self.assertEqual(launch_gui.call_args_list[0].kwargs["mode"], "browser")
+        self.assertEqual(launch_gui.call_args_list[1].kwargs["mode"], "server")
 
     def test_profile_create_validate_and_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
