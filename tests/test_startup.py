@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from os import environ
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest.mock import patch
 
 from spade65.startup import (
@@ -15,21 +15,27 @@ from spade65.startup import (
 class StartupTests(unittest.TestCase):
     def test_default_service_paths_are_user_owned(self):
         linux = default_service_paths(
-            "linux", environ={"XDG_CONFIG_HOME": "/config"}, home=Path("/home/test")
+            "linux",
+            environ={"XDG_CONFIG_HOME": "/config"},
+            home=PurePosixPath("/home/test"),
         )
         windows = default_service_paths(
             "windows",
             environ={"APPDATA": "C:/Users/test/Roaming"},
-            home=Path("C:/Users/test"),
+            home=PureWindowsPath("C:/Users/test"),
         )
-        macos = default_service_paths("macos", environ={}, home=Path("/Users/test"))
+        macos = default_service_paths(
+            "macos", environ={}, home=PurePosixPath("/Users/test")
+        )
 
-        self.assertEqual(linux[0], Path("/config/spade65/background.json"))
+        self.assertEqual(linux[0], PurePosixPath("/config/spade65/background.json"))
         self.assertEqual(linux[1].name, "spade65-background.service")
         self.assertEqual(windows[1].name, "spade65-background.cmd")
         self.assertEqual(
             macos[1],
-            Path("/Users/test/Library/LaunchAgents/com.spade65.background.plist"),
+            PurePosixPath(
+                "/Users/test/Library/LaunchAgents/com.spade65.background.plist"
+            ),
         )
 
     def test_release_linux_setup_uses_current_appimage(self):
@@ -39,7 +45,7 @@ class StartupTests(unittest.TestCase):
                 "APPIMAGE": "/home/test/Applications/Spade65.AppImage",
                 "XDG_CONFIG_HOME": "/home/test/.config",
             },
-            home=Path("/home/test"),
+            home=PurePosixPath("/home/test"),
             frozen=True,
         )
 
@@ -55,8 +61,8 @@ class StartupTests(unittest.TestCase):
         setup = release_service_setup(
             "windows",
             environ={"APPDATA": "C:/Users/test/AppData/Roaming"},
-            home=Path("C:/Users/test"),
-            executable=Path("C:/Spade65/Spade65.exe"),
+            home=PureWindowsPath("C:/Users/test"),
+            executable=PureWindowsPath("C:/Spade65/Spade65.exe"),
             frozen=True,
         )
 
@@ -73,8 +79,10 @@ class StartupTests(unittest.TestCase):
         setup = release_service_setup(
             "macos",
             environ={},
-            home=Path("/Users/test"),
-            executable=Path("/Applications/Spade65.app/Contents/MacOS/Spade65"),
+            home=PurePosixPath("/Users/test"),
+            executable=PurePosixPath(
+                "/Applications/Spade65.app/Contents/MacOS/Spade65"
+            ),
             frozen=True,
         )
 
@@ -85,7 +93,10 @@ class StartupTests(unittest.TestCase):
 
     def test_source_setup_keeps_commands_out_of_gui_metadata(self):
         setup = release_service_setup(
-            "linux", environ={}, home=Path("/home/test"), frozen=False
+            "linux",
+            environ={},
+            home=PurePosixPath("/home/test"),
+            frozen=False,
         )
 
         self.assertFalse(setup["packaged"])

@@ -7,7 +7,7 @@ import os
 import shlex
 import sys
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
 
 def platform_family(value: str | None = None) -> str:
@@ -33,21 +33,24 @@ def default_service_paths(
     platform: str | None = None,
     *,
     environ: Mapping[str, str] | None = None,
-    home: Path | None = None,
-) -> tuple[Path, Path]:
+    home: PurePath | str | None = None,
+) -> tuple[PurePath, PurePath]:
     """Return user-owned config and startup-integration paths for a platform."""
 
     family = platform_family(platform)
     environment = os.environ if environ is None else environ
-    user_home = Path.home() if home is None else home
+    path_type = PureWindowsPath if family == "windows" else PurePosixPath
+    user_home = path_type(Path.home() if home is None else home)
     if family == "linux":
-        config_root = Path(environment.get("XDG_CONFIG_HOME") or user_home / ".config")
+        config_root = path_type(
+            environment.get("XDG_CONFIG_HOME") or user_home / ".config"
+        )
         return (
             config_root / "spade65" / "background.json",
             config_root / "systemd" / "user" / startup_filename(family),
         )
     if family == "windows":
-        roaming = Path(
+        roaming = path_type(
             environment.get("APPDATA") or user_home / "AppData" / "Roaming"
         )
         return (
@@ -66,7 +69,7 @@ def default_service_paths(
     )
 
 
-def _powershell_quote(value: Path | str) -> str:
+def _powershell_quote(value: PurePath | str) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
@@ -74,8 +77,8 @@ def release_service_setup(
     platform: str | None = None,
     *,
     environ: Mapping[str, str] | None = None,
-    home: Path | None = None,
-    executable: Path | None = None,
+    home: PurePath | str | None = None,
+    executable: PurePath | str | None = None,
     frozen: bool | None = None,
 ) -> dict[str, object]:
     """Describe package-specific service setup without changing host startup."""
@@ -97,10 +100,11 @@ def release_service_setup(
     if not is_frozen:
         return result
 
-    selected = executable
+    path_type = PureWindowsPath if family == "windows" else PurePosixPath
+    selected = path_type(executable) if executable is not None else None
     if selected is None and family == "linux":
-        selected = Path(environment.get("APPIMAGE") or sys.executable)
-    selected = (selected or Path(sys.executable)).expanduser()
+        selected = path_type(environment.get("APPIMAGE") or sys.executable)
+    selected = selected or path_type(sys.executable)
     if family == "windows" and selected.name.casefold() == "spade65.exe":
         selected = selected.with_name("Spade65CLI.exe")
 
