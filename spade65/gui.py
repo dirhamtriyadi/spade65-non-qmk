@@ -6,11 +6,9 @@ import json
 import re
 import secrets
 import socket
-import subprocess
 import sys
 import threading
 import time
-import webbrowser
 import webbrowser
 from collections.abc import Callable
 from http import HTTPStatus
@@ -62,34 +60,9 @@ MAX_REQUEST_BYTES = 1_000_000
 SAFE_ACTIONS = frozenset(
     {
         "validate", "vendor-convert", "rgb", "per-key", "profile", "stream",
-        "debounce", "sleep", "reset", "open-url",
+        "debounce", "sleep", "reset",
     }
 )
-EXTERNAL_URLS = {
-    "https://github.com/dirhamtriyadi/spade65-non-qmk",
-    "https://github.com/dirhamtriyadi/spade65-non-qmk/releases",
-}
-
-
-def open_external_url(url: str) -> bool:
-    """Open an allowlisted URL with the host operating system's browser."""
-
-    if url not in EXTERNAL_URLS:
-        raise ValueError("external URL is not allowed")
-    try:
-        if webbrowser.open_new_tab(url):
-            return True
-    except (OSError, webbrowser.Error):
-        pass
-    try:
-        if sys.platform == "win32":
-            os.startfile(url)  # type: ignore[attr-defined]
-            return True
-        command = ["open", url] if sys.platform == "darwin" else ["xdg-open", url]
-        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
-    except (FileNotFoundError, OSError):
-        return False
 
 
 def _device_summary(device: Device) -> dict[str, object]:
@@ -177,9 +150,6 @@ def _send_features(device: Device, reports: list[bytes]) -> list[int]:
 def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
     if action not in SAFE_ACTIONS:
         raise ValueError(f"unknown or unsafe GUI action: {action}")
-    if action == "open-url":
-        url = payload.get("url")
-        return {"opened": open_external_url(url)}
     path = payload.get("device") or None
     if action == "vendor-convert":
         from .vendor import convert_vendor_document

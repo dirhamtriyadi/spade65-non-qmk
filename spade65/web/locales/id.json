@@ -28,7 +28,6 @@
   "about.supportLabel": "Hardware yang didukung",
   "about.checkUpdates": "Periksa pembaruan",
   "about.releaseNotes": "Catatan rilis",
-  "about.openFailed": "Browser default tidak dapat dibuka.",
   "about.safetyTitle": "Keamanan dan cakupan",
   "about.safetyDescription": "Aplikasi ini mendukung penulisan konfigurasi yang divalidasi descriptor. Flash firmware, akses bootloader, raw flash, dan paket HID sembarang sengaja dinonaktifkan.",
   "about.privacyTitle": "Privasi",

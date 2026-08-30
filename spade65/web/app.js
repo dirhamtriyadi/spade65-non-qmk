@@ -38,7 +38,6 @@ async function api(action,data={},method='POST'){
 function fetchGuiStatus(){if(!statusFetchPromise)statusFetchPromise=api('status',{},'GET').finally(()=>statusFetchPromise=null);return statusFetchPromise}
 function deviceSignature(devices){return JSON.stringify((devices||[]).map(item=>[item.path,item.vid,item.pid,item.usages]).sort((left,right)=>String(left[0]).localeCompare(String(right[0]))))}
 function toast(message,error=false){const el=$('toast');el.textContent=message;el.className=`show${error?' error':''}`;clearTimeout(el._timer);el._timer=setTimeout(()=>el.className='',3500)}
-async function openExternal(url){try{const result=await api('open-url',{url});if(result.opened)return;const fallback=window.open(url,'_blank');if(!fallback)toast(t('about.openFailed'),true)}catch(error){const fallback=window.open(url,'_blank');if(!fallback)toast(error.message,true)}}
 async function quitApplication(){if(!confirm(t('app.confirmQuit')))return;try{await api('quit');$('quitBtn').disabled=true;toast(t('app.shuttingDown'))}catch(error){toast(error.message,true)}}
 function device(){return $('deviceSelect').value||null}
 function selectedLayoutDevice(){const path=device();return path&&meta?meta.devices.find(item=>item.path===path&&item.usages.includes(layoutState.CONFIG_USAGE))||null:null}
@@ -140,8 +139,7 @@ function renderDiagnostics(){$('deviceJson').textContent=JSON.stringify(meta.dev
 function renderAbout(){if(meta)$('aboutVersion').textContent=meta.version}
 
 document.querySelectorAll('#nav button').forEach(button=>button.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x===button));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(`page-${button.dataset.page}`).classList.add('active');updatePageHeader(button.dataset.page)});
-$('updatesBtn').onclick=()=>openExternal('https://github.com/dirhamtriyadi/spade65-non-qmk/releases');
-document.querySelectorAll('[data-external-url]').forEach(link=>link.onclick=event=>{event.preventDefault();openExternal(link.dataset.externalUrl)});
+$('updatesBtn').onclick=()=>$('releaseNotesLink').click();
 document.querySelectorAll('#layerTabs button').forEach(button=>button.onclick=()=>{currentLayer=button.dataset.layer;document.querySelectorAll('#layerTabs button').forEach(x=>x.classList.toggle('active',x===button));renderKeyboard()});
 $('languageSelect').onchange=event=>setLanguage(event.target.value);
 $('quitBtn').onclick=quitApplication;

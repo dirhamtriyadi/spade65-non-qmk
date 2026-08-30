@@ -174,6 +174,7 @@ class DesktopTests(unittest.TestCase):
                 run_desktop(port=0, webview_module=webview, platform_name="linux")
 
         self.assertTrue(webview.settings["ALLOW_DOWNLOADS"])
+        self.assertTrue(webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"])
         _, url = webview.create_window.call_args.args[:2]
         self.assertEqual(url, "http://127.0.0.1:49152/")
         self.assertEqual(webview.create_window.call_args.kwargs["min_size"], (1000, 640))
@@ -214,6 +215,7 @@ class DesktopTests(unittest.TestCase):
 
         self.assertIsNone(webview.create_window.call_args.kwargs["js_api"])
         self.assertTrue(webview.settings["ALLOW_DOWNLOADS"])
+        self.assertTrue(webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"])
 
     def test_runtime_check_rejects_windows_mshtml_fallback(self) -> None:
         modules = {

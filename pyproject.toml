@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spade65-non-qmk"
-version = "0.7.6"
+version = "0.7.7"
 description = "Cross-platform configuration utility for the non-QMK Noir Spade65"
 readme = "README.md"
 requires-python = ">=3.10"

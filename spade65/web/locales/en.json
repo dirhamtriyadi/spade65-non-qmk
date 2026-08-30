@@ -28,7 +28,6 @@
   "about.supportLabel": "Supported hardware",
   "about.checkUpdates": "Check for updates",
   "about.releaseNotes": "Release notes",
-  "about.openFailed": "Could not open the default browser.",
   "about.safetyTitle": "Safety and scope",
   "about.safetyDescription": "This application supports descriptor-validated configuration writes. Firmware flashing, bootloader access, raw flash, and arbitrary HID packets are intentionally disabled.",
   "about.privacyTitle": "Privacy",

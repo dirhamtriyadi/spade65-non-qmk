@@ -232,6 +232,7 @@ def run_desktop_session(
         webview = webview_module
     try:
         webview.settings["ALLOW_DOWNLOADS"] = True
+        webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
         desktop_api = None if current == "win32" else DesktopApi(webview)
         window = webview.create_window(
             WINDOW_TITLE,
