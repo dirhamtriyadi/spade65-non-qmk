@@ -139,7 +139,6 @@ function renderDiagnostics(){$('deviceJson').textContent=JSON.stringify(meta.dev
 function renderAbout(){if(meta)$('aboutVersion').textContent=meta.version}
 
 document.querySelectorAll('#nav button').forEach(button=>button.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x===button));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(`page-${button.dataset.page}`).classList.add('active');updatePageHeader(button.dataset.page)});
-$('updatesBtn').onclick=()=>$('releaseNotesLink').click();
 document.querySelectorAll('#layerTabs button').forEach(button=>button.onclick=()=>{currentLayer=button.dataset.layer;document.querySelectorAll('#layerTabs button').forEach(x=>x.classList.toggle('active',x===button));renderKeyboard()});
 $('languageSelect').onchange=event=>setLanguage(event.target.value);
 $('quitBtn').onclick=quitApplication;

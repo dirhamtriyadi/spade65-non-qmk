@@ -6,8 +6,11 @@ import importlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
+import webbrowser
 from pathlib import Path
 from types import ModuleType
 from typing import Mapping
@@ -21,10 +24,70 @@ WINDOW_WIDTH = 1360
 WINDOW_HEIGHT = 860
 WINDOW_MIN_SIZE = (1000, 640)
 MAX_NATIVE_EXPORT_BYTES = 5_000_000
+LINUX_EXTERNAL_OPENERS = (
+    ("xdg-open",),
+    ("gio", "open"),
+    ("kde-open5",),
+    ("kde-open",),
+)
+QT_EXTERNAL_ENVIRONMENT = (
+    "QML2_IMPORT_PATH",
+    "QML_IMPORT_PATH",
+    "QT_PLUGIN_PATH",
+    "QT_QPA_PLATFORM_PLUGIN_PATH",
+    "QTWEBENGINEPROCESS_PATH",
+    "QTWEBENGINE_LOCALES_PATH",
+    "QTWEBENGINE_RESOURCES_PATH",
+)
 
 
 class DesktopUnavailable(RuntimeError):
     """Raised when the optional native WebView runtime cannot be loaded."""
+
+
+def _linux_external_environment(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Restore host library paths before launching a system application."""
+
+    environment = dict(os.environ if environ is None else environ)
+    original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original_library_path:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    else:
+        environment.pop("LD_LIBRARY_PATH", None)
+    for variable in QT_EXTERNAL_ENVIRONMENT:
+        environment.pop(variable, None)
+    return environment
+
+
+def _open_linux_external_url(
+    url: str, new: int = 0, autoraise: bool = True,
+) -> bool:
+    """Open a URL outside a frozen Qt process using clean host libraries."""
+
+    del new, autoraise
+    environment = _linux_external_environment()
+    for command in LINUX_EXTERNAL_OPENERS:
+        executable = shutil.which(command[0], path=environment.get("PATH"))
+        if executable is None:
+            continue
+        try:
+            process = subprocess.Popen(
+                [executable, *command[1:], url],
+                env=environment,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            try:
+                if process.wait(timeout=2) == 0:
+                    return True
+            except subprocess.TimeoutExpired:
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _safe_export_filename(value: object) -> str:
@@ -253,12 +316,18 @@ def run_desktop_session(
         if sys.stdout is not None:
             print(f"Spade65 desktop GUI: {url}")
         storage_path = desktop_storage_path(platform_name)
-        webview.start(
-            gui=desktop_backend(platform_name),
-            debug=False,
-            private_mode=False,
-            storage_path=str(storage_path) if storage_path is not None else None,
-        )
+        original_browser_open = webbrowser.open
+        if current.startswith("linux"):
+            webbrowser.open = _open_linux_external_url
+        try:
+            webview.start(
+                gui=desktop_backend(platform_name),
+                debug=False,
+                private_mode=False,
+                storage_path=str(storage_path) if storage_path is not None else None,
+            )
+        finally:
+            webbrowser.open = original_browser_open
     except DesktopUnavailable:
         raise
     except Exception as error:
