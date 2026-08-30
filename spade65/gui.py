@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import webbrowser
+import webbrowser
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,9 +61,13 @@ MAX_REQUEST_BYTES = 1_000_000
 SAFE_ACTIONS = frozenset(
     {
         "validate", "vendor-convert", "rgb", "per-key", "profile", "stream",
-        "debounce", "sleep", "reset",
+        "debounce", "sleep", "reset", "open-url",
     }
 )
+EXTERNAL_URLS = {
+    "https://github.com/dirhamtriyadi/spade65-non-qmk",
+    "https://github.com/dirhamtriyadi/spade65-non-qmk/releases",
+}
 
 
 def _device_summary(device: Device) -> dict[str, object]:
@@ -150,6 +155,11 @@ def _send_features(device: Device, reports: list[bytes]) -> list[int]:
 def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
     if action not in SAFE_ACTIONS:
         raise ValueError(f"unknown or unsafe GUI action: {action}")
+    if action == "open-url":
+        url = payload.get("url")
+        if url not in EXTERNAL_URLS:
+            raise ValueError("external URL is not allowed")
+        return {"opened": bool(webbrowser.open(url))}
     path = payload.get("device") or None
     if action == "vendor-convert":
         from .vendor import convert_vendor_document
