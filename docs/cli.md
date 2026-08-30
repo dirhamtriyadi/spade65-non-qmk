@@ -90,6 +90,7 @@ window. From a terminal, these modes are also available:
 spade65ctl gui
 spade65ctl gui --browser
 spade65ctl gui --no-browser
+spade65ctl gui --start-hidden
 ```
 
 The default desktop mode hosts the local interface at
@@ -98,13 +99,19 @@ the same interface in the default browser. `--no-browser` starts only the local
 server, which is useful on a Linux desktop where the embedded renderer is not
 compatible with the current Wayland or graphics setup.
 
+`--start-hidden` is the native desktop startup mode used by the per-user login
+launcher created from **Settings → Desktop integration**. It cannot be combined
+with browser/server-only modes. If the current Linux session has no usable
+system tray, the application deliberately shows the window instead.
+
 The server listens on loopback only. Its API requires a random session token
 and rejects foreign `Host` and mismatched `Origin` values. A second desktop
 launch activates the existing application instead of claiming port 8765 again.
 If another, unrelated process owns the port, Spade65 reports the conflict and
-does not terminate that process. Closing the desktop window or choosing **Quit
-application** stops its server. In browser mode, closing the tab alone does not
-stop the terminal process.
+does not terminate that process. With close-to-tray enabled and a tray
+available, closing the desktop window hides it; otherwise close stops its
+server. Choosing **Quit application** always stops the process. In browser mode,
+closing the tab alone does not stop the terminal process.
 
 The GUI and CLI share the same protocol implementation and safety checks. The
 GUI adds profiles, three-layer key assignment, macro recording, per-key colors,
@@ -391,9 +398,10 @@ spade65ctl service run spade65-service.json
 
 By default, the service runs only AP effects and custom timelines. It can keep
 host-streamed lighting active after the GUI closes and select profiles according
-to the active application. It has no tray icon. On Wayland, where no portable
-foreground-window API exists, it falls back to the first configured rule whose
-process is running; rule order matters.
+to the active application. On Wayland, where no portable foreground-window API
+exists, it falls back to the first configured rule whose process is running;
+rule order matters. This service has no tray icon; the system tray belongs to
+the separate native GUI process.
 
 Automatic keymap/profile writes are disabled by default. Enabling them requires
 both `"allow_profile_writes": true` in the configuration and the independent

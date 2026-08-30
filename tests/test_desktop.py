@@ -138,7 +138,8 @@ class DesktopTests(unittest.TestCase):
                 create_file_dialog=MagicMock(return_value=(str(output),))
             )
             api = DesktopApi(
-                SimpleNamespace(FileDialog=SimpleNamespace(SAVE=30))
+                SimpleNamespace(FileDialog=SimpleNamespace(SAVE=30)),
+                platform_name="linux",
             )
             api._bind_window(window)
             result = api.save_json('{"profile": true}\n', "../../my/profile.json")
@@ -153,9 +154,62 @@ class DesktopTests(unittest.TestCase):
             )
 
     def test_native_json_export_rejects_invalid_content(self) -> None:
-        api = DesktopApi(SimpleNamespace())
+        api = DesktopApi(SimpleNamespace(), platform_name="linux")
         with self.assertRaisesRegex(ValueError, "valid JSON"):
             api.save_json("not json", "profile.json")
+
+    def test_windows_native_export_bridge_is_explicitly_disabled(self) -> None:
+        api = DesktopApi(SimpleNamespace(), platform_name="win32")
+        with self.assertRaisesRegex(RuntimeError, "WebView2"):
+            api.save_json("{}", "profile.json")
+
+    def test_desktop_api_persists_tray_and_controls_login_startup(self) -> None:
+        class FakeTray:
+            ready = True
+            available = True
+            close_to_tray = True
+
+            def wait_until_ready(self, _timeout):
+                return True
+
+            def set_close_to_tray(self, enabled):
+                self.close_to_tray = enabled
+
+        startup = {
+            "platform": "linux",
+            "supported": True,
+            "enabled": False,
+            "current": False,
+            "path": "/config/autostart/spade65.desktop",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            preferences = Path(directory) / "desktop.json"
+            tray = FakeTray()
+            api = DesktopApi(
+                SimpleNamespace(),
+                tray_controller=tray,
+                platform_name="linux",
+                preferences_path=preferences,
+            )
+            with (
+                patch(
+                    "spade65.desktop.gui_auto_start_status",
+                    return_value=startup,
+                ),
+                patch("spade65.desktop.set_gui_auto_start") as set_startup,
+            ):
+                status = api.desktop_status()
+                self.assertTrue(status["tray_available"])
+                self.assertTrue(status["native_export"])
+                changed = api.set_close_to_tray(False)
+                self.assertFalse(changed["close_to_tray"])
+                api.set_auto_start(True)
+
+            self.assertIn(
+                '"close_to_tray": false',
+                preferences.read_text(encoding="utf-8"),
+            )
+            set_startup.assert_called_once_with(True, platform="linux")
 
     def test_storage_path_uses_platform_application_data(self) -> None:
         home = Path("/users/test")
@@ -256,6 +310,7 @@ class DesktopTests(unittest.TestCase):
         _, url = webview.create_window.call_args.args[:2]
         self.assertEqual(url, "http://127.0.0.1:49152/")
         self.assertEqual(webview.create_window.call_args.kwargs["min_size"], (1000, 640))
+        self.assertFalse(webview.create_window.call_args.kwargs["hidden"])
         self.assertIsInstance(
             webview.create_window.call_args.kwargs["js_api"], DesktopApi
         )
@@ -267,7 +322,7 @@ class DesktopTests(unittest.TestCase):
         )
         server.server_close.assert_called_once_with()
 
-    def test_windows_uses_webview2_download_instead_of_worker_dialog(self) -> None:
+    def test_windows_exposes_desktop_settings_but_keeps_webview2_downloads(self) -> None:
         window = SimpleNamespace(
             destroy=MagicMock(), show=MagicMock(), restore=MagicMock()
         )
@@ -291,7 +346,19 @@ class DesktopTests(unittest.TestCase):
                 port=0, webview_module=webview, platform_name="win32"
             )
 
-        self.assertIsNone(webview.create_window.call_args.kwargs["js_api"])
+        desktop_api = webview.create_window.call_args.kwargs["js_api"]
+        self.assertIsInstance(desktop_api, DesktopApi)
+        with patch(
+            "spade65.desktop.gui_auto_start_status",
+            return_value={
+                "platform": "windows",
+                "supported": True,
+                "enabled": False,
+                "current": False,
+                "path": "C:/Startup/spade65-gui.cmd",
+            },
+        ):
+            self.assertFalse(desktop_api.desktop_status()["native_export"])
         self.assertTrue(webview.settings["ALLOW_DOWNLOADS"])
         self.assertTrue(webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"])
 

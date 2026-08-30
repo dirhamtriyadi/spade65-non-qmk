@@ -35,6 +35,9 @@ dapat direproduksi dengan batas keselamatan yang jelas yang didukung.
 ## Fitur utama
 
 - GUI desktop mandiri dan CLI pada Linux, Windows, dan macOS.
+- System tray native, perilaku close-to-tray, dan opsi menjalankan aplikasi
+  setelah login pada ketiga platform desktop, dengan fallback jendela terlihat
+  bila sesi Linux tidak memiliki tray.
 - Deteksi perangkat otomatis dan pratinjau tersinkron untuk keempat layout fisik
   Spade65: ANSI/ISO dengan spacebar standar atau terpisah.
 - Editor keymap tiga layer dengan kategori assignment yang tersedia pada
@@ -90,11 +93,13 @@ Paket siap jalan tersedia di
 | Linux x86_64 | `Spade65-Linux-x86_64.AppImage` | Dibangun pada Ubuntu 22.04; memakai library grafis dan desktop dari host |
 | macOS universal | `Spade65-macOS-universal.dmg` | Berjalan pada Intel dan Apple silicon |
 
-Menjalankan aplikasi paket tanpa argumen akan membuka GUI desktop. Pengguna
-release dapat mengatur startup latar belakang milik pengguna melalui
-**Pengaturan → Layanan latar belakang**; halaman tersebut menghasilkan perintah
-untuk paket dan sistem operasi yang sedang dipakai. Setup `spade65ctl` khusus
-source tetap tersedia di [panduan fitur host](docs/id/host-features.md).
+Menjalankan aplikasi paket tanpa argumen akan membuka GUI desktop.
+**Pengaturan → Integrasi desktop** mengatur close-to-tray serta dapat memasang
+atau menghapus startup setelah login untuk pengguna saat ini. Startup GUI ini
+terpisah dari **Pengaturan → Layanan latar belakang**, yang menghasilkan
+perintah untuk playback AP/timeline persisten dan asosiasi aplikasi. Setup
+service `spade65ctl` khusus source tetap tersedia di
+[panduan fitur host](docs/id/host-features.md).
 Paket Windows belum ditandatangani dan paket macOS belum dinotarisasi, sehingga
 sistem operasi dapat menampilkan peringatan keamanan. Lihat
 [panduan lintas platform](docs/id/cross-platform.md) untuk catatan instalasi dan

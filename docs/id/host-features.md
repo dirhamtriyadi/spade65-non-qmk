@@ -34,6 +34,26 @@ dapat di-loop, tersimpan dalam `settings.custom_timeline`, dan memakai transport
 streaming USB yang sama dengan AP mode. Tidak ada data timeline yang ditulis ke
 flash firmware.
 
+## Tray desktop dan startup setelah login
+
+Pada aplikasi native, **Pengaturan → Integrasi desktop** mengatur apakah
+menutup jendela akan menyembunyikannya ke system tray dan apakah Spade65 berjalan
+setelah pengguna saat ini login. Menu tray dapat membuka kembali jendela yang
+sama atau menghentikan proses. Startup setelah login menjalankan
+`gui --start-hidden`; mengaktifkan atau menonaktifkannya hanya menulis atau
+menghapus launcher Spade65 milik pengguna.
+
+Implementasi memakai kembali runtime desktop yang sudah disertakan pada setiap
+host: Qt pada Linux, WinForms pada Windows, dan Cocoa pada macOS. Lingkungan
+Linux tanpa tray yang dapat digunakan mempertahankan perilaku close-to-exit
+normal. Peluncuran login tersembunyi juga kembali menampilkan jendela agar tidak
+meninggalkan proses yang tidak dapat diakses.
+
+Mempertahankan GUI di tray bukan pengganti service di bawah. WebView tersembunyi
+dapat dibatasi oleh renderer; gunakan background service untuk playback
+AP/timeline dan asosiasi aplikasi yang andal setelah jendela ditutup atau
+disembunyikan.
+
 ## Background service dan asosiasi aplikasi
 
 ### Paket release (direkomendasikan)
@@ -96,10 +116,11 @@ Gunakan `--platform linux`, `windows`, atau `macos` untuk menghasilkan launcher
 platform lain. Linux menghasilkan unit systemd, Windows menghasilkan launcher
 `.cmd` untuk folder Startup, dan macOS menghasilkan LaunchAgent `.plist`.
 
-Service/launcher ini adalah komponen background yang tetap berjalan tanpa GUI;
-tidak ada ikon tray dan tidak diperlukan toolkit desktop tambahan. Audio-reactive
-tetap dijalankan dari GUI karena service tidak meminta akses mikrofon secara
-diam-diam.
+Service/launcher ini adalah komponen background yang tetap berjalan tanpa GUI.
+Service itu sendiri tidak memiliki ikon tray dan tidak memerlukan toolkit
+desktop tambahan; tray hanya dimiliki GUI native yang dijelaskan di atas.
+Audio-reactive tetap dijalankan dari GUI karena service tidak meminta akses
+mikrofon secara diam-diam.
 
 ## Informasi read-only
 

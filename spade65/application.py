@@ -116,8 +116,12 @@ def launch_gui(
     host: str = GUI_HOST,
     port: int = GUI_PORT,
     mode: GuiMode = "desktop",
+    start_hidden: bool = False,
 ) -> None:
     """Launch one primary GUI, or activate the verified primary instance."""
+
+    if start_hidden and mode != "desktop":
+        raise ValueError("hidden startup is available only for the desktop GUI")
 
     claimed = _claim_server(host, port, mode)
     if claimed is None:
@@ -130,7 +134,12 @@ def launch_gui(
         worker = _start_server(server)
         if mode == "desktop":
             try:
-                run_desktop_session(server=server, url=url, activation=bridge)
+                run_desktop_session(
+                    server=server,
+                    url=url,
+                    activation=bridge,
+                    start_hidden=start_hidden,
+                )
                 return
             except DesktopUnavailable as error:
                 # run_desktop_session may have attached window.destroy before

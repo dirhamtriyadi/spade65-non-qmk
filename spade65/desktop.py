@@ -15,8 +15,15 @@ from pathlib import Path
 from types import ModuleType
 from typing import Mapping
 
+from .desktop_preferences import (
+    desktop_preferences_path,
+    load_desktop_preferences,
+    save_desktop_preferences,
+)
 from .gui import create_gui_server
 from .settings import GUI_HOST, GUI_PORT
+from .startup import gui_auto_start_status, set_gui_auto_start
+from .tray import TrayController
 
 
 WINDOW_TITLE = "Spade65 Control Center"
@@ -100,17 +107,78 @@ def _safe_export_filename(value: object) -> str:
 
 
 class DesktopApi:
-    """Small native bridge for reliable, user-approved JSON exports."""
+    """Native bridge for exports, system tray, and login startup settings."""
 
-    def __init__(self, webview_module: ModuleType) -> None:
+    def __init__(
+        self,
+        webview_module: ModuleType,
+        *,
+        tray_controller: TrayController | None = None,
+        platform_name: str | None = None,
+        preferences_path: Path | None = None,
+    ) -> None:
         self._window: object | None = None
+        self._tray = tray_controller
+        self._platform_name = platform_name or sys.platform
+        self._preferences_path = preferences_path
+        self._native_export = self._platform_name not in {"win32", "windows"}
         dialogs = getattr(webview_module, "FileDialog", None)
         self._save_dialog = getattr(dialogs, "SAVE", 30)
 
     def _bind_window(self, window: object) -> None:
         self._window = window
 
+    def desktop_status(self) -> dict[str, object]:
+        tray = self._tray
+        if tray is not None and not tray.ready:
+            tray.wait_until_ready(2)
+        startup = gui_auto_start_status(platform=self._platform_name)
+        return {
+            "available": True,
+            "platform": startup["platform"],
+            "packaged": bool(getattr(sys, "frozen", False)),
+            "native_export": self._native_export,
+            "tray_ready": tray.ready if tray is not None else False,
+            "tray_available": tray.available if tray is not None else False,
+            "close_to_tray": tray.close_to_tray if tray is not None else False,
+            "auto_start_supported": startup["supported"],
+            "auto_start_enabled": startup["enabled"],
+            "auto_start_current": startup["current"],
+            "auto_start_path": startup["path"],
+        }
+
+    def set_close_to_tray(self, enabled: bool) -> dict[str, object]:
+        if self._tray is None:
+            raise RuntimeError("system tray integration is not ready")
+        previous = self._tray.close_to_tray
+        self._tray.set_close_to_tray(enabled)
+        try:
+            save_desktop_preferences(
+                {"close_to_tray": enabled}, path=self._preferences_path
+            )
+        except Exception:
+            self._tray.set_close_to_tray(previous)
+            raise
+        return self.desktop_status()
+
+    def set_auto_start(self, enabled: bool) -> dict[str, object]:
+        if not isinstance(enabled, bool):
+            raise ValueError("auto-start state must be a boolean")
+        tray = self._tray
+        if enabled:
+            if tray is None:
+                raise RuntimeError("system tray integration is not ready")
+            tray.wait_until_ready(2)
+            if not tray.available:
+                raise RuntimeError(
+                    "hidden auto-start requires a system tray on this desktop"
+                )
+        set_gui_auto_start(enabled, platform=self._platform_name)
+        return self.desktop_status()
+
     def save_json(self, contents: str, suggested_name: str) -> dict[str, object]:
+        if not self._native_export:
+            raise RuntimeError("Windows exports use the WebView2 download handler")
         if not isinstance(contents, str):
             raise ValueError("export contents must be text")
         if len(contents.encode("utf-8")) > MAX_NATIVE_EXPORT_BYTES:
@@ -281,6 +349,7 @@ def run_desktop_session(
     activation: ActivationBridge,
     webview_module: ModuleType | None = None,
     platform_name: str | None = None,
+    start_hidden: bool = False,
 ) -> None:
     """Run only the native window around an already-serving GUI server."""
 
@@ -296,7 +365,19 @@ def run_desktop_session(
     try:
         webview.settings["ALLOW_DOWNLOADS"] = True
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
-        desktop_api = None if current == "win32" else DesktopApi(webview)
+        preferences_path = desktop_preferences_path(current)
+        preferences = load_desktop_preferences(preferences_path)
+        tray = TrayController(
+            platform_name=current,
+            close_to_tray=preferences["close_to_tray"],
+            start_hidden=start_hidden,
+        )
+        desktop_api = DesktopApi(
+            webview,
+            tray_controller=tray,
+            platform_name=current,
+            preferences_path=preferences_path,
+        )
         window = webview.create_window(
             WINDOW_TITLE,
             url,
@@ -306,13 +387,14 @@ def run_desktop_session(
             min_size=WINDOW_MIN_SIZE,
             background_color="#0d0d12",
             text_select=True,
+            hidden=start_hidden,
         )
         if window is None:
             raise DesktopUnavailable("native desktop window creation was cancelled")
-        if desktop_api is not None:
-            desktop_api._bind_window(window)
+        desktop_api._bind_window(window)
+        tray.bind(window)
         activation.bind(window)
-        server.on_quit = window.destroy
+        server.on_quit = tray.quit
         if sys.stdout is not None:
             print(f"Spade65 desktop GUI: {url}")
         storage_path = desktop_storage_path(platform_name)
@@ -328,6 +410,7 @@ def run_desktop_session(
             )
         finally:
             webbrowser.open = original_browser_open
+            tray.dispose()
     except DesktopUnavailable:
         raise
     except Exception as error:
@@ -340,6 +423,7 @@ def run_desktop(
     port: int = GUI_PORT,
     webview_module: ModuleType | None = None,
     platform_name: str | None = None,
+    start_hidden: bool = False,
 ) -> None:
     """Run the local API and HTML UI inside a native desktop window."""
 
@@ -359,6 +443,7 @@ def run_desktop(
             activation=activation,
             webview_module=webview_module,
             platform_name=platform_name,
+            start_hidden=start_hidden,
         )
     finally:
         if worker.is_alive():

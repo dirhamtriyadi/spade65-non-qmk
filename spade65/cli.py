@@ -326,7 +326,12 @@ def command_gui(args: argparse.Namespace) -> int:
     from .application import launch_gui
 
     mode = "server" if args.no_browser else "browser" if args.browser else "desktop"
-    launch_gui(host=args.host, port=args.port, mode=mode)
+    launch_gui(
+        host=args.host,
+        port=args.port,
+        mode=mode,
+        start_hidden=args.start_hidden,
+    )
     return 0
 
 
@@ -437,6 +442,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-browser",
         action="store_true",
         help="run only the localhost GUI server",
+    )
+    gui_mode.add_argument(
+        "--start-hidden",
+        action="store_true",
+        help="start the desktop GUI in the system tray",
     )
     gui.set_defaults(handler=command_gui)
 

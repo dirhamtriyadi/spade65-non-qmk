@@ -685,6 +685,50 @@ th {
   margin-top: 10px !important
 }
 
+.desktop-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px
+}
+
+.desktop-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  margin: 0;
+  padding: 15px;
+  background: #111914;
+  border: 1px solid var(--line);
+  border-radius: 8px
+}
+
+.desktop-option input {
+  margin-top: 3px;
+  accent-color: var(--accent)
+}
+
+.desktop-option strong,
+.desktop-option small {
+  display: block
+}
+
+.desktop-option strong {
+  color: var(--text);
+  font-size: 13px
+}
+
+.desktop-option small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.45
+}
+
+.desktop-option input:disabled + span {
+  opacity: .58
+}
+
 .service-workflow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -722,6 +766,8 @@ th {
 }
 
 @media(max-width:900px) {
+
+  .desktop-options,
   .service-workflow {
     grid-template-columns: 1fr
   }

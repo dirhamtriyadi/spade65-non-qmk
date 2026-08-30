@@ -33,6 +33,24 @@ Each frame lasts 20–60000 ms. A timeline can contain up to 200 frames, can loo
 is stored in `settings.custom_timeline`, and uses the same USB streaming
 transport as AP mode. Timeline data is never written to firmware flash.
 
+## Desktop tray and login startup
+
+In the native application, **Settings → Desktop integration** controls whether
+closing the window hides it in the system tray and whether Spade65 starts after
+the current user signs in. The tray menu can reopen the existing window or quit
+the process. Start-after-sign-in invokes `gui --start-hidden`; enabling and
+disabling it writes or removes only Spade65's per-user launcher.
+
+The implementation reuses the desktop runtime already bundled for each host:
+Qt on Linux, WinForms on Windows, and Cocoa on macOS. Linux environments without
+a usable tray keep normal close-to-exit behavior. A hidden login launch also
+falls back to a visible window so it cannot strand an inaccessible process.
+
+Keeping the GUI in the tray is not a replacement for the service below. Hidden
+WebViews can be throttled by their renderer; use the background service for
+reliable AP/timeline playback and application associations after the window is
+closed or hidden.
+
 ## Background service and application associations
 
 ### Release packages (recommended)
@@ -98,9 +116,10 @@ platform. Linux produces a systemd unit, Windows produces a `.cmd` launcher for
 the Startup folder, and macOS produces a LaunchAgent `.plist`.
 
 This service and its launcher are background components that continue without
-the GUI; there is no tray icon, and no additional desktop toolkit is required.
-Audio-reactive effects remain in the GUI because the service does not request
-microphone access silently.
+the GUI. The service itself has no tray icon and requires no additional desktop
+toolkit; the tray belongs only to the native GUI described above. Audio-reactive
+effects remain in the GUI because the service does not request microphone access
+silently.
 
 ## Read-only information
 

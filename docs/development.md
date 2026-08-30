@@ -14,8 +14,11 @@ spade65ctl.py
         ├── spade65.application # shared port ownership + GUI lifecycle
         ├── spade65.instance   # localhost instance identity/activation
         ├── spade65.gui        # loopback HTTP API + web assets
-        └── spade65.desktop    # PyWebView window lifecycle
-              └── spade65.web # HTML/CSS/JS + locale catalogs
+        ├── spade65.desktop    # PyWebView window + native bridge lifecycle
+        ├── spade65.tray       # Qt/WinForms/Cocoa system tray adapters
+        ├── spade65.desktop_preferences # native-shell preferences
+        ├── spade65.startup    # GUI login + background-service launchers
+        └── spade65.web        # HTML/CSS/JS + locale catalogs
 
 packaging/
   ├── build.py                 # manual build dispatcher for the host OS
@@ -35,7 +38,13 @@ This separation is intentional:
   `Host`/`Origin` authority to reject DNS rebinding, and serves the same API and
   assets to the WebView and browser.
 - `desktop.py` manages PyWebView, persistent storage, server/window lifecycle,
-  downloads, and activation of an existing instance.
+  downloads, activation of an existing instance, and the narrow JavaScript API
+  for desktop integration.
+- `tray.py` attaches to the toolkit already selected by PyWebView: Qt on Linux,
+  WinForms on Windows, and Cocoa on macOS. It does not add a second tray toolkit.
+- `desktop_preferences.py` persists close-to-tray independently of WebView
+  `localStorage`; `startup.py` owns both login-GUI and background-service
+  launcher formats.
 - `application.py` claims the port atomically, starts the server before the
   renderer, queues activation during window startup, and shares one path between
   the no-argument executable and the `gui` subcommand.
@@ -63,9 +72,12 @@ Cocoa WebKit uses the persistent default website data store managed by macOS for
 the application bundle ID because that backend ignores pywebview's custom path.
 On Linux and macOS, `DesktopApi` validates JSON and opens a native Save dialog
 for profile and library exports. Windows uses the WebView2 download handler on
-the UI thread; browser mode continues to use Blob downloads. Closing the window
-or calling the quit endpoint stops the server; there is no system tray. Browser
-mode and `--no-browser` remain available through the CLI.
+the UI thread; browser mode continues to use Blob downloads. A synchronous
+PyWebView closing handler cancels close only after the native tray adapter has
+attached; otherwise close exits normally. Explicit quit marks the controller as
+quitting before destroying the window. `gui --start-hidden` is used by the
+per-user login launcher, and a failed Linux tray attachment restores a visible
+window. Browser mode and `--no-browser` remain available through the CLI.
 
 The GUI layouts use the `ItemCss` coordinates for `SPADE65-01` through
 `SPADE65-04` found in `KeyBoardStyle.js`. The repository stores only the geometry

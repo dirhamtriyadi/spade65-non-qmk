@@ -45,8 +45,12 @@ standalone PyWebView ketika dijalankan tanpa argumen. UI tetap berupa
 HTML/CSS/JavaScript lokal di dalam WebView, bukan widget native penuh. Jika
 backend native tidak tersedia, launcher membuka browser sebagai fallback.
 Peluncuran kedua mengaktifkan dan memulihkan jendela existing. Menutup jendela
-atau memilih **Quit application** menghentikan server; tidak ada system tray.
-Storage WebView bersifat persisten dan download ekspor profil/library diaktifkan.
+akan menyembunyikannya bila close-to-tray aktif dan tray native berhasil
+terpasang; bila tidak, aplikasi keluar. **Quit Spade65** pada tray dan **Keluar
+dari aplikasi** di GUI selalu menghentikan server. Paket yang sama dapat
+memasang startup GUI per pengguna dari Pengaturan; login menjalankan
+`gui --start-hidden`. Storage WebView bersifat persisten dan download ekspor
+profil/library diaktifkan.
 
 ZIP Windows juga menyertakan `Spade65CLI.exe` agar output/error CLI terlihat;
 Linux dan macOS meneruskan argumen pada executable yang sama ke command

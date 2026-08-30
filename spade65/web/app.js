@@ -23,7 +23,8 @@ let meta = null,
   devicePollBusy = false,
   recordingMacro = false,
   recordLast = 0,
-  recordPressed = new Set();
+  recordPressed = new Set(),
+  desktopIntegration = null;
 const I18N_STORAGE_KEY = 'spade65-language',
   DEFAULT_LANGUAGE = 'en';
 const LAYOUT_STORAGE_KEY = 'spade65-device-layouts-v1',
@@ -145,6 +146,7 @@ function renderLocalizedDynamic() {
   const active = document.querySelector('#nav button.active');
   if (active) updatePageHeader(active.dataset.page);
   renderAbout();
+  renderDesktopIntegration();
   renderServiceSetup();
   if (!meta || !profile) return;
   renderSavedProfiles($('savedProfile').value);
@@ -1305,7 +1307,7 @@ async function applyProfile() {
 async function downloadJson(data, name) {
   const contents = JSON.stringify(data, null, 2) + '\n',
     nativeSave = window.pywebview?.api?.save_json;
-  if (nativeSave) {
+  if (desktopIntegration?.native_export && nativeSave) {
     const result = await nativeSave(contents, name);
     toast(result.saved ? t('profile.exportSaved', {
       name: result.name
@@ -1711,6 +1713,74 @@ function renderAbout() {
   if (meta) $('aboutVersion').textContent = meta.version
 }
 
+function renderDesktopIntegration() {
+  const platform = $('desktopIntegrationPlatform'),
+    closeToTray = $('closeToTray'),
+    autoStart = $('autoStartGui'),
+    status = $('desktopIntegrationStatus');
+  if (!platform || !closeToTray || !autoStart || !status) return;
+  if (!desktopIntegration?.available) {
+    platform.textContent = t('desktop.browserMode');
+    closeToTray.checked = false;
+    closeToTray.disabled = true;
+    autoStart.checked = false;
+    autoStart.disabled = true;
+    status.textContent = t('desktop.nativeRequired');
+    return
+  }
+
+  platform.textContent = t(`service.platform.${desktopIntegration.platform}`);
+  closeToTray.checked = Boolean(desktopIntegration.close_to_tray);
+  autoStart.checked = Boolean(desktopIntegration.auto_start_enabled);
+  if (!desktopIntegration.tray_ready) {
+    closeToTray.disabled = true;
+    autoStart.disabled = true;
+    status.textContent = t('desktop.loading');
+    return
+  }
+
+  closeToTray.disabled = !desktopIntegration.tray_available;
+  autoStart.disabled = !desktopIntegration.auto_start_supported || (!desktopIntegration.tray_available && !desktopIntegration.auto_start_enabled);
+  if (desktopIntegration.auto_start_enabled && !desktopIntegration.auto_start_current) status.textContent = t('desktop.autoStartStale');
+  else if (!desktopIntegration.tray_available) status.textContent = t('desktop.trayUnavailable');
+  else if (desktopIntegration.auto_start_enabled) status.textContent = t('desktop.autoStartEnabled');
+  else status.textContent = t('desktop.ready')
+}
+
+async function refreshDesktopIntegration() {
+  const native = window.pywebview?.api;
+  if (!native?.desktop_status) {
+    desktopIntegration = {
+      available: false
+    };
+    renderDesktopIntegration();
+    return
+  }
+  try {
+    desktopIntegration = await native.desktop_status();
+    renderDesktopIntegration()
+  } catch (error) {
+    desktopIntegration = {
+      available: false
+    };
+    renderDesktopIntegration();
+    console.warn('Unable to read desktop integration status', error)
+  }
+}
+
+async function setDesktopIntegration(method, enabled, successKey) {
+  const native = window.pywebview?.api;
+  if (!native?.[method]) return;
+  try {
+    desktopIntegration = await native[method](enabled);
+    renderDesktopIntegration();
+    toast(t(successKey))
+  } catch (error) {
+    await refreshDesktopIntegration();
+    toast(error.message || String(error), true)
+  }
+}
+
 function renderServiceSetup() {
   if (!meta?.service_setup) return;
   const setup = meta.service_setup,
@@ -1764,6 +1834,8 @@ document.querySelectorAll('#nav button').forEach(button => button.onclick = () =
 });
 $('copyServicePrepareBtn').onclick = () => copyServiceCommands('prepare_commands', 'service.prepareCopied');
 $('copyServiceActivateBtn').onclick = () => copyServiceCommands('activate_commands', 'service.activateCopied');
+$('closeToTray').onchange = event => setDesktopIntegration('set_close_to_tray', event.target.checked, 'desktop.closeToTraySaved');
+$('autoStartGui').onchange = event => setDesktopIntegration('set_auto_start', event.target.checked, event.target.checked ? 'desktop.autoStartEnabledSaved' : 'desktop.autoStartDisabledSaved');
 document.querySelectorAll('#layerTabs button').forEach(button => button.onclick = () => {
   currentLayer = button.dataset.layer;
   document.querySelectorAll('#layerTabs button').forEach(x => x.classList.toggle('active', x === button));
@@ -1883,6 +1955,7 @@ $('validateBtn').onclick = async () => {
 };
 async function initialize() {
   await initI18n();
+  await refreshDesktopIntegration();
   await refresh();
   const initialPage = location.hash.slice(1);
   if (initialPage && subtitles[initialPage]) document.querySelector(`#nav button[data-page="${initialPage}"]`).click();
@@ -1891,4 +1964,5 @@ async function initialize() {
     if (!document.hidden) pollDeviceChanges()
   })
 }
+window.addEventListener('pywebviewready', refreshDesktopIntegration);
 initialize().catch(error => toast(error.message, true));

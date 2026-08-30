@@ -35,6 +35,9 @@ configuration paths that can be reproduced with clear safety boundaries.
 ## Highlights
 
 - Standalone desktop GUI and CLI on Linux, Windows, and macOS.
+- Native system tray, close-to-tray behavior, and opt-in start-after-sign-in on
+  all three desktop platforms, with a visible-window fallback when a Linux
+  session has no tray.
 - Automatic device detection and a synchronized preview for all four Spade65
   physical layouts: ANSI/ISO with standard or split spacebar.
 - Three-layer keymap editor with the assignment categories exposed by the
@@ -89,10 +92,11 @@ Ready-to-run packages are published on
 | macOS universal | `Spade65-macOS-universal.dmg` | Runs on Intel and Apple silicon |
 
 Opening the packaged application without arguments launches the desktop GUI.
-Release users can configure per-user background startup from **Settings →
-Background service**; the page generates commands for the package and operating
-system currently in use. Source-only `spade65ctl` setup remains in the
-[host-features guide](docs/host-features.md).
+**Settings → Desktop integration** controls close-to-tray and can install or
+remove start-after-sign-in for the current user. This GUI startup is separate
+from **Settings → Background service**, which generates commands for persistent
+AP/timeline playback and application associations. Source-only `spade65ctl`
+service setup remains in the [host-features guide](docs/host-features.md).
 The Windows package is not code-signed, and the macOS package is not notarized,
 so the operating system may show a security warning. See the
 [cross-platform guide](docs/cross-platform.md) for installation notes and the

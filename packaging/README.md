@@ -26,11 +26,13 @@ authenticated activation route, restores the existing window, and exits instead
 of failing on the occupied port. The explicit `gui` command uses the same
 coordinator. Port ownership is claimed before WebView initialization and an
 activation arriving during startup is queued until the window exists. A foreign
-service on 8765 is never killed or treated as Spade65. Closing the desktop
-window or using **Quit application** closes the window and localhost server.
-There is no tray icon or minimize-to-tray process. In browser mode, closing only
-the tab leaves the server running until **Quit application**, Ctrl+C, or process
-termination.
+service on 8765 is never killed or treated as Spade65. When close-to-tray is
+enabled and a native tray is available, closing the desktop window hides it;
+otherwise it exits. **Quit Spade65** in the tray or **Quit application** in the
+GUI closes the window and localhost server. Settings can install per-user login
+startup, which invokes the package with `gui --start-hidden`. In browser mode,
+closing only the tab leaves the server running until **Quit application**,
+Ctrl+C, or process termination.
 
 Windowed processes without a console write stdout/stderr to a per-user launcher
 log and display a best-effort native startup error. Log roots are

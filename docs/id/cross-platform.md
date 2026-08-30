@@ -68,11 +68,14 @@ melewati coordinator yang sama, sehingga invocation kedua tidak gagal dengan
 `Address already in use`. Port diklaim sebelum renderer dimuat dan request
 aktivasi yang datang selama startup ditunda sampai jendela siap. Layanan asing
 di port 8765 tidak pernah dihentikan atau diambil alih; startup gagal dengan
-pesan yang jelas. Menutup jendela desktop atau memilih **Quit application**
-menghentikan server localhost dan proses GUI.
-Spade65 tidak memiliki ikon system tray atau mode minimize-to-tray. Mode browser
-berbeda: menutup tab tidak menghentikan server; gunakan **Quit application** atau
-akhiri proses terminal.
+pesan yang jelas. Bila **Pengaturan → Integrasi desktop → Tetap berjalan di
+system tray** aktif dan desktop menyediakan tray, menutup jendela hanya
+menyembunyikannya tanpa menghentikan server localhost. **Open Spade65**
+memulihkannya; **Quit Spade65** pada tray atau **Keluar dari aplikasi** di GUI
+menghentikan proses. Bila sesi Linux tidak menyediakan tray, opsi dinonaktifkan
+dan menutup jendela akan keluar secara normal. Mode browser berbeda: menutup tab
+tidak menghentikan server; gunakan **Keluar dari aplikasi** atau akhiri proses
+terminal.
 
 Executable Linux/macOS juga menerima command CLI; misalnya AppImage dapat
 dijalankan dengan argumen `probe`. Pada Windows gunakan `Spade65CLI.exe` agar
@@ -105,6 +108,11 @@ Data `localStorage` untuk bahasa, layout, dan profil bertahan pada lokasi beriku
 - macOS: default website data store Cocoa WebKit yang persisten dan dikelola OS
   untuk bundle ID `io.github.dirhamtriyadi.spade65`; backend ini tidak mengekspos
   custom path melalui pywebview.
+
+Preferensi close-to-tray adalah state shell native, bukan data WebView. File-nya
+berada di `${XDG_CONFIG_HOME:-~/.config}/spade65/desktop-settings.json` pada
+Linux, `%APPDATA%\Spade65\desktop-settings.json` pada Windows, dan
+`~/Library/Application Support/Spade65/desktop-settings.json` pada macOS.
 
 Mode browser memakai storage profil browser dan tidak otomatis berbagi data
 dengan WebView. Gunakan backup/restore library untuk memindahkannya. Download
@@ -177,7 +185,29 @@ Indonesia sebagai pilihan. Preference bahasa tersimpan lokal di profil WebView
 khusus aplikasi, atau di profil browser ketika fallback dipakai; lihat
 [`localization.md`](localization.md) untuk struktur yang dapat diperluas.
 
-## Background startup
+## Startup GUI setelah login
+
+Halaman Pengaturan native dapat mengaktifkan **Jalankan setelah login** bagi
+pengguna saat ini. Aplikasi menulis satu launcher native OS milik pengguna dan
+menjalankan release yang sama dengan `gui --start-hidden`:
+
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/autostart/io.github.dirhamtriyadi.spade65.desktop`;
+- Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\spade65-gui.cmd`;
+- macOS: `~/Library/LaunchAgents/io.github.dirhamtriyadi.spade65.gui.plist`.
+
+Menonaktifkan switch hanya menghapus launcher Spade65 tersebut. Pindahkan
+AppImage, direktori hasil ekstraksi Windows, atau aplikasi macOS ke lokasi
+permanen sebelum mengaktifkannya. Bila lokasi aplikasi kemudian berubah,
+Pengaturan menandai launcher lama agar dapat dinonaktifkan lalu diaktifkan lagi.
+Startup tersembunyi hanya diterima pada mode desktop native. Bila tray Linux
+hilang di antara sesi, aplikasi menampilkan jendela agar proses tidak berjalan
+tanpa dapat diakses.
+
+Fitur ini menjalankan shell GUI dan terpisah dari service di bawah. Gunakan
+service bila playback AP/timeline atau asosiasi aplikasi harus tetap berjalan
+secara independen dari WebView.
+
+## Startup background service
 
 Untuk pengguna release, buka **Pengaturan → Layanan latar belakang**. GUI yang
 sudah dipaketkan mendeteksi Linux, Windows, atau macOS dan menampilkan perintah

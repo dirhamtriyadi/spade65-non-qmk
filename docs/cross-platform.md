@@ -68,9 +68,12 @@ explicit `gui` command uses the same coordinator, so a second invocation does
 not fail with `Address already in use`. The port is claimed before the renderer
 loads, and activation requests received during startup are deferred until the
 window is ready. A foreign service on port 8765 is never stopped or taken over;
-startup fails with a clear message. Closing the desktop window or choosing
-**Quit application** stops the localhost server and the GUI process.
-Spade65 has no system-tray icon or minimize-to-tray mode. Browser mode behaves
+startup fails with a clear message. When **Settings → Desktop integration →
+Keep running in the system tray** is enabled and the desktop exposes a tray,
+closing the window hides it without stopping the localhost server. **Open
+Spade65** restores it; **Quit Spade65** in the tray or **Quit application** in
+the GUI stops the process. If a Linux session does not expose a tray, the option
+is disabled and closing the window exits normally. Browser mode behaves
 differently: closing the tab does not stop the server; choose **Quit
 application** or terminate the process in its terminal.
 
@@ -107,6 +110,11 @@ preserved at the following locations:
 - macOS: the persistent default Cocoa WebKit website data store managed by the
   operating system for bundle ID `io.github.dirhamtriyadi.spade65`; this backend
   does not expose a custom path through pywebview.
+
+The close-to-tray preference is native-shell state, not WebView data. It is
+stored in `${XDG_CONFIG_HOME:-~/.config}/spade65/desktop-settings.json` on
+Linux, `%APPDATA%\Spade65\desktop-settings.json` on Windows, and
+`~/Library/Application Support/Spade65/desktop-settings.json` on macOS.
 
 Browser mode uses the browser profile's storage and does not automatically share
 data with the WebView. Use library backup and restore to transfer it. Profile
@@ -182,7 +190,28 @@ application-specific WebView profile, or in the browser profile when fallback
 mode is used. See [`localization.md`](localization.md) for the extensible
 structure.
 
-## Background startup
+## Desktop login startup
+
+The native Settings page can enable **Start after sign-in** for the current
+user. It writes one OS-native, user-owned launcher and starts the same release
+with `gui --start-hidden`:
+
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/autostart/io.github.dirhamtriyadi.spade65.desktop`;
+- Windows: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\spade65-gui.cmd`;
+- macOS: `~/Library/LaunchAgents/io.github.dirhamtriyadi.spade65.gui.plist`.
+
+Disabling the switch removes only that Spade65 launcher. Move the AppImage,
+extracted Windows directory, or macOS application to its permanent location
+before enabling it. If the application later moves, Settings reports the stale
+launcher so it can be disabled and enabled again. Hidden startup is accepted
+only for the native desktop mode. If a Linux tray disappears between sessions,
+the application shows its window instead of leaving an inaccessible process.
+
+This starts the GUI shell; it is separate from the service below. Use the
+service when AP/timeline playback or application associations must continue
+independently of the WebView.
+
+## Background service startup
 
 For release users, open **Settings → Background service**. The packaged GUI
 detects Linux, Windows, or macOS and displays commands that invoke the release

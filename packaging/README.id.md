@@ -29,10 +29,13 @@ lalu keluar, alih-alih gagal karena port terpakai. Perintah eksplisit `gui`
 memakai coordinator yang sama. Kepemilikan port diklaim sebelum inisialisasi
 WebView, dan aktivasi yang tiba selama startup akan diantrekan sampai jendela
 tersedia. Service asing pada port 8765 tidak pernah dihentikan atau dianggap
-sebagai Spade65. Menutup jendela desktop atau memakai **Quit application** akan
-menutup jendela dan server localhost. Tidak ada ikon tray atau proses
-minimize-to-tray. Dalam mode browser, menutup tab saja membiarkan server tetap
-berjalan sampai **Quit application**, Ctrl+C, atau proses dihentikan.
+sebagai Spade65. Bila close-to-tray aktif dan tray native tersedia, menutup
+jendela desktop akan menyembunyikannya; bila tidak, aplikasi keluar. **Quit
+Spade65** pada tray atau **Keluar dari aplikasi** di GUI menutup jendela dan
+server localhost. Pengaturan dapat memasang startup login per pengguna yang
+menjalankan paket dengan `gui --start-hidden`. Dalam mode browser, menutup tab
+saja membiarkan server tetap berjalan sampai **Keluar dari aplikasi**, Ctrl+C,
+atau proses dihentikan.
 
 Proses berjendela tanpa console menulis stdout/stderr ke log launcher per
 pengguna dan menampilkan error startup native secara best-effort. Lokasi root

@@ -14,8 +14,11 @@ spade65ctl.py
         ├── spade65.application # ownership port + lifecycle GUI bersama
         ├── spade65.instance   # identitas/aktivasi instance localhost
         ├── spade65.gui        # API HTTP loopback + asset web
-        └── spade65.desktop    # lifecycle jendela PyWebView
-              └── spade65.web # HTML/CSS/JS + katalog locale
+        ├── spade65.desktop    # lifecycle jendela + bridge native PyWebView
+        ├── spade65.tray       # adapter tray Qt/WinForms/Cocoa
+        ├── spade65.desktop_preferences # preferensi shell native
+        ├── spade65.startup    # launcher login GUI + background service
+        └── spade65.web        # HTML/CSS/JS + katalog locale
 
 packaging/
   ├── build.py                 # dispatcher build manual sesuai OS host
@@ -35,7 +38,13 @@ Pemisahan ini disengaja:
   `Host`/`Origin` untuk menolak DNS rebinding, dan melayani API serta asset yang
   sama untuk WebView maupun browser.
 - `desktop.py` mengelola PyWebView, storage persisten, lifecycle server/window,
-  download, dan aktivasi instance yang sudah berjalan.
+  download, aktivasi instance yang sudah berjalan, serta API JavaScript sempit
+  untuk integrasi desktop.
+- `tray.py` terhubung ke toolkit yang sudah dipilih PyWebView: Qt pada Linux,
+  WinForms pada Windows, dan Cocoa pada macOS. Tidak ada toolkit tray kedua.
+- `desktop_preferences.py` menyimpan close-to-tray secara terpisah dari
+  `localStorage` WebView; `startup.py` menangani format launcher login GUI dan
+  background service.
 - `application.py` mengklaim port secara atomik, menyalakan server sebelum
   renderer, mengantrekan aktivasi selama window startup, dan berbagi alur yang
   sama antara executable tanpa argumen dan subcommand `gui`.
@@ -62,9 +71,13 @@ Linux. Cocoa WebKit memakai default website data store persisten yang dikelola
 macOS untuk bundle ID aplikasi, karena backend tersebut mengabaikan custom path
 pywebview. Pada Linux/macOS, `DesktopApi` memvalidasi JSON dan membuka dialog
 Save native untuk ekspor profil/library. Windows memakai handler download
-WebView2 pada UI thread; mode browser tetap memakai download Blob. Menutup
-jendela atau endpoint quit menghentikan server; tidak ada system tray. Mode
-browser dan `--no-browser` tetap tersedia melalui CLI.
+WebView2 pada UI thread; mode browser tetap memakai download Blob. Handler
+closing PyWebView sinkron hanya membatalkan close setelah adapter tray native
+berhasil terpasang; bila tidak, close keluar secara normal. Quit eksplisit
+menandai controller sebagai quitting sebelum menghancurkan jendela.
+`gui --start-hidden` dipakai launcher login per pengguna, dan kegagalan tray
+Linux memulihkan jendela yang terlihat. Mode browser dan `--no-browser` tetap
+tersedia melalui CLI.
 
 Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
 yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan

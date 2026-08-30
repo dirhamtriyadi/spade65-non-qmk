@@ -154,6 +154,35 @@ class ApplicationTests(unittest.TestCase):
                 application.launch_gui(mode="browser")
         server.server_close.assert_called_once_with()
 
+    def test_hidden_startup_is_forwarded_only_to_the_desktop_session(self) -> None:
+        server = SimpleNamespace(
+            on_activate=None,
+            on_quit=None,
+            shutdown=MagicMock(),
+            server_close=MagicMock(),
+        )
+        worker = MagicMock()
+        worker.is_alive.return_value = False
+        with (
+            patch.object(
+                application,
+                "_claim_server",
+                return_value=(server, "http://127.0.0.1:8765/"),
+            ),
+            patch.object(application, "_start_server", return_value=worker),
+            patch.object(application, "run_desktop_session") as desktop,
+        ):
+            application.launch_gui(start_hidden=True)
+        desktop.assert_called_once_with(
+            server=server,
+            url="http://127.0.0.1:8765/",
+            activation=server.on_activate,
+            start_hidden=True,
+        )
+
+        with self.assertRaisesRegex(ValueError, "only for the desktop"):
+            application.launch_gui(mode="browser", start_hidden=True)
+
     def test_server_is_closed_when_worker_thread_cannot_start(self) -> None:
         server = SimpleNamespace(
             on_activate=None,

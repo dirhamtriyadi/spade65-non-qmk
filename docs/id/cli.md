@@ -91,6 +91,7 @@ Dari terminal, mode berikut juga tersedia:
 spade65ctl gui
 spade65ctl gui --browser
 spade65ctl gui --no-browser
+spade65ctl gui --start-hidden
 ```
 
 Mode desktop default menjalankan antarmuka lokal di
@@ -99,13 +100,20 @@ membuka antarmuka yang sama di browser default. `--no-browser` hanya menjalankan
 server lokal; mode ini berguna pada desktop Linux ketika renderer tertanam tidak
 kompatibel dengan konfigurasi Wayland atau grafis saat ini.
 
+`--start-hidden` adalah mode startup desktop native yang dipakai launcher login
+per pengguna dari **Pengaturan → Integrasi desktop**. Opsi ini tidak dapat
+digabung dengan mode browser/server-only. Bila sesi Linux aktif tidak memiliki
+system tray yang dapat digunakan, aplikasi sengaja menampilkan jendelanya.
+
 Server hanya mendengarkan koneksi loopback. API-nya membutuhkan token sesi acak
 dan menolak nilai `Host` asing serta `Origin` yang tidak cocok. Peluncuran
 desktop kedua mengaktifkan aplikasi yang sudah berjalan, bukan mengambil port
 8765 lagi. Jika proses lain yang tidak terkait memakai port tersebut, Spade65
-melaporkan konflik dan tidak menghentikan proses itu. Menutup jendela desktop
-atau memilih **Quit application** menghentikan server. Dalam mode browser,
-menutup tab saja tidak menghentikan proses di terminal.
+melaporkan konflik dan tidak menghentikan proses itu. Bila close-to-tray aktif
+dan tray tersedia, menutup jendela desktop akan menyembunyikannya; bila tidak,
+close menghentikan server. Memilih **Keluar dari aplikasi** selalu menghentikan
+proses. Dalam mode browser, menutup tab saja tidak menghentikan proses di
+terminal.
 
 GUI dan CLI menggunakan implementasi protokol serta pemeriksaan keselamatan
 yang sama. GUI menambahkan profil, assignment tombol tiga layer, perekaman macro,
@@ -397,8 +405,9 @@ spade65ctl service run spade65-service.json
 
 Secara default, service hanya menjalankan efek AP dan timeline kustom. Service
 dapat menjaga pencahayaan streaming host tetap aktif setelah GUI ditutup serta
-memilih profil berdasarkan aplikasi aktif. Service tidak memiliki ikon tray.
-Pada Wayland, yang tidak menyediakan API jendela foreground portabel, fallback
+memilih profil berdasarkan aplikasi aktif. Service ini tidak memiliki ikon
+tray; system tray dimiliki proses GUI native yang terpisah. Pada Wayland, yang
+tidak menyediakan API jendela foreground portabel, fallback
 memilih rule pertama dengan proses yang sedang berjalan; urutan rule penting.
 
 Penulisan keymap/profil otomatis nonaktif secara default. Mengaktifkannya

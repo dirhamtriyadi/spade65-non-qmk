@@ -1,11 +1,13 @@
-"""Generate opt-in background launchers without modifying OS startup state."""
+"""Generate background-service and desktop login-startup integrations."""
 
 from __future__ import annotations
 
 import html
 import os
+import plistlib
 import shlex
 import sys
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 
@@ -27,6 +29,49 @@ def startup_filename(platform: str | None = None) -> str:
         "windows": "spade65-background.cmd",
         "macos": "com.spade65.background.plist",
     }[platform_family(platform)]
+
+
+def gui_startup_filename(platform: str | None = None) -> str:
+    """Return the per-user login-startup filename for the desktop GUI."""
+
+    return {
+        "linux": "io.github.dirhamtriyadi.spade65.desktop",
+        "windows": "spade65-gui.cmd",
+        "macos": "io.github.dirhamtriyadi.spade65.gui.plist",
+    }[platform_family(platform)]
+
+
+def default_gui_startup_path(
+    platform: str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    home: PurePath | str | None = None,
+) -> PurePath:
+    """Return the user-owned login-startup path for the desktop GUI."""
+
+    family = platform_family(platform)
+    environment = os.environ if environ is None else environ
+    path_type = PureWindowsPath if family == "windows" else PurePosixPath
+    user_home = path_type(Path.home() if home is None else home)
+    if family == "linux":
+        config_root = path_type(
+            environment.get("XDG_CONFIG_HOME") or user_home / ".config"
+        )
+        return config_root / "autostart" / gui_startup_filename(family)
+    if family == "windows":
+        roaming = path_type(
+            environment.get("APPDATA") or user_home / "AppData" / "Roaming"
+        )
+        return (
+            roaming
+            / "Microsoft"
+            / "Windows"
+            / "Start Menu"
+            / "Programs"
+            / "Startup"
+            / gui_startup_filename(family)
+        )
+    return user_home / "Library" / "LaunchAgents" / gui_startup_filename(family)
 
 
 def default_service_paths(
@@ -219,3 +264,183 @@ WantedBy=default.target
 </dict>
 </plist>
 """
+
+
+def _gui_startup_command(
+    platform: str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    executable: PurePath | str | None = None,
+    frozen: bool | None = None,
+) -> tuple[str, PurePath, tuple[str, ...]]:
+    family = platform_family(platform)
+    environment = os.environ if environ is None else environ
+    is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    path_type = PureWindowsPath if family == "windows" else PurePosixPath
+    selected_value: PurePath | str
+    if executable is not None:
+        selected_value = executable
+    elif is_frozen and family == "linux":
+        selected_value = environment.get("APPIMAGE") or sys.executable
+    else:
+        selected_value = sys.executable
+    selected = path_type(selected_value)
+
+    if family == "windows":
+        if is_frozen and selected.name.casefold() == "spade65cli.exe":
+            selected = selected.with_name("Spade65.exe")
+        elif not is_frozen:
+            selected = selected.with_name("pythonw.exe")
+
+    arguments = ("gui", "--start-hidden")
+    if not is_frozen:
+        arguments = ("-m", "spade65", *arguments)
+    return family, selected, arguments
+
+
+def _desktop_exec_argument(value: PurePath | str) -> str:
+    escaped = (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("`", "\\`")
+        .replace("$", "\\$")
+    )
+    return f'"{escaped}"'
+
+
+def _batch_argument(value: PurePath | str) -> str:
+    return '"' + str(value).replace("%", "%%") + '"'
+
+
+def render_gui_startup(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    executable: PurePath | str | None = None,
+    frozen: bool | None = None,
+) -> str:
+    """Render a login launcher that starts the desktop GUI in the tray."""
+
+    family, selected, arguments = _gui_startup_command(
+        platform,
+        environ=environ,
+        executable=executable,
+        frozen=frozen,
+    )
+    if family == "linux":
+        command = " ".join(
+            _desktop_exec_argument(value) for value in (selected, *arguments)
+        )
+        return f"""[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Spade65
+Comment=Start Spade65 Control Center in the system tray
+Exec={command}
+Terminal=false
+X-GNOME-Autostart-enabled=true
+"""
+    if family == "windows":
+        command = " ".join(_batch_argument(value) for value in (selected, *arguments))
+        return f'@echo off\nstart "" /b {command}\n'
+
+    payload = {
+        "Label": "io.github.dirhamtriyadi.spade65.gui",
+        "ProgramArguments": [str(selected), *arguments],
+        "RunAtLoad": True,
+        "KeepAlive": False,
+        "LimitLoadToSessionType": "Aqua",
+        "ProcessType": "Interactive",
+        "AssociatedBundleIdentifiers": ["io.github.dirhamtriyadi.spade65"],
+    }
+    return plistlib.dumps(payload, sort_keys=False).decode("utf-8")
+
+
+def gui_auto_start_status(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    home: PurePath | str | None = None,
+    executable: PurePath | str | None = None,
+    frozen: bool | None = None,
+    startup_path: Path | None = None,
+) -> dict[str, object]:
+    """Describe whether GUI login startup exists and targets this executable."""
+
+    family = platform_family(platform)
+    target = startup_path or Path(
+        default_gui_startup_path(family, environ=environ, home=home)
+    )
+    expected = render_gui_startup(
+        platform=family,
+        environ=environ,
+        executable=executable,
+        frozen=frozen,
+    )
+    enabled = target.is_file()
+    current = False
+    if enabled:
+        try:
+            current = target.read_text(encoding="utf-8") == expected
+        except (OSError, UnicodeError):
+            current = False
+    return {
+        "supported": True,
+        "enabled": enabled,
+        "current": current,
+        "path": str(target),
+        "platform": family,
+    }
+
+
+def set_gui_auto_start(
+    enabled: bool,
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    home: PurePath | str | None = None,
+    executable: PurePath | str | None = None,
+    frozen: bool | None = None,
+    startup_path: Path | None = None,
+) -> dict[str, object]:
+    """Enable or disable per-user GUI startup for the current login session."""
+
+    if not isinstance(enabled, bool):
+        raise ValueError("auto-start state must be a boolean")
+    family = platform_family(platform)
+    target = startup_path or Path(
+        default_gui_startup_path(family, environ=environ, home=home)
+    )
+    if enabled:
+        contents = render_gui_startup(
+            platform=family,
+            environ=environ,
+            executable=executable,
+            frozen=frozen,
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            text=True,
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(contents)
+            temporary.chmod(0o600)
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+    else:
+        target.unlink(missing_ok=True)
+    return gui_auto_start_status(
+        platform=family,
+        environ=environ,
+        home=home,
+        executable=executable,
+        frozen=frozen,
+        startup_path=target,
+    )

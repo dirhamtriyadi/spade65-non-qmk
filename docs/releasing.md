@@ -43,9 +43,12 @@ When launched without arguments, the built GUI executable serves localhost at
 local HTML, CSS, and JavaScript inside a WebView rather than a fully native
 widget interface. If the native backend is unavailable, the launcher opens a
 browser as a fallback. A second launch activates and restores the existing
-window. Closing the window or choosing **Quit application** stops the server;
-there is no system tray. WebView storage is persistent, and downloads for
-profile and library exports are enabled.
+window. Closing it hides the window when close-to-tray is enabled and the native
+tray attached; otherwise it exits. **Quit Spade65** in the tray and **Quit
+application** in the GUI always stop the server. The same package can install
+per-user GUI startup from Settings; login invokes `gui --start-hidden`. WebView
+storage is persistent, and downloads for profile and library exports are
+enabled.
 
 The Windows ZIP also includes `Spade65CLI.exe`, so CLI output and errors remain
 visible. On Linux and macOS, arguments passed to the same executable are

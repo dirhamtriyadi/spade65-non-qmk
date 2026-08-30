@@ -25,7 +25,7 @@ class CliTests(unittest.TestCase):
         with patch("spade65.application.launch_gui") as launch_gui:
             self.assertEqual(main(["gui", "--port", "0"]), 0)
         launch_gui.assert_called_once_with(
-            host="127.0.0.1", port=0, mode="desktop"
+            host="127.0.0.1", port=0, mode="desktop", start_hidden=False
         )
 
     def test_gui_can_force_browser_or_server_only_mode(self) -> None:
@@ -34,6 +34,13 @@ class CliTests(unittest.TestCase):
             self.assertEqual(main(["gui", "--no-browser", "--port", "0"]), 0)
         self.assertEqual(launch_gui.call_args_list[0].kwargs["mode"], "browser")
         self.assertEqual(launch_gui.call_args_list[1].kwargs["mode"], "server")
+
+    def test_gui_can_start_hidden_for_login_startup(self) -> None:
+        with patch("spade65.application.launch_gui") as launch_gui:
+            self.assertEqual(main(["gui", "--start-hidden", "--port", "0"]), 0)
+        launch_gui.assert_called_once_with(
+            host="127.0.0.1", port=0, mode="desktop", start_hidden=True
+        )
 
     def test_profile_create_validate_and_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

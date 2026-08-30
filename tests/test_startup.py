@@ -1,3 +1,4 @@
+import plistlib
 import tempfile
 import unittest
 from os import environ
@@ -5,9 +6,14 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest.mock import patch
 
 from spade65.startup import (
+    default_gui_startup_path,
     default_service_paths,
+    gui_auto_start_status,
+    gui_startup_filename,
     release_service_setup,
+    render_gui_startup,
     render_startup,
+    set_gui_auto_start,
     startup_filename,
 )
 
@@ -155,6 +161,121 @@ class StartupTests(unittest.TestCase):
         )
         self.assertIn("Spade65.exe", launcher)
         self.assertNotIn("Spade65CLI.exe", launcher)
+
+    def test_gui_startup_paths_are_owned_by_the_current_user(self):
+        linux = default_gui_startup_path(
+            "linux",
+            environ={"XDG_CONFIG_HOME": "/config"},
+            home=PurePosixPath("/home/test"),
+        )
+        windows = default_gui_startup_path(
+            "windows",
+            environ={"APPDATA": "C:/Users/test/Roaming"},
+            home=PureWindowsPath("C:/Users/test"),
+        )
+        macos = default_gui_startup_path(
+            "macos", environ={}, home=PurePosixPath("/Users/test")
+        )
+
+        self.assertEqual(
+            linux,
+            PurePosixPath(
+                "/config/autostart/io.github.dirhamtriyadi.spade65.desktop"
+            ),
+        )
+        self.assertEqual(windows.name, "spade65-gui.cmd")
+        self.assertEqual(
+            macos,
+            PurePosixPath(
+                "/Users/test/Library/LaunchAgents/"
+                "io.github.dirhamtriyadi.spade65.gui.plist"
+            ),
+        )
+        self.assertEqual(
+            gui_startup_filename("linux"),
+            "io.github.dirhamtriyadi.spade65.desktop",
+        )
+
+    def test_gui_login_launchers_start_the_desktop_hidden(self):
+        linux = render_gui_startup(
+            platform="linux",
+            executable=PurePosixPath("/opt/Spade65/Spade65"),
+            frozen=True,
+        )
+        windows = render_gui_startup(
+            platform="windows",
+            executable=PureWindowsPath("C:/Python/python.exe"),
+            frozen=False,
+        )
+        macos = render_gui_startup(
+            platform="macos",
+            executable=PurePosixPath(
+                "/Applications/Spade65.app/Contents/MacOS/Spade65"
+            ),
+            frozen=True,
+        )
+        macos_payload = plistlib.loads(macos.encode("utf-8"))
+
+        self.assertIn('"gui" "--start-hidden"', linux)
+        self.assertIn("Terminal=false", linux)
+        self.assertIn("pythonw.exe", windows)
+        self.assertIn('"-m" "spade65" "gui" "--start-hidden"', windows)
+        self.assertEqual(
+            macos_payload["ProgramArguments"],
+            [
+                "/Applications/Spade65.app/Contents/MacOS/Spade65",
+                "gui",
+                "--start-hidden",
+            ],
+        )
+        self.assertTrue(macos_payload["RunAtLoad"])
+        self.assertFalse(macos_payload["KeepAlive"])
+        self.assertEqual(macos_payload["ProcessType"], "Interactive")
+        self.assertEqual(
+            macos_payload["AssociatedBundleIdentifiers"],
+            ["io.github.dirhamtriyadi.spade65"],
+        )
+
+    def test_gui_appimage_startup_uses_the_persistent_image_path(self):
+        launcher = render_gui_startup(
+            platform="linux",
+            environ={"APPIMAGE": "/home/user/Applications/Spade65.AppImage"},
+            frozen=True,
+        )
+        self.assertIn("/home/user/Applications/Spade65.AppImage", launcher)
+
+    def test_gui_auto_start_can_be_enabled_refreshed_and_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "spade65.desktop"
+            enabled = set_gui_auto_start(
+                True,
+                platform="linux",
+                executable=PurePosixPath("/opt/Spade65/Spade65"),
+                frozen=True,
+                startup_path=target,
+            )
+            self.assertTrue(enabled["enabled"])
+            self.assertTrue(enabled["current"])
+
+            target.write_text("old launcher\n", encoding="utf-8")
+            stale = gui_auto_start_status(
+                platform="linux",
+                executable=PurePosixPath("/opt/Spade65/Spade65"),
+                frozen=True,
+                startup_path=target,
+            )
+            self.assertTrue(stale["enabled"])
+            self.assertFalse(stale["current"])
+
+            disabled = set_gui_auto_start(
+                False,
+                platform="linux",
+                executable=PurePosixPath("/opt/Spade65/Spade65"),
+                frozen=True,
+                startup_path=target,
+            )
+            self.assertFalse(disabled["enabled"])
+            self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":
