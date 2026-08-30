@@ -208,6 +208,17 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("node tests/layout_state.test.js", workflow)
         self.assertIn("group: release-${{", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+        self.assertEqual(workflow.count("retention-days: 1"), 3)
+
+        cleanup = (
+            ROOT / ".github" / "workflows" / "release-artifact-cleanup.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("workflows: [release]", cleanup)
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", cleanup)
+        self.assertIn("actions: write", cleanup)
+        self.assertIn("actions/runs/${run_id}/artifacts", cleanup)
+        self.assertIn("actions/artifacts/${artifact_id}", cleanup)
+        self.assertIn("workflows/release.yml/runs?status=completed", cleanup)
 
     def test_linux_packager_pins_tool_and_embedded_runtime(self):
         script = (ROOT / "packaging" / "build_linux.sh").read_text(

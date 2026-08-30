@@ -26,6 +26,15 @@ di-smoke-test tanpa publish. Workflow rilis tetap membangun ulang ketiga asset
 dari commit tag yang immutable; hasil preflight tidak dipakai ulang sebagai
 release asset.
 
+Job platform memindahkan hasil build ke job publish melalui artifact sementara
+GitHub Actions. Setiap artifact sementara memiliki retensi satu hari sebagai
+fallback pemulihan kegagalan. Setelah run release berhasil, workflow
+[`release-artifact-cleanup.yml`](../../.github/workflows/release-artifact-cleanup.yml)
+menghapus salinan sementara tersebut. Mode manual/bootstrap-nya juga menyapu
+artifact dari run release lama yang sudah selesai. Asset GitHub Release yang
+sudah dipublikasikan merupakan objek terpisah dan tidak pernah menjadi target
+cleanup ini.
+
 Executable GUI hasil build membuka localhost di `127.0.0.1:8765` dalam jendela
 standalone PyWebView ketika dijalankan tanpa argumen. UI tetap berupa
 HTML/CSS/JavaScript lokal di dalam WebView, bukan widget native penuh. Jika

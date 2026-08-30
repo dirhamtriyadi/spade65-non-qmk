@@ -25,6 +25,14 @@ DMG are built and smoke-tested without being published. The release workflow
 still rebuilds all three assets from the immutable tagged commit; it does not
 reuse preflight output as release assets.
 
+Platform jobs transfer their output to the publish job through temporary
+GitHub Actions artifacts. Each temporary artifact has a one-day retention as a
+failure-recovery fallback. After a successful release run, the
+[`release-artifact-cleanup.yml`](../.github/workflows/release-artifact-cleanup.yml)
+workflow deletes those temporary copies. Its manual/bootstrap mode also sweeps
+artifacts from older completed release runs. Published GitHub Release assets are
+separate objects and are never targeted by this cleanup.
+
 When launched without arguments, the built GUI executable serves localhost at
 `127.0.0.1:8765` and displays it in a standalone PyWebView window. The UI remains
 local HTML, CSS, and JavaScript inside a WebView rather than a fully native

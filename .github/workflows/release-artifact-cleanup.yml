@@ -1,0 +1,71 @@
+name: release artifact cleanup
+
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-artifact-cleanup.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-artifact-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete temporary release workflow artifacts
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          delete_run_artifacts() {
+            local run_id="$1"
+            local deleted=0
+            while IFS= read -r artifact_id; do
+              [[ -n "$artifact_id" ]] || continue
+              gh api --method DELETE \
+                "repos/${GH_REPO}/actions/artifacts/${artifact_id}"
+              deleted=$((deleted + 1))
+            done < <(
+              gh api --paginate \
+                "repos/${GH_REPO}/actions/runs/${run_id}/artifacts?per_page=100" \
+                --jq '.artifacts[].id'
+            )
+            echo "Deleted ${deleted} temporary artifact(s) from run ${run_id}."
+          }
+
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            [[ "$TARGET_RUN_ID" =~ ^[0-9]+$ ]]
+            delete_run_artifacts "$TARGET_RUN_ID"
+            exit 0
+          fi
+
+          while IFS= read -r run_id; do
+            [[ "$run_id" =~ ^[0-9]+$ ]] || continue
+            delete_run_artifacts "$run_id"
+          done < <(
+            gh api --paginate \
+              "repos/${GH_REPO}/actions/workflows/release.yml/runs?status=completed&per_page=100" \
+              --jq '.workflow_runs[].id'
+          )
