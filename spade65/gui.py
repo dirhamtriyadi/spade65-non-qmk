@@ -6,6 +6,7 @@ import json
 import re
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -68,6 +69,27 @@ EXTERNAL_URLS = {
     "https://github.com/dirhamtriyadi/spade65-non-qmk",
     "https://github.com/dirhamtriyadi/spade65-non-qmk/releases",
 }
+
+
+def open_external_url(url: str) -> bool:
+    """Open an allowlisted URL with the host operating system's browser."""
+
+    if url not in EXTERNAL_URLS:
+        raise ValueError("external URL is not allowed")
+    try:
+        if webbrowser.open_new_tab(url):
+            return True
+    except (OSError, webbrowser.Error):
+        pass
+    try:
+        if sys.platform == "win32":
+            os.startfile(url)  # type: ignore[attr-defined]
+            return True
+        command = ["open", url] if sys.platform == "darwin" else ["xdg-open", url]
+        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (FileNotFoundError, OSError):
+        return False
 
 
 def _device_summary(device: Device) -> dict[str, object]:
@@ -157,9 +179,7 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         raise ValueError(f"unknown or unsafe GUI action: {action}")
     if action == "open-url":
         url = payload.get("url")
-        if url not in EXTERNAL_URLS:
-            raise ValueError("external URL is not allowed")
-        return {"opened": bool(webbrowser.open(url))}
+        return {"opened": open_external_url(url)}
     path = payload.get("device") or None
     if action == "vendor-convert":
         from .vendor import convert_vendor_document
