@@ -89,6 +89,10 @@ Ready-to-run packages are published on
 | macOS universal | `Spade65-macOS-universal.dmg` | Runs on Intel and Apple silicon |
 
 Opening the packaged application without arguments launches the desktop GUI.
+Release users can configure per-user background startup from **Settings →
+Background service**; the page generates commands for the package and operating
+system currently in use. Source-only `spade65ctl` setup remains in the
+[host-features guide](docs/host-features.md).
 The Windows package is not code-signed, and the macOS package is not notarized,
 so the operating system may show a security warning. See the
 [cross-platform guide](docs/cross-platform.md) for installation notes and the

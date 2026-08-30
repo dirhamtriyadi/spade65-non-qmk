@@ -381,6 +381,12 @@ keyboard. Tinjau dan validasi profil hasil konversi sebelum perintah apply.
 
 ## Efek latar belakang dan asosiasi aplikasi
 
+Pengguna release sebaiknya memakai **Pengaturan → Layanan latar belakang** pada
+GUI yang sudah dipaketkan; halaman tersebut menyediakan executable AppImage,
+`Spade65CLI.exe`, atau aplikasi macOS yang benar dan memisahkan pembuatan
+konfigurasi dari aktivasi. Notasi `spade65ctl` berikut berlaku untuk instalasi
+dari source atau paket Python.
+
 Buat konfigurasi service host, edit path profil dan asosiasi nama proses, lalu
 jalankan:
 

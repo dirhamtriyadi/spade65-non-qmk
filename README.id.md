@@ -90,9 +90,13 @@ Paket siap jalan tersedia di
 | Linux x86_64 | `Spade65-Linux-x86_64.AppImage` | Dibangun pada Ubuntu 22.04; memakai library grafis dan desktop dari host |
 | macOS universal | `Spade65-macOS-universal.dmg` | Berjalan pada Intel dan Apple silicon |
 
-Menjalankan aplikasi paket tanpa argumen akan membuka GUI desktop. Paket
-Windows belum ditandatangani dan paket macOS belum dinotarisasi, sehingga sistem
-operasi dapat menampilkan peringatan keamanan. Lihat
+Menjalankan aplikasi paket tanpa argumen akan membuka GUI desktop. Pengguna
+release dapat mengatur startup latar belakang milik pengguna melalui
+**Pengaturan → Layanan latar belakang**; halaman tersebut menghasilkan perintah
+untuk paket dan sistem operasi yang sedang dipakai. Setup `spade65ctl` khusus
+source tetap tersedia di [panduan fitur host](docs/id/host-features.md).
+Paket Windows belum ditandatangani dan paket macOS belum dinotarisasi, sehingga
+sistem operasi dapat menampilkan peringatan keamanan. Lihat
 [panduan lintas platform](docs/id/cross-platform.md) untuk catatan instalasi dan
 [panduan rilis](docs/id/releasing.md) untuk build CI maupun manual.
 

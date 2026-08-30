@@ -36,7 +36,31 @@ flash firmware.
 
 ## Background service dan asosiasi aplikasi
 
-Buat konfigurasi awal:
+### Paket release (direkomendasikan)
+
+Buka **Pengaturan → Layanan latar belakang** pada aplikasi yang sudah
+dipaketkan. Halaman tersebut mendeteksi sistem operasi dan executable release
+yang sedang digunakan, lalu menampilkan dua blok perintah terpisah:
+
+1. Membuat konfigurasi service milik pengguna.
+2. Setelah konfigurasi diedit, memasang dan mengaktifkan integrasi startup milik
+   pengguna.
+
+Perintah yang dihasilkan memakai AppImage aktif di Linux, `Spade65CLI.exe` dari
+release Windows yang sudah diekstrak, atau executable di dalam `Spade65.app`
+yang sudah dipasang pada macOS. Perintah tersebut tidak bergantung pada source
+checkout atau instalasi global command `spade65ctl`.
+
+Pindahkan AppImage, direktori hasil ekstraksi Windows, atau aplikasi macOS ke
+lokasi permanen terlebih dahulu. Membuka halaman Pengaturan atau menyalin
+perintah tidak mengubah startup OS. Pengguna harus meninjau dan menjalankan
+setiap blok secara eksplisit. Aktivasi Windows berlaku saat login berikutnya;
+systemd Linux dan LaunchAgent macOS dimulai oleh blok kedua.
+
+### Instalasi dari source
+
+Perintah `spade65ctl` berikut hanya untuk instalasi dari source atau paket
+Python. Buat konfigurasi awal:
 
 ```bash
 mkdir -p ~/.config/spade65
@@ -61,8 +85,8 @@ aplikasi juga menulis keymap, dua izin harus aktif sekaligus:
 1. `"allow_profile_writes": true` di file config.
 2. Flag runtime `--allow-profile-writes`.
 
-Semua write tetap diperiksa terhadap HID descriptor. Launcher untuk OS aktif
-dapat dibuat tanpa langsung memasangnya:
+Semua write tetap diperiksa terhadap HID descriptor. Dari instalasi source,
+launcher untuk OS aktif dapat dibuat tanpa langsung memasangnya:
 
 ```bash
 spade65ctl service integration ~/.config/spade65/default.json launcher-output

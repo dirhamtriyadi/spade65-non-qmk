@@ -170,6 +170,16 @@ class I18nTests(unittest.TestCase):
             "keymap.winRestored",
             "keymap.wasdSwapped",
             "keymap.wasdRestored",
+            *(f"service.platform.{name}" for name in (
+                "linux",
+                "windows",
+                "macos",
+            )),
+            *(f"service.activateHint.{name}" for name in (
+                "linux",
+                "windows",
+                "macos",
+            )),
         }
         self.assertLessEqual(dynamic_keys, set(english))
 

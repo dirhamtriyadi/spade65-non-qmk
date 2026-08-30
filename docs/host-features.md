@@ -35,7 +35,31 @@ transport as AP mode. Timeline data is never written to firmware flash.
 
 ## Background service and application associations
 
-Create an initial configuration:
+### Release packages (recommended)
+
+Open **Settings → Background service** in the packaged application. The page
+detects the current operating system and release executable, then shows two
+separate command blocks:
+
+1. Create the per-user service configuration.
+2. After editing that configuration, install and activate the per-user startup
+   integration.
+
+The generated commands invoke the current AppImage on Linux,
+`Spade65CLI.exe` from the extracted Windows release, or the executable inside
+the installed `Spade65.app` on macOS. They do not depend on a source checkout or
+the `spade65ctl` command being installed globally.
+
+Move the AppImage, extracted Windows directory, or macOS application to its
+permanent location first. Opening the Settings page or copying a command does
+not alter operating-system startup. The user must review and run each block
+explicitly. Windows activation takes effect at the next sign-in; Linux systemd
+and the macOS LaunchAgent are started by the second block.
+
+### Source installations
+
+The `spade65ctl` commands below are for a source or Python-package installation
+only. Create an initial configuration:
 
 ```bash
 mkdir -p ~/.config/spade65
@@ -61,8 +85,9 @@ switch to write a keymap as well, both permissions must be enabled:
 1. `"allow_profile_writes": true` in the configuration file.
 2. The `--allow-profile-writes` runtime flag.
 
-Every write is still checked against the HID descriptor. A launcher for the
-current operating system can be generated without installing it immediately:
+Every write is still checked against the HID descriptor. From a source
+installation, a launcher for the current operating system can be generated
+without installing it immediately:
 
 ```bash
 spade65ctl service integration ~/.config/spade65/default.json launcher-output

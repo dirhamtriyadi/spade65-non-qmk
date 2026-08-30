@@ -4,10 +4,94 @@ from os import environ
 from pathlib import Path
 from unittest.mock import patch
 
-from spade65.startup import render_startup, startup_filename
+from spade65.startup import (
+    default_service_paths,
+    release_service_setup,
+    render_startup,
+    startup_filename,
+)
 
 
 class StartupTests(unittest.TestCase):
+    def test_default_service_paths_are_user_owned(self):
+        linux = default_service_paths(
+            "linux", environ={"XDG_CONFIG_HOME": "/config"}, home=Path("/home/test")
+        )
+        windows = default_service_paths(
+            "windows",
+            environ={"APPDATA": "C:/Users/test/Roaming"},
+            home=Path("C:/Users/test"),
+        )
+        macos = default_service_paths("macos", environ={}, home=Path("/Users/test"))
+
+        self.assertEqual(linux[0], Path("/config/spade65/background.json"))
+        self.assertEqual(linux[1].name, "spade65-background.service")
+        self.assertEqual(windows[1].name, "spade65-background.cmd")
+        self.assertEqual(
+            macos[1],
+            Path("/Users/test/Library/LaunchAgents/com.spade65.background.plist"),
+        )
+
+    def test_release_linux_setup_uses_current_appimage(self):
+        setup = release_service_setup(
+            "linux",
+            environ={
+                "APPIMAGE": "/home/test/Applications/Spade65.AppImage",
+                "XDG_CONFIG_HOME": "/home/test/.config",
+            },
+            home=Path("/home/test"),
+            frozen=True,
+        )
+
+        self.assertTrue(setup["packaged"])
+        self.assertIn(
+            "Spade65.AppImage service example", setup["prepare_commands"]
+        )
+        self.assertIn("systemctl --user enable --now", setup["activate_commands"])
+        self.assertNotIn("spade65ctl", setup["prepare_commands"])
+        self.assertNotIn("spade65ctl", setup["activate_commands"])
+
+    def test_release_windows_setup_uses_console_executable(self):
+        setup = release_service_setup(
+            "windows",
+            environ={"APPDATA": "C:/Users/test/AppData/Roaming"},
+            home=Path("C:/Users/test"),
+            executable=Path("C:/Spade65/Spade65.exe"),
+            frozen=True,
+        )
+
+        self.assertIn("Spade65CLI.exe", setup["prepare_commands"])
+        self.assertIn("Spade65CLI.exe", setup["activate_commands"])
+        self.assertIn(
+            "Windows/Start Menu/Programs/Startup",
+            setup["launcher_path"].replace("\\", "/"),
+        )
+        self.assertNotIn("spade65ctl", setup["prepare_commands"])
+        self.assertNotIn("spade65ctl", setup["activate_commands"])
+
+    def test_release_macos_setup_uses_launch_agent(self):
+        setup = release_service_setup(
+            "macos",
+            environ={},
+            home=Path("/Users/test"),
+            executable=Path("/Applications/Spade65.app/Contents/MacOS/Spade65"),
+            frozen=True,
+        )
+
+        self.assertIn("launchctl bootstrap", setup["activate_commands"])
+        self.assertIn(
+            "Spade65.app/Contents/MacOS/Spade65", setup["prepare_commands"]
+        )
+
+    def test_source_setup_keeps_commands_out_of_gui_metadata(self):
+        setup = release_service_setup(
+            "linux", environ={}, home=Path("/home/test"), frozen=False
+        )
+
+        self.assertFalse(setup["packaged"])
+        self.assertEqual(setup["prepare_commands"], "")
+        self.assertEqual(setup["activate_commands"], "")
+
     def test_platform_specific_filenames(self):
         self.assertEqual(startup_filename("linux"), "spade65-background.service")
         self.assertEqual(startup_filename("windows"), "spade65-background.cmd")

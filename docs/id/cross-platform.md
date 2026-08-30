@@ -179,7 +179,14 @@ khusus aplikasi, atau di profil browser ketika fallback dipakai; lihat
 
 ## Background startup
 
-Buat config service, lalu generator launcher untuk OS yang sedang digunakan:
+Untuk pengguna release, buka **Pengaturan → Layanan latar belakang**. GUI yang
+sudah dipaketkan mendeteksi Linux, Windows, atau macOS dan menampilkan perintah
+yang memakai executable release aktif. Pembuatan konfigurasi dipisahkan dari
+aktivasi startup agar contoh path proses dan profil dapat diedit terlebih dahulu.
+Pindahkan paket release ke lokasi permanen sebelum menjalankan perintah tersebut.
+
+Bentuk `spade65ctl` berikut hanya untuk instalasi dari source atau paket Python.
+Buat config service, lalu buat launcher untuk OS yang sedang digunakan:
 
 ```bash
 spade65ctl service example spade65-service.json
@@ -193,7 +200,9 @@ spade65ctl service integration spade65-service.json launcher-output
 
 Generator hanya menulis file output yang diminta; tidak mengubah startup OS
 secara otomatis. Pada macOS, asosiasi aplikasi dapat memerlukan izin
-Automation/Accessibility untuk membaca aplikasi frontmost.
+Automation/Accessibility untuk membaca aplikasi frontmost. Lihat [panduan fitur
+host](host-features.md) untuk path khusus release, alur aktivasi, dan kontrol
+keamanannya.
 
 ## Data persisten dan data host
 

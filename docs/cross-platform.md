@@ -184,6 +184,13 @@ structure.
 
 ## Background startup
 
+For release users, open **Settings → Background service**. The packaged GUI
+detects Linux, Windows, or macOS and displays commands that invoke the release
+executable actually in use. It separates configuration creation from startup
+activation so the example process and profile paths can be edited first. Move
+the release package to a permanent location before running those commands.
+
+The following `spade65ctl` form is for source or Python-package installations.
 Create a service configuration, then generate a launcher for the current
 operating system:
 
@@ -200,6 +207,8 @@ spade65ctl service integration spade65-service.json launcher-output
 The generator only writes the requested output file; it does not modify
 operating-system startup automatically. On macOS, application associations may
 require Automation/Accessibility permission to read the frontmost application.
+See the [host-features guide](host-features.md) for the release-specific paths,
+activation flow, and safety controls.
 
 ## Persistent device and host data
 

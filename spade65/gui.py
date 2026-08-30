@@ -53,6 +53,7 @@ from .protocol import (
     streaming_rgb_reports,
 )
 from .settings import GUI_HOST, GUI_PORT
+from .startup import release_service_setup
 
 
 WRITE_LOCK = threading.Lock()
@@ -98,6 +99,7 @@ def gui_metadata() -> dict[str, object]:
         "profile": profile_template(),
         "firmware_update": False,
         "safe_actions": sorted(SAFE_ACTIONS),
+        "service_setup": release_service_setup(),
     }
 
 

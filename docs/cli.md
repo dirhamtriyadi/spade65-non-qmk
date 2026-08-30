@@ -376,6 +376,11 @@ keyboard. Review and validate the converted profile before any apply command.
 
 ## Background effects and application associations
 
+Release users should use **Settings → Background service** in the packaged GUI;
+it supplies the correct AppImage, `Spade65CLI.exe`, or macOS application
+executable and separates configuration from activation. The `spade65ctl`
+notation below applies to source or Python-package installations.
+
 Create a host-service configuration, edit its profile paths and process-name
 associations, then run it:
 

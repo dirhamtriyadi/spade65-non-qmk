@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import html
 import os
+import shlex
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 
@@ -25,6 +27,132 @@ def startup_filename(platform: str | None = None) -> str:
         "windows": "spade65-background.cmd",
         "macos": "com.spade65.background.plist",
     }[platform_family(platform)]
+
+
+def default_service_paths(
+    platform: str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    home: Path | None = None,
+) -> tuple[Path, Path]:
+    """Return user-owned config and startup-integration paths for a platform."""
+
+    family = platform_family(platform)
+    environment = os.environ if environ is None else environ
+    user_home = Path.home() if home is None else home
+    if family == "linux":
+        config_root = Path(environment.get("XDG_CONFIG_HOME") or user_home / ".config")
+        return (
+            config_root / "spade65" / "background.json",
+            config_root / "systemd" / "user" / startup_filename(family),
+        )
+    if family == "windows":
+        roaming = Path(
+            environment.get("APPDATA") or user_home / "AppData" / "Roaming"
+        )
+        return (
+            roaming / "Spade65" / "background.json",
+            roaming
+            / "Microsoft"
+            / "Windows"
+            / "Start Menu"
+            / "Programs"
+            / "Startup"
+            / startup_filename(family),
+        )
+    return (
+        user_home / "Library" / "Application Support" / "Spade65" / "background.json",
+        user_home / "Library" / "LaunchAgents" / startup_filename(family),
+    )
+
+
+def _powershell_quote(value: Path | str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def release_service_setup(
+    platform: str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    home: Path | None = None,
+    executable: Path | None = None,
+    frozen: bool | None = None,
+) -> dict[str, object]:
+    """Describe package-specific service setup without changing host startup."""
+
+    family = platform_family(platform)
+    environment = os.environ if environ is None else environ
+    is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
+    config, launcher = default_service_paths(
+        family, environ=environment, home=home
+    )
+    result: dict[str, object] = {
+        "platform": family,
+        "packaged": is_frozen,
+        "config_path": str(config),
+        "launcher_path": str(launcher),
+        "prepare_commands": "",
+        "activate_commands": "",
+    }
+    if not is_frozen:
+        return result
+
+    selected = executable
+    if selected is None and family == "linux":
+        selected = Path(environment.get("APPIMAGE") or sys.executable)
+    selected = (selected or Path(sys.executable)).expanduser()
+    if family == "windows" and selected.name.casefold() == "spade65.exe":
+        selected = selected.with_name("Spade65CLI.exe")
+
+    if family == "windows":
+        exe = _powershell_quote(selected)
+        config_value = _powershell_quote(config)
+        launcher_value = _powershell_quote(launcher)
+        prepare_commands = [
+            f"New-Item -ItemType Directory -Force -Path {_powershell_quote(config.parent)}",
+            (
+                f"if (-not (Test-Path {config_value})) "
+                f"{{ & {exe} service example {config_value} }}"
+            ),
+        ]
+        activate_commands = [
+            (
+                f"& {exe} service integration {config_value} "
+                f"{launcher_value} --force"
+            ),
+        ]
+    else:
+        exe = shlex.quote(str(selected))
+        config_value = shlex.quote(str(config))
+        launcher_value = shlex.quote(str(launcher))
+        prepare_commands = [
+            f"mkdir -p {shlex.quote(str(config.parent))} {shlex.quote(str(launcher.parent))}",
+            f"test -f {config_value} || {exe} service example {config_value}",
+        ]
+        activate_commands = [
+            (
+                f"{exe} service integration {config_value} "
+                f"{launcher_value} --force"
+            ),
+        ]
+        if family == "linux":
+            activate_commands.extend(
+                (
+                    "systemctl --user daemon-reload",
+                    f"systemctl --user enable --now {startup_filename(family)}",
+                )
+            )
+        else:
+            label = "com.spade65.background"
+            activate_commands.extend(
+                (
+                    f"launchctl bootout gui/$(id -u)/{label} 2>/dev/null || true",
+                    f"launchctl bootstrap gui/$(id -u) {launcher_value}",
+                )
+            )
+    result["prepare_commands"] = "\n".join(prepare_commands)
+    result["activate_commands"] = "\n".join(activate_commands)
+    return result
 
 
 def render_startup(
