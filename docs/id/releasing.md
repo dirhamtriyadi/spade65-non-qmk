@@ -35,6 +35,11 @@ artifact dari run release lama yang sudah selesai. Asset GitHub Release yang
 sudah dipublikasikan merupakan objek terpisah dan tidak pernah menjadi target
 cleanup ini.
 
+[`Jenkinsfile`](../../Jenkinsfile) di root menyediakan fallback independen dan
+opt-in untuk matriks test, paket native, serta publikasi GitHub Release dengan
+guard yang sama. Setup controller, agent, credential, keamanan, dan penyimpanan
+tersedia di [panduan CI/CD Jenkins](jenkins.md).
+
 Executable GUI hasil build membuka localhost di `127.0.0.1:8765` dalam jendela
 standalone PyWebView ketika dijalankan tanpa argumen. UI tetap berupa
 HTML/CSS/JavaScript lokal di dalam WebView, bukan widget native penuh. Jika

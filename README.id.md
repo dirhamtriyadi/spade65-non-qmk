@@ -152,6 +152,7 @@ sebagai verifikasi perangkat fisik.
 - [Panduan pengembangan](docs/id/development.md)
 - [Panduan lokalisasi](docs/id/localization.md)
 - [Panduan rilis dan build manual](docs/id/releasing.md)
+- [Jalur cadangan CI/CD Jenkins](docs/id/jenkins.md)
 - [Detail packaging desktop](packaging/README.id.md)
 
 English adalah bahasa dokumentasi kanonis. Terjemahan Bahasa Indonesia yang

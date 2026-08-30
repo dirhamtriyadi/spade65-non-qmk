@@ -149,6 +149,7 @@ device verification.
 - [Development guide](docs/development.md)
 - [Localization guide](docs/localization.md)
 - [Release and manual-build guide](docs/releasing.md)
+- [Jenkins CI/CD fallback](docs/jenkins.md)
 - [Desktop packaging details](packaging/README.md)
 
 English is the canonical documentation language. Maintained Indonesian

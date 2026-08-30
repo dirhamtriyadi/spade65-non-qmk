@@ -220,6 +220,49 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("actions/artifacts/${artifact_id}", cleanup)
         self.assertIn("workflows/release.yml/runs?status=completed", cleanup)
 
+    def test_jenkins_fallback_keeps_native_release_guardrails(self):
+        pipeline = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+
+        self.assertIn("agent none", pipeline)
+        self.assertIn("skipDefaultCheckout(true)", pipeline)
+        self.assertIn("disableConcurrentBuilds()", pipeline)
+        self.assertIn("buildDiscarder(logRotator(", pipeline)
+        self.assertIn("artifactNumToKeepStr: '3'", pipeline)
+        self.assertIn("name: 'BUILD_DESKTOP'", pipeline)
+        self.assertIn("defaultValue: false", pipeline)
+        self.assertIn("name: 'PUBLISH_RELEASE'", pipeline)
+        self.assertIn("PUBLISH_RELEASE requires RELEASE_TAG", pipeline)
+        self.assertIn("Publishing is forbidden from pull-request jobs", pipeline)
+        self.assertIn("allowed only from the main branch job", pipeline)
+
+        self.assertIn("name 'PLATFORM'", pipeline)
+        self.assertIn("values 'linux', 'windows', 'macos'", pipeline)
+        self.assertIn("name 'PYTHON_VERSION'", pipeline)
+        self.assertIn("values '3.10', '3.13'", pipeline)
+        for label in ("linux", "windows", "macos"):
+            self.assertIn(f"agent {{ label '{label}' }}", pipeline)
+
+        self.assertIn("SPADE65_STRICT_LINUX_LEGAL = '1'", pipeline)
+        self.assertIn("python3.13 packaging/check_version.py", pipeline)
+        self.assertEqual(pipeline.count("packaging/build.py"), 2)
+        self.assertIn(r"packaging\build.py", pipeline)
+        for artifact in build.ARTIFACTS.values():
+            self.assertIn(artifact, pipeline)
+        self.assertIn("archiveArtifacts(", pipeline)
+        self.assertIn("fingerprint: true", pipeline)
+
+        self.assertIn(
+            "GH_REPO = 'dirhamtriyadi/spade65-non-qmk'", pipeline
+        )
+        self.assertEqual(
+            pipeline.count("credentialsId: 'spade65-github-token'"), 2
+        )
+        self.assertIn("already published; refusing overwrite", pipeline)
+        self.assertIn("Tag ${RELEASE_TAG} moved after validation", pipeline)
+        self.assertIn("Unexpected release remote", pipeline)
+        self.assertIn("Draft contains unexpected assets", pipeline)
+        self.assertIn("test \"$asset_count\" -eq 3", pipeline)
+
     def test_linux_packager_pins_tool_and_embedded_runtime(self):
         script = (ROOT / "packaging" / "build_linux.sh").read_text(
             encoding="utf-8"

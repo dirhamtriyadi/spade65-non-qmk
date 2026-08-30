@@ -33,6 +33,11 @@ workflow deletes those temporary copies. Its manual/bootstrap mode also sweeps
 artifacts from older completed release runs. Published GitHub Release assets are
 separate objects and are never targeted by this cleanup.
 
+The root [`Jenkinsfile`](../Jenkinsfile) provides an independent, opt-in
+fallback for the same test matrix, native packages, and guarded GitHub Release
+publication. Controller, agent, credential, security, and storage setup are in
+the [Jenkins CI/CD guide](jenkins.md).
+
 When launched without arguments, the built GUI executable serves localhost at
 `127.0.0.1:8765` and displays it in a standalone PyWebView window. The UI remains
 local HTML, CSS, and JavaScript inside a WebView rather than a fully native
