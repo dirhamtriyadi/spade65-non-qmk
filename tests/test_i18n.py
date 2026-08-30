@@ -26,6 +26,10 @@ def load_json(path: Path) -> dict[str, object]:
     return value
 
 
+def without_source_whitespace(value: str) -> str:
+    return re.sub(r"\s+", "", value)
+
+
 class TranslationKeyParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -185,33 +189,35 @@ class I18nTests(unittest.TestCase):
 
     def test_i18n_runtime_keeps_english_fallback_and_persists_choice(self) -> None:
         javascript = (WEB / "app.js").read_text(encoding="utf-8")
-        self.assertIn("DEFAULT_LANGUAGE='en'", javascript)
-        self.assertIn("spade65-language", javascript)
-        self.assertIn("catalogs[DEFAULT_LANGUAGE]?.[key]", javascript)
+        compact = without_source_whitespace(javascript)
+        self.assertIn("DEFAULT_LANGUAGE='en'", compact)
+        self.assertIn("spade65-language", compact)
+        self.assertIn("catalogs[DEFAULT_LANGUAGE]?.[key]", compact)
         self.assertIn(
-            "localStorage.setItem(I18N_STORAGE_KEY,currentLanguage)", javascript
+            "localStorage.setItem(I18N_STORAGE_KEY,currentLanguage)", compact
         )
-        self.assertIn("document.documentElement.lang=currentLanguage", javascript)
-        self.assertIn("window.pywebview?.api?.save_json", javascript)
+        self.assertIn("document.documentElement.lang=currentLanguage", compact)
+        self.assertIn("window.pywebview?.api?.save_json", compact)
 
     def test_keyboard_and_lighting_share_device_aware_layout_state(self) -> None:
         html = (WEB / "index.html").read_text(encoding="utf-8")
         javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        compact = without_source_whitespace(javascript)
         self.assertIn('id="layoutVariant"', html)
         self.assertIn('id="lightingLayoutVariant"', html)
         self.assertLess(
             html.index('<script src="/layout-state.js"></script>'),
             html.index('<script src="/app.js"></script>'),
         )
-        self.assertIn("spade65-device-layouts-v1", javascript)
-        self.assertIn("syncLayoutFromSelectedDevice(false)", javascript)
-        self.assertIn("$('deviceSelect').onchange", javascript)
-        self.assertIn("setInterval(pollDeviceChanges,2000)", javascript)
-        self.assertIn("snapshot===deviceSnapshot", javascript)
-        self.assertIn("device_layouts:storedDeviceLayouts()", javascript)
-        self.assertIn("Array.isArray(data.profiles)", javascript)
+        self.assertIn("spade65-device-layouts-v1", compact)
+        self.assertIn("syncLayoutFromSelectedDevice(false)", compact)
+        self.assertIn("$('deviceSelect').onchange", compact)
+        self.assertIn("setInterval(pollDeviceChanges,2000)", compact)
+        self.assertIn("snapshot===deviceSnapshot", compact)
+        self.assertIn("device_layouts:storedDeviceLayouts()", compact)
+        self.assertIn("Array.isArray(data.profiles)", compact)
         self.assertNotIn(
-            "layoutVariant=localStorage.getItem('spade65-layout')", javascript
+            "layoutVariant=localStorage.getItem('spade65-layout')", compact
         )
 
 

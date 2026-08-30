@@ -74,11 +74,38 @@ normalisasi USB/dongle, serta fallback disconnected. Firmware dan software
 original tidak menyediakan readback layout fisik; frontend karena itu hanya
 memulihkan preferensi host dan menyebutkannya secara eksplisit di UI.
 
+## Mengubah antarmuka web
+
+File di dalam `spade65/web/` adalah source frontend utama. File tersebut langsung
+dilayani development server dan disalin ke paket release; repository tidak
+menyimpan salinan hasil generate atau minify. Pertahankan HTML, JavaScript, CSS,
+dan katalog JSON dalam bentuk terbaca agar GUI dapat dikembangkan tanpa harus
+merekonstruksi production bundle atau bergantung pada AI.
+
+Pasang formatter Python yang kecil dan versinya dikunci, lalu format seluruh
+JavaScript dan CSS:
+
+```bash
+python -m pip install -e ".[dev]"
+python tools/format_web.py
+```
+
+Untuk development GUI native, kedua extra dapat dipasang sekaligus:
+
+```bash
+python -m pip install -e ".[desktop,dev]"
+```
+
+`python tools/format_web.py --check` memeriksa format tanpa mengubah file.
+Formatter sengaja tidak menulis ulang `index.html` atau JSON locale karena file
+tersebut sudah disimpan sebagai source yang terbaca.
+
 ## Menjalankan quality checks
 
 ```bash
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
+python tools/format_web.py --check
 node --check spade65/web/layout-state.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js

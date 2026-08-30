@@ -75,11 +75,37 @@ migration, USB/dongle normalization, and the disconnected fallback. Neither the
 firmware nor the original software provides physical-layout readback, so the
 frontend restores only a host preference and states this explicitly in the UI.
 
+## Editing the web interface
+
+Files under `spade65/web/` are the canonical frontend source. They are served by
+the development server and copied into release packages directly; the repository
+does not commit a generated or minified copy. Keep the HTML, JavaScript, CSS, and
+JSON catalogs readable so the GUI can be maintained without reconstructing a
+production bundle.
+
+Install the small, pinned Python formatters and format all JavaScript and CSS:
+
+```bash
+python -m pip install -e ".[dev]"
+python tools/format_web.py
+```
+
+For native GUI development, install both extras in one command:
+
+```bash
+python -m pip install -e ".[desktop,dev]"
+```
+
+`python tools/format_web.py --check` verifies formatting without changing files.
+The formatter deliberately does not rewrite `index.html` or locale JSON because
+those files are already stored as readable source.
+
 ## Running quality checks
 
 ```bash
 python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
+python tools/format_web.py --check
 node --check spade65/web/layout-state.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js

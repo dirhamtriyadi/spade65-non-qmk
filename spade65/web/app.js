@@ -1,161 +1,1894 @@
-const token=document.querySelector('meta[name="spade65-token"]').content;
-const $=id=>document.getElementById(id);
-const layoutState=window.Spade65LayoutState;
-let meta=null,profile=null,currentLayer='normal',selectedKey=null,colorKeys=new Set(),activeMacro=0,activeAppLayer=0,animationTimer=null,animationPhase=0,timelineTimer=null,timelineIndex=0,streamBusy=false,audioContext=null,audioAnalyser=null,audioStream=null,layoutVariant=layoutState.DEFAULT_LAYOUT,activeLayoutKey=null,statusFetchPromise=null,deviceSnapshot='',devicePollBusy=false,recordingMacro=false,recordLast=0,recordPressed=new Set();
-const I18N_STORAGE_KEY='spade65-language',DEFAULT_LANGUAGE='en';
-const LAYOUT_STORAGE_KEY='spade65-device-layouts-v1',LEGACY_LAYOUT_STORAGE_KEY='spade65-layout';
-const defaultLanguages=[{code:'en',name:'English'},{code:'id',name:'Bahasa Indonesia'}];
-let languageManifest={default:DEFAULT_LANGUAGE,languages:defaultLanguages},currentLanguage=DEFAULT_LANGUAGE;
-const catalogs={};
-const hasOwn=(object,key)=>Object.prototype.hasOwnProperty.call(object,key);
-const cloneJson=value=>JSON.parse(JSON.stringify(value));
-const subtitles={device:'subtitle.device',keymap:'subtitle.keymap',lighting:'subtitle.lighting',macros:'subtitle.macros',settings:'subtitle.settings',diagnostics:'subtitle.diagnostics',about:'subtitle.about'};
-const pageLabels={device:'nav.device',keymap:'nav.keyboard',lighting:'nav.lighting',macros:'nav.macros',settings:'nav.settings',diagnostics:'nav.diagnostics',about:'nav.about'};
-function interpolate(value,variables={}){return String(value).replace(/\{([A-Za-z0-9_]+)\}/g,(match,key)=>hasOwn(variables,key)?String(variables[key]):match)}
-function t(key,variables={}){return interpolate(catalogs[currentLanguage]?.[key]??catalogs[DEFAULT_LANGUAGE]?.[key]??key,variables)}
-async function fetchJson(path){const response=await fetch(path,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);const value=await response.json();if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`Invalid locale JSON: ${path}`);return value}
-function seedEnglishCatalog(){const seeded={};document.querySelectorAll('[data-i18n]').forEach(element=>seeded[element.dataset.i18n]=element.textContent);document.querySelectorAll('[data-i18n-placeholder]').forEach(element=>seeded[element.dataset.i18nPlaceholder]=element.placeholder);document.querySelectorAll('[data-i18n-title]').forEach(element=>seeded[element.dataset.i18nTitle]=element.title);document.querySelectorAll('[data-i18n-aria-label]').forEach(element=>seeded[element.dataset.i18nAriaLabel]=element.getAttribute('aria-label')||'');catalogs[DEFAULT_LANGUAGE]=seeded}
-function validManifest(value){if(!Array.isArray(value.languages)||!value.languages.length)return false;const codes=value.languages.map(item=>item?.code);return value.languages.every(item=>item&&/^[A-Za-z0-9_-]+$/.test(item.code)&&typeof item.name==='string')&&new Set(codes).size===codes.length&&codes.includes(value.default)}
-function applyTranslations(root=document){root.querySelectorAll('[data-i18n]').forEach(element=>element.textContent=t(element.dataset.i18n));root.querySelectorAll('[data-i18n-placeholder]').forEach(element=>element.placeholder=t(element.dataset.i18nPlaceholder));root.querySelectorAll('[data-i18n-title]').forEach(element=>element.title=t(element.dataset.i18nTitle));root.querySelectorAll('[data-i18n-aria-label]').forEach(element=>element.setAttribute('aria-label',t(element.dataset.i18nAriaLabel)));document.documentElement.lang=currentLanguage;document.title=t('app.title')}
-function updatePageHeader(page){$('pageTitle').dataset.i18n=pageLabels[page];$('pageSubtitle').dataset.i18n=subtitles[page];$('pageTitle').textContent=t(pageLabels[page]);$('pageSubtitle').textContent=t(subtitles[page])}
-function renderLanguageOptions(){const select=$('languageSelect');select.innerHTML='';for(const item of languageManifest.languages){const option=document.createElement('option');option.value=item.code;option.textContent=item.name;select.append(option)}select.value=currentLanguage}
-async function setLanguage(requested,persist=true){const supported=new Set(languageManifest.languages.map(item=>item.code)),target=supported.has(requested)?requested:(languageManifest.default||DEFAULT_LANGUAGE);if(!catalogs[DEFAULT_LANGUAGE])catalogs[DEFAULT_LANGUAGE]=await fetchJson('/locales/en.json');let selected=target;if(target!==DEFAULT_LANGUAGE&&!catalogs[target]){try{catalogs[target]=await fetchJson(`/locales/${target}.json`)}catch(error){console.warn(`Unable to load locale ${target}; using English`,error);selected=DEFAULT_LANGUAGE}}currentLanguage=selected;if(persist)localStorage.setItem(I18N_STORAGE_KEY,currentLanguage);renderLanguageOptions();applyTranslations();renderLocalizedDynamic()}
-function renderLocalizedDynamic(){const active=document.querySelector('#nav button.active');if(active)updatePageHeader(active.dataset.page);renderAbout();renderServiceSetup();if(!meta||!profile)return;renderSavedProfiles($('savedProfile').value);renderEffects();renderUsageList();renderKeyboard();renderMacros();renderAppLayers();renderTimeline();renderConnectionStatus();renderDiagnostics();$('animationBtn').textContent=t(animationTimer?'action.stopAnimation':'action.startAnimation')}
-async function initI18n(){seedEnglishCatalog();try{const manifest=await fetchJson('/locales/index.json');if(validManifest(manifest))languageManifest=manifest}catch(error){console.warn('Unable to load locale manifest; using built-in language list',error)}try{catalogs[DEFAULT_LANGUAGE]={...catalogs[DEFAULT_LANGUAGE],...await fetchJson('/locales/en.json')}}catch(error){console.warn('Unable to load English locale catalog; using document text',error)}const saved=localStorage.getItem(I18N_STORAGE_KEY)||languageManifest.default||DEFAULT_LANGUAGE;await setLanguage(saved,false)}
-const rows=[['esc','n1','n2','n3','n4','n5','n6','n7','n8','n9','n0','minus','plus','bksp'],['tab','q','w','e','r','t','y','u','i','o','p','lqu','rqu','k29','delete'],['caps','a','s','d','f','g','h','j','k','l','sem','quo','k42','enter','pageup'],['lshift','z','x','c','v','b','n','m','comma','dot','qmark','rshift','up','pagedown'],['lctrl','win','lalt','lspace','ralt','mspace','rspace','fn','rctrl','left','down','right']];
-const titles={esc:'Esc',bksp:'Backspace',caps:'Caps',lshift:'L Shift',rshift:'R Shift',lctrl:'L Ctrl',rctrl:'R Ctrl',lalt:'L Alt',ralt:'R Alt',lspace:'Space',mspace:'Space',rspace:'Space',pageup:'Pg Up',pagedown:'Pg Dn',lqu:'[',rqu:']',sem:';',quo:"'",qmark:'/',comma:',',dot:'.',minus:'-',plus:'=',win:'Win',k29:'\\',k42:'\\'};
-const isoPositions=[[70,21,35,35],[109,21,35,35],[148,21,35,35],[186,21,35,35],[226,21,35,35],[264,21,35,35],[303,21,35,35],[342,21,35,35],[381,21,35,35],[420,21,35,35],[458,21,35,35],[497,21,35,35],[536,21,35,35],[576,21,70,35],[70,61,55,35],[128,61,35,35],[168,61,35,35],[206,61,35,35],[245,61,35,35],[284,61,35,35],[323,61,35,35],[362,61,35,35],[400,61,35,35],[439,61,35,35],[478,61,35,35],[517,61,35,35],[556,61,35,35],[604,61,0,0],[652,61,35,35],[70,100,64,35],[138,100,35,35],[177,100,35,35],[215,100,35,35],[254,100,35,35],[293,100,35,35],[332,100,35,35],[371,100,35,35],[410,100,35,35],[448,100,35,35],[487,100,35,35],[526,100,35,35],[565,100,35,35],[606,61,41,74],[652,100,35,35],[70,138,83,35],[157,138,35,35],[196,138,35,35],[235,138,35,35],[274,138,35,35],[313,138,35,35],[352,138,35,35],[390,138,35,35],[430,138,35,35],[468,138,35,35],[507,138,35,35],[546,138,64,35],[614,138,35,35],[652,138,35,35],[70,177,45,35],[118,177,45,35],[167,177,45,35],[216,177,0,0],[303,177,0,0],[216,177,239,35],[352,177,0,0],[458,177,45,35],[507,177,45,35],[575,177,35,35],[614,177,35,35],[652,177,35,35]];
-const ansiPositions=[[70,23,35,35],[109,23,35,35],[148,23,35,35],[186,23,35,35],[225,23,35,35],[264,23,35,35],[303,23,35,35],[342,23,35,35],[381,23,35,35],[420,23,35,35],[458,23,35,35],[497,23,35,35],[536,23,35,35],[577,23,70,35],[70,61,55,35],[128,61,35,35],[167,61,35,35],[206,61,35,35],[245,61,35,35],[284,61,35,35],[323,61,35,35],[362,61,35,35],[400,61,35,35],[439,61,35,35],[478,61,35,35],[517,61,35,35],[556,61,35,35],[595,61,54,35],[652,61,35,35],[70,100,65,35],[138,100,35,35],[177,100,35,35],[216,100,35,35],[255,100,35,35],[293,100,35,35],[332,100,35,35],[371,100,35,35],[410,100,35,35],[449,100,35,35],[488,100,35,35],[526,100,35,35],[548,100,0,0],[566,100,82,35],[652,100,35,35],[70,138,84,35],[158,138,35,35],[197,138,35,35],[235,138,35,35],[274,138,35,35],[313,138,35,35],[352,138,35,35],[391,138,35,35],[430,138,35,35],[468,138,35,35],[507,138,35,35],[546,138,64,35],[614,138,35,35],[652,138,35,35],[70,177,45,35],[118,177,45,35],[166,177,45,35],[216,177,0,0],[303,177,0,0],[216,177,239,35],[353,177,0,0],[459,177,45,35],[507,177,45,35],[575,177,35,35],[614,177,35,35],[652,177,35,35]];
-const splitPositions={iso:{61:[216,177,82,35],62:[303,177,45,35],63:[216,177,0,0],64:[352,177,102,35]},ansi:{61:[216,177,82,35],62:[303,177,45,35],63:[216,177,0,0],64:[353,177,103,35]}};
-function keyPosition(index){const family=layoutVariant.startsWith('iso')?'iso':'ansi',positions=family==='iso'?isoPositions:ansiPositions;if(layoutVariant.endsWith('split')&&splitPositions[family][index])return splitPositions[family][index];return positions[index]}
+const token = document.querySelector('meta[name="spade65-token"]').content;
+const $ = id => document.getElementById(id);
+const layoutState = window.Spade65LayoutState;
+let meta = null,
+  profile = null,
+  currentLayer = 'normal',
+  selectedKey = null,
+  colorKeys = new Set(),
+  activeMacro = 0,
+  activeAppLayer = 0,
+  animationTimer = null,
+  animationPhase = 0,
+  timelineTimer = null,
+  timelineIndex = 0,
+  streamBusy = false,
+  audioContext = null,
+  audioAnalyser = null,
+  audioStream = null,
+  layoutVariant = layoutState.DEFAULT_LAYOUT,
+  activeLayoutKey = null,
+  statusFetchPromise = null,
+  deviceSnapshot = '',
+  devicePollBusy = false,
+  recordingMacro = false,
+  recordLast = 0,
+  recordPressed = new Set();
+const I18N_STORAGE_KEY = 'spade65-language',
+  DEFAULT_LANGUAGE = 'en';
+const LAYOUT_STORAGE_KEY = 'spade65-device-layouts-v1',
+  LEGACY_LAYOUT_STORAGE_KEY = 'spade65-layout';
+const defaultLanguages = [{
+  code: 'en',
+  name: 'English'
+}, {
+  code: 'id',
+  name: 'Bahasa Indonesia'
+}];
+let languageManifest = {
+    default: DEFAULT_LANGUAGE,
+    languages: defaultLanguages
+  },
+  currentLanguage = DEFAULT_LANGUAGE;
+const catalogs = {};
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const cloneJson = value => JSON.parse(JSON.stringify(value));
+const subtitles = {
+  device: 'subtitle.device',
+  keymap: 'subtitle.keymap',
+  lighting: 'subtitle.lighting',
+  macros: 'subtitle.macros',
+  settings: 'subtitle.settings',
+  diagnostics: 'subtitle.diagnostics',
+  about: 'subtitle.about'
+};
+const pageLabels = {
+  device: 'nav.device',
+  keymap: 'nav.keyboard',
+  lighting: 'nav.lighting',
+  macros: 'nav.macros',
+  settings: 'nav.settings',
+  diagnostics: 'nav.diagnostics',
+  about: 'nav.about'
+};
 
-async function api(action,data={},method='POST'){
-  const options={method,headers:{'X-Spade65-Token':token}};
-  if(method==='POST'){options.headers['Content-Type']='application/json';options.body=JSON.stringify(data)}
-  const response=await fetch(`/api/${action}`,options);const result=await response.json();
-  if(!response.ok||result.ok===false)throw new Error(result.error||`HTTP ${response.status}`);return result;
+function interpolate(value, variables = {}) {
+  return String(value).replace(/\{([A-Za-z0-9_]+)\}/g, (match, key) => hasOwn(variables, key) ? String(variables[key]) : match)
 }
-function fetchGuiStatus(){if(!statusFetchPromise)statusFetchPromise=api('status',{},'GET').finally(()=>statusFetchPromise=null);return statusFetchPromise}
-function deviceSignature(devices){return JSON.stringify((devices||[]).map(item=>[item.path,item.vid,item.pid,item.usages]).sort((left,right)=>String(left[0]).localeCompare(String(right[0]))))}
-function toast(message,error=false){const el=$('toast');el.textContent=message;el.className=`show${error?' error':''}`;clearTimeout(el._timer);el._timer=setTimeout(()=>el.className='',3500)}
-async function quitApplication(){if(!confirm(t('app.confirmQuit')))return;try{await api('quit');$('quitBtn').disabled=true;toast(t('app.shuttingDown'))}catch(error){toast(error.message,true)}}
-function device(){return $('deviceSelect').value||null}
-function selectedLayoutDevice(){const path=device();return path&&meta?meta.devices.find(item=>item.path===path&&item.usages.includes(layoutState.CONFIG_USAGE))||null:null}
-function storedDeviceLayouts(){return layoutState.parseDeviceLayouts(localStorage.getItem(LAYOUT_STORAGE_KEY))}
-function saveDeviceLayouts(layouts){localStorage.setItem(LAYOUT_STORAGE_KEY,JSON.stringify(layoutState.parseDeviceLayouts(layouts)))}
-function applyLayoutDisplay(layout,connected,render=true){layoutVariant=layoutState.isValidLayout(layout)?layout:layoutState.DEFAULT_LAYOUT;for(const id of ['layoutVariant','lightingLayoutVariant']){const select=$(id);select.value=layoutVariant;select.disabled=!connected}const sourceKey=connected?'layout.detected':'layout.noDevice';for(const id of ['keymapLayoutSource','lightingLayoutSource']){const source=$(id);source.dataset.i18n=sourceKey;source.textContent=t(sourceKey)}if(render&&profile){renderKeyboard();renderColorKeyboard()}}
-function syncLayoutFromSelectedDevice(render=true){const result=layoutState.resolveLayout(selectedLayoutDevice(),storedDeviceLayouts(),localStorage.getItem(LEGACY_LAYOUT_STORAGE_KEY));activeLayoutKey=result.key;if(result.connected){if(result.changed)saveDeviceLayouts(result.layouts);localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)}applyLayoutDisplay(result.layout,result.connected,render)}
-function chooseLayout(value){if(!activeLayoutKey||!layoutState.isValidLayout(value)){syncLayoutFromSelectedDevice();return}const layouts=storedDeviceLayouts();layouts[activeLayoutKey]=value;saveDeviceLayouts(layouts);applyLayoutDisplay(value,true)}
-function restoreLayoutPreferences(data){const legacy=layoutState.isValidLayout(data.layout)?data.layout:null,hasMap=data.device_layouts&&typeof data.device_layouts==='object'&&!Array.isArray(data.device_layouts),key=layoutState.deviceKey(selectedLayoutDevice());if(hasMap){const layouts=layoutState.parseDeviceLayouts(data.device_layouts);if(key&&legacy&&!layouts[key])layouts[key]=legacy;saveDeviceLayouts(layouts);if(!key&&legacy&&!Object.keys(layouts).length)localStorage.setItem(LEGACY_LAYOUT_STORAGE_KEY,legacy);else localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)}else if(legacy){if(key){const layouts=storedDeviceLayouts();layouts[key]=legacy;saveDeviceLayouts(layouts);localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)}else localStorage.setItem(LEGACY_LAYOUT_STORAGE_KEY,legacy)}syncLayoutFromSelectedDevice(false)}
-function actionPayload(extra={}){return{device:device(),...extra}}
-function storedProfiles(){try{const value=JSON.parse(localStorage.getItem('spade65-profiles')||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return{}}}
-function renderSavedProfiles(selected=''){const select=$('savedProfile'),items=storedProfiles();select.innerHTML='';const unsaved=document.createElement('option');unsaved.value='';unsaved.textContent=t('profile.unsaved');select.append(unsaved);Object.keys(items).sort().forEach(name=>{const option=document.createElement('option');option.value=name;option.textContent=name;select.append(option)});select.value=selected}
-async function loadSavedProfile(name){if(!name)return;try{const item=storedProfiles()[name];await api('validate',{profile:item});profile=cloneJson(item);$('profileName').value=name;selectedKey=null;activeMacro=0;activeAppLayer=0;renderKeyboard();renderColorKeyboard();renderMacros();renderAppLayers();renderTimeline();toast(t('profile.loaded',{name}))}catch(error){toast(error.message,true)}}
-async function saveProfile(){try{await api('validate',{profile});const name=$('profileName').value.trim();if(!name)return toast(t('profile.nameRequired'),true);const items=storedProfiles();items[name]=cloneJson(profile);localStorage.setItem('spade65-profiles',JSON.stringify(items));renderSavedProfiles(name);toast(t('profile.savedLocal',{name}))}catch(error){toast(error.message,true)}}
-function deleteSavedProfile(){const name=$('savedProfile').value;if(!name)return toast(t('profile.selectSaved'),true);if(!confirm(t('profile.confirmDelete',{name})))return;const items=storedProfiles();delete items[name];localStorage.setItem('spade65-profiles',JSON.stringify(items));renderSavedProfiles();toast(t('profile.deleted',{name}))}
 
-async function refresh(){try{meta=await fetchGuiStatus();deviceSnapshot=deviceSignature(meta.devices);if(!profile)profile=cloneJson(meta.profile);renderDevices();syncLayoutFromSelectedDevice(false);renderEffects();renderUsageList();renderSavedProfiles($('savedProfile').value);renderKeyboard();renderColorKeyboard();renderMacros();renderAppLayers();renderTimeline();renderDiagnostics();renderAbout();renderServiceSetup();renderConnectionStatus()}catch(error){toast(error.message,true)}}
-async function pollDeviceChanges(){if(devicePollBusy||document.hidden||!meta)return;devicePollBusy=true;try{const status=await fetchGuiStatus(),snapshot=deviceSignature(status.devices);if(snapshot===deviceSnapshot)return;meta={...meta,devices:status.devices};deviceSnapshot=snapshot;renderDevices();syncLayoutFromSelectedDevice();renderDiagnostics();renderConnectionStatus()}catch(error){console.warn('Unable to refresh Spade65 device presence',error)}finally{devicePollBusy=false}}
-function renderConnectionStatus(){if(!meta)return;const connected=meta.devices.length>0;$('connectionDot').classList.toggle('online',connected);$('connectionText').textContent=connected?t('status.connected',{name:meta.devices[0].name}):t('status.noDevice');$('transportBadge').textContent=connected?`${meta.devices[0].transport} ${meta.devices[0].vid}:${meta.devices[0].pid}`:t('status.notConnected');$('descriptorBadge').textContent=meta.devices.some(d=>d.reports.some(r=>r.kind==='feature'&&r.id===7&&r.bytes===620))?t('status.descriptorVerified'):t('status.configUnavailable')}
-function renderDevices(){const select=$('deviceSelect'),old=select.value;select.innerHTML='';for(const item of meta.devices.filter(d=>d.usages.includes('ff02:0001'))){const o=document.createElement('option');o.value=item.path;o.textContent=`${item.name} · ${item.transport} · ${item.path}`;select.append(o)}if([...select.options].some(o=>o.value===old))select.value=old}
-function renderEffects(){const select=$('effectSelect'),selected=select.value||'fixed';select.innerHTML='';for(const effect of meta.effects){const o=document.createElement('option'),key=`effect.${effect}`,translated=t(key);o.value=effect;o.textContent=translated===key?effect.replaceAll('-',' '):translated;select.append(o)}select.value=[...select.options].some(option=>option.value===selected)?selected:'fixed'}
-function renderUsageList(){const list=$('usageList'),preset=$('usagePreset'),selected=preset.value;list.innerHTML='';preset.innerHTML='';const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=t('keymap.chooseFunction');preset.append(placeholder);for(const name of Object.keys(meta.usages).sort()){const o=document.createElement('option');o.value=name;list.append(o)}for(const [group,names] of Object.entries(meta.usage_groups)){const optgroup=document.createElement('optgroup');optgroup.label=t(`usageGroup.${group}`);for(const name of names){const option=document.createElement('option');option.value=name;option.textContent=`${name} · 0x${meta.usages[name].toString(16).padStart(2,'0')}`;optgroup.append(option)}preset.append(optgroup)}if([...preset.options].some(option=>option.value===selected))preset.value=selected}
-function keyLabel(key){return titles[key]||key.replace(/^n(?=\d)/,'')}
-function buildKeyboard(container,mode){container.innerHTML='';rows.flat().forEach((key,index)=>{const [x,y,w,h]=keyPosition(index);if(!w||!h)return;const b=document.createElement('button');b.className='key';b.dataset.key=key;b.style.cssText=`--x:${x/7.57}%;--y:${y/2.36}%;--w:${w/7.57}%;--h:${h/2.36}%`;b.textContent=keyLabel(key);if(mode==='assign'&&profile.layers[currentLayer][key])b.classList.add('assigned');if(mode==='assign'&&selectedKey===key)b.classList.add('selected');if(mode==='color'&&colorKeys.has(key))b.classList.add('selected');if(mode==='color'&&profile.colors[key]){const sw=document.createElement('i');sw.className='swatch';const c=profile.colors[key];sw.style.background=Array.isArray(c)?`rgb(${c.join(',')})`:c;b.append(sw)}b.onclick=()=>mode==='assign'?selectKey(key):toggleColorKey(key);container.append(b)})}
-function profileSettings(){if(!profile.settings||typeof profile.settings!=='object')profile.settings={win_lock:false,wasd_arrows:false};return profile.settings}
-function renderKeyboard(){buildKeyboard($('keyboard'),'assign');renderLayerSummary();$('selectedKey').textContent=selectedKey?keyLabel(selectedKey):t('common.none');$('winLock').checked=!!profileSettings().win_lock;$('wasdArrows').checked=!!profileSettings().wasd_arrows;if(selectedKey)loadAssignment()}
-function renderColorKeyboard(){buildKeyboard($('colorKeyboard'),'color');renderAppRangeSummary()}
-function selectKey(key){selectedKey=key;$('selectedKey').textContent=keyLabel(key);renderKeyboard()}
-function toggleColorKey(key){colorKeys.has(key)?colorKeys.delete(key):colorKeys.add(key);renderColorKeyboard()}
-function loadAssignment(){const value=profile.layers[currentLayer][selectedKey];document.querySelectorAll('#modifierWrap input').forEach(x=>x.checked=false);if(value===undefined){$('assignmentType').value='default';$('usageInput').value=''}else if(typeof value==='object'&&'macro'in value){$('assignmentType').value='macro';$('macroAssign').value=value.macro}else{$('assignmentType').value='usage';$('usageInput').value=typeof value==='object'?value.usage:value;const mods=typeof value==='object'?(value.modifiers||0):0;document.querySelectorAll('#modifierWrap input').forEach(x=>x.checked=!!(mods&Number(x.value)))}assignmentTypeChanged()}
-function assignmentTypeChanged(){const type=$('assignmentType').value;$('usageWrap').hidden=type!=='usage';$('modifierWrap').hidden=type!=='usage';$('macroWrap').hidden=type!=='macro'}
-function saveAssignment(){if(!selectedKey)return toast(t('keymap.selectFirst'),true);const type=$('assignmentType').value;if(type==='default')delete profile.layers[currentLayer][selectedKey];else if(type==='macro'){if(!profile.macros.length)return toast(t('keymap.createMacroFirst'),true);profile.layers[currentLayer][selectedKey]={macro:Number($('macroAssign').value)}}else{const usage=$('usageInput').value.trim();if(!usage)return toast(t('keymap.usageRequired'),true);let modifiers=0;document.querySelectorAll('#modifierWrap input:checked').forEach(x=>modifiers|=Number(x.value));profile.layers[currentLayer][selectedKey]=modifiers?{usage,modifiers}:usage}renderKeyboard();toast(t('keymap.assignmentSaved',{key:keyLabel(selectedKey),layer:currentLayer}))}
-function renderLayerSummary(){const box=$('layerSummary');box.innerHTML='';for(const layer of ['normal','fn1','fn2']){const div=document.createElement('div');div.textContent=t('keymap.assignments',{layer:layer.toUpperCase(),count:Object.keys(profile.layers[layer]).length});box.append(div)}const div=document.createElement('div');div.textContent=t('keymap.colors',{count:Object.keys(profile.colors).length});box.append(div)}
-function backupKeys(name,keys){const settings=profileSettings();settings[name]={};for(const key of keys)settings[name][key]=hasOwn(profile.layers.normal,key)?{present:true,value:cloneJson(profile.layers.normal[key])}:{present:false}}
-function restoreKeys(name){const settings=profileSettings(),backup=settings[name]||{};for(const [key,item] of Object.entries(backup))item.present?profile.layers.normal[key]=item.value:delete profile.layers.normal[key];delete settings[name]}
-function toggleWinLock(enabled){const settings=profileSettings();if(enabled&&!settings.win_lock){backupKeys('win_lock_backup',['win']);profile.layers.normal.win='disabled'}else if(!enabled&&settings.win_lock)restoreKeys('win_lock_backup');settings.win_lock=enabled;renderKeyboard();toast(t(enabled?'keymap.winDisabled':'keymap.winRestored'))}
-function toggleWasdArrows(enabled){const settings=profileSettings(),keys=['w','a','s','d','up','left','down','right'];if(enabled&&!settings.wasd_arrows){backupKeys('wasd_arrows_backup',keys);Object.assign(profile.layers.normal,{w:'up',a:'left',s:'down',d:'right',up:'w',left:'a',down:'s',right:'d'})}else if(!enabled&&settings.wasd_arrows)restoreKeys('wasd_arrows_backup');settings.wasd_arrows=enabled;renderKeyboard();toast(t(enabled?'keymap.wasdSwapped':'keymap.wasdRestored'))}
-function disableGroup(group){const groups={numbers:['n0','n1','n2','n3','n4','n5','n6','n7','n8','n9'],letters:[...'abcdefghijklmnopqrstuvwxyz'],symbols:['minus','plus','lqu','rqu','k29','k42','sem','quo','comma','dot','qmark'],controls:['esc','bksp','tab','caps','enter','delete','pageup','pagedown','lshift','rshift','lctrl','rctrl','lalt','ralt','win','fn','up','down','left','right','lspace','mspace','rspace'],all:meta.buttons};for(const key of groups[group])profile.layers[currentLayer][key]='disabled';renderKeyboard();toast(t('keymap.groupDisabled',{group:t(group==='all'?'group.allKeys':`group.${group}`),layer:currentLayer}))}
-function undoDisabled(){for(const [key,value] of Object.entries(profile.layers[currentLayer]))if(value==='disabled'||value===0)delete profile.layers[currentLayer][key];renderKeyboard();toast(t('keymap.disabledRemoved',{layer:currentLayer}))}
+function t(key, variables = {}) {
+  return interpolate(catalogs[currentLanguage]?.[key] ?? catalogs[DEFAULT_LANGUAGE]?.[key] ?? key, variables)
+}
+async function fetchJson(path) {
+  const response = await fetch(path, {
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const value = await response.json();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Invalid locale JSON: ${path}`);
+  return value
+}
 
-function newAppLayer(){return{mode:'wave',enabled:true,speed:5,opacity:100,bandwidth:200,angle:0,number:5,gap:0,fire:1,center_x:0,center_y:0,gradient:true,reverse:false,bump:false,bidirectional:false,audio:false,colors:['#ff0000','#00ffff','#8000ff'],keys:[]}}
-function appLayers(){const settings=profileSettings();if(!Array.isArray(settings.app_effects)||!settings.app_effects.length)settings.app_effects=[newAppLayer()];settings.app_effects=settings.app_effects.slice(0,10).map(value=>{const layer=value&&typeof value==='object'&&!Array.isArray(value)?{...newAppLayer(),...value}:newAppLayer();layer.keys=Array.isArray(layer.keys)?layer.keys.filter(key=>meta?.buttons.includes(key)):[];layer.colors=Array.isArray(layer.colors)?layer.colors.slice(0,20).filter(color=>/^#[0-9a-f]{6}$/i.test(color)):[];if(!layer.colors.length)layer.colors=newAppLayer().colors;return layer});return settings.app_effects}
-function appLayer(){activeAppLayer=Math.min(activeAppLayer,appLayers().length-1);return appLayers()[activeAppLayer]}
-function animationKey(mode){return mode==='linear-wave'?'linearWave':mode}
-function renderAppLayers(){const list=$('appLayerList');list.innerHTML='';appLayers().forEach((layer,index)=>{const row=document.createElement('div');row.className=`effect-layer${index===activeAppLayer?' active':''}`;const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=layer.enabled!==false;enabled.title=t('lighting.toggleLayer');enabled.onclick=event=>event.stopPropagation();enabled.onchange=()=>layer.enabled=enabled.checked;const name=document.createElement('button');name.textContent=`${index+1} · ${t(`animation.${animationKey(layer.mode||'wave')}`)}`;name.onclick=()=>{activeAppLayer=index;renderAppLayers();loadAppLayer()};row.append(enabled,name);list.append(row)});$('removeAppLayerBtn').disabled=appLayers().length<=1;loadAppLayer()}
-function loadAppLayer(){const layer=appLayer();$('animation').value=layer.mode;$('appSpeed').value=layer.speed;$('appSpeedOut').value=layer.speed;$('appOpacity').value=layer.opacity;$('appOpacityOut').value=layer.opacity;$('appBandwidth').value=layer.bandwidth;$('appBandwidthOut').value=layer.bandwidth;$('appAngle').value=layer.angle;$('appAngleOut').value=layer.angle;$('appNumber').value=layer.number;$('appGap').value=layer.gap;$('appFire').value=layer.fire;$('appCenterX').value=layer.center_x;$('appCenterY').value=layer.center_y;$('appGradient').checked=layer.gradient!==false;$('appReverse').checked=!!layer.reverse;$('appBump').checked=!!layer.bump;$('appBidirectional').checked=!!layer.bidirectional;$('audioSync').checked=!!layer.audio;document.querySelectorAll('.app-color').forEach((input,index)=>input.value=layer.colors?.[index]||'#000000');renderAppRangeSummary()}
-function saveAppLayer(){const layer=appLayer();layer.mode=$('animation').value;layer.speed=Number($('appSpeed').value);layer.opacity=Number($('appOpacity').value);layer.bandwidth=Number($('appBandwidth').value);layer.angle=Number($('appAngle').value);layer.number=Number($('appNumber').value);layer.gap=Number($('appGap').value);layer.fire=Number($('appFire').value);layer.center_x=Number($('appCenterX').value);layer.center_y=Number($('appCenterY').value);layer.gradient=$('appGradient').checked;layer.reverse=$('appReverse').checked;layer.bump=$('appBump').checked;layer.bidirectional=$('appBidirectional').checked;layer.audio=$('audioSync').checked;layer.colors=[...document.querySelectorAll('.app-color')].map(input=>input.value);renderAppLayers()}
-function addAppLayer(){if(appLayers().length>=10)return toast(t('lighting.maxLayers'),true);appLayers().push(newAppLayer());activeAppLayer=appLayers().length-1;renderAppLayers();toast(t('lighting.layerAdded'))}
-function removeAppLayer(){if(appLayers().length<=1)return;appLayers().splice(activeAppLayer,1);activeAppLayer=Math.max(0,activeAppLayer-1);renderAppLayers();toast(t('lighting.layerRemoved'))}
-function setAppRange(){appLayer().keys=[...colorKeys];renderAppRangeSummary();toast(colorKeys.size?t('lighting.effectSelectedKeys',{count:colorKeys.size}):t('lighting.effectAllKeys'))}
-function clearAppRange(){appLayer().keys=[];renderAppRangeSummary();toast(t('lighting.effectAllKeys'))}
-function renderAppRangeSummary(){const target=$('appRangeSummary');if(!target||!profile)return;const keys=appLayer().keys||[];target.textContent=keys.length?t('lighting.currentRangeSelected',{count:keys.length}):t('lighting.currentRangeAll')}
+function seedEnglishCatalog() {
+  const seeded = {};
+  document.querySelectorAll('[data-i18n]').forEach(element => seeded[element.dataset.i18n] = element.textContent);
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(element => seeded[element.dataset.i18nPlaceholder] = element.placeholder);
+  document.querySelectorAll('[data-i18n-title]').forEach(element => seeded[element.dataset.i18nTitle] = element.title);
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(element => seeded[element.dataset.i18nAriaLabel] = element.getAttribute('aria-label') || '');
+  catalogs[DEFAULT_LANGUAGE] = seeded
+}
 
-function macroDisplayName(macro){return macro.name||t('macro.defaultName',{index:macro.index})}
-function renderMacros(){const list=$('macroList');list.innerHTML='';profile.macros.forEach((macro,i)=>{const b=document.createElement('button');b.className=i===activeMacro?'active':'';b.textContent=`M${macro.index} · ${macroDisplayName(macro)} (${macro.events.length})`;b.onclick=()=>{if(recordingMacro)stopMacroRecording();activeMacro=i;renderMacros()};list.append(b)});const macro=profile.macros[activeMacro];$('macroTitle').textContent=macro?`M${macro.index} · ${macroDisplayName(macro)}`:t('macro.editor');$('macroName').value=macro?.name??'';$('macroRepeat').value=macro?.repeat??1;$('eventList').innerHTML='';if(macro)macro.events.forEach((event,i)=>renderEvent(event,i));$('deleteMacroBtn').disabled=!macro;$('addEventBtn').disabled=!macro;$('recordMacroBtn').disabled=!macro;$('recordMacroBtn').textContent=t(recordingMacro?'action.stopRecording':'action.record');renderMacroAssign()}
-function renderMacroAssign(){const s=$('macroAssign');s.innerHTML='';for(const macro of profile.macros){const o=document.createElement('option');o.value=macro.index;o.textContent=`M${macro.index} · ${macroDisplayName(macro)}`;s.append(o)}}
-function renderEvent(event,index){const row=document.createElement('div');row.className='event';const delay=document.createElement('input');delay.type='number';delay.min=0;delay.max=32767;delay.value=event.delay_ms;delay.onchange=()=>event.delay_ms=Number(delay.value);const usage=document.createElement('input');usage.value=event.usage;usage.setAttribute('list','usageList');usage.onchange=()=>event.usage=usage.value;const state=document.createElement('select');for(const [value,key] of [['true','macro.keyDown'],['false','macro.keyUp']]){const option=document.createElement('option');option.value=value;option.textContent=t(key);state.append(option)}state.value=String(event.pressed);state.onchange=()=>event.pressed=state.value==='true';const del=document.createElement('button');del.textContent='×';del.className='danger';del.onclick=()=>{profile.macros[activeMacro].events.splice(index,1);renderMacros()};row.append(delay,usage,state,del);$('eventList').append(row)}
-function addMacro(){if(profile.macros.length>=10)return toast(t('macro.maximumTen'),true);const used=new Set(profile.macros.map(m=>m.index));let index=0;while(used.has(index))index++;profile.macros.push({index,name:t('macro.defaultName',{index}),repeat:1,events:[]});activeMacro=profile.macros.length-1;renderMacros()}
-function deleteMacro(){const macro=profile.macros[activeMacro];if(!macro)return;for(const layer of Object.values(profile.layers))for(const [key,value] of Object.entries(layer))if(typeof value==='object'&&value.macro===macro.index)delete layer[key];profile.macros.splice(activeMacro,1);activeMacro=Math.max(0,activeMacro-1);renderMacros();renderKeyboard()}
-function addEvent(){const macro=profile.macros[activeMacro];if(!macro)return;if(macro.events.length>=84)return toast(t('macro.maximumEvents'),true);macro.events.push({delay_ms:20,usage:'a',pressed:macro.events.length%2===0});renderMacros()}
-function eventUsage(event){if(event.code.startsWith('Key'))return event.code.slice(3).toLowerCase();if(event.code.startsWith('Digit'))return event.code.slice(5);if(/^F\d+$/.test(event.code))return event.code.toLowerCase();return{Enter:'enter',Escape:'esc',Backspace:'backspace',Tab:'tab',Space:'space',Minus:'minus',Equal:'equal',BracketLeft:'left-bracket',BracketRight:'right-bracket',Backslash:'backslash',Semicolon:'semicolon',Quote:'quote',Backquote:'grave',Comma:'comma',Period:'dot',Slash:'slash',CapsLock:'caps-lock',PrintScreen:'print-screen',ScrollLock:'scroll-lock',Pause:'pause',Insert:'insert',Home:'home',PageUp:'page-up',Delete:'delete',End:'end',PageDown:'page-down',ArrowRight:'right',ArrowLeft:'left',ArrowDown:'down',ArrowUp:'up',ControlLeft:'left-ctrl',ShiftLeft:'left-shift',AltLeft:'left-alt',MetaLeft:'left-gui',ControlRight:'right-ctrl',ShiftRight:'right-shift',AltRight:'right-alt',MetaRight:'right-gui'}[event.code]||null}
-function recordMacroEvent(event){if(!recordingMacro||event.repeat)return;const usage=eventUsage(event);if(!usage)return;const isDown=event.type==='keydown';if(isDown&&recordPressed.has(event.code)||!isDown&&!recordPressed.has(event.code))return;isDown?recordPressed.add(event.code):recordPressed.delete(event.code);const macro=profile.macros[activeMacro];if(macro.events.length>=84){stopMacroRecording();return toast(t('macro.maximumReached'),true)}const now=performance.now();macro.events.push({delay_ms:Math.max(0,Math.round(now-recordLast)),usage,pressed:isDown});recordLast=now;event.preventDefault();renderMacros()}
-function startMacroRecording(){const macro=profile.macros[activeMacro];if(!macro)return;if(macro.events.length&&!confirm(t('macro.confirmClear')))return;macro.events=[];recordPressed.clear();recordLast=performance.now();recordingMacro=true;document.addEventListener('keydown',recordMacroEvent,true);document.addEventListener('keyup',recordMacroEvent,true);renderMacros();toast(t('macro.recording'))}
-function stopMacroRecording(){recordingMacro=false;recordPressed.clear();document.removeEventListener('keydown',recordMacroEvent,true);document.removeEventListener('keyup',recordMacroEvent,true);renderMacros();toast(t('macro.stopped'))}
-function toggleMacroRecording(){recordingMacro?stopMacroRecording():startMacroRecording()}
+function validManifest(value) {
+  if (!Array.isArray(value.languages) || !value.languages.length) return false;
+  const codes = value.languages.map(item => item?.code);
+  return value.languages.every(item => item && /^[A-Za-z0-9_-]+$/.test(item.code) && typeof item.name === 'string') && new Set(codes).size === codes.length && codes.includes(value.default)
+}
 
-async function doAction(action,payload,success){try{await api(action,actionPayload(payload));toast(success)}catch(error){toast(error.message,true)}}
-async function applyProfile(){if(!confirm(t('profile.confirmApply')))return;if(prompt(t('profile.typeApply'))!=='APPLY PROFILE')return toast(t('profile.cancelled'),true);await doAction('profile',{profile,confirmation:'APPLY PROFILE'},t('profile.applied'))}
-async function downloadJson(data,name){const contents=JSON.stringify(data,null,2)+'\n',nativeSave=window.pywebview?.api?.save_json;if(nativeSave){const result=await nativeSave(contents,name);toast(result.saved?t('profile.exportSaved',{name:result.name}):t('profile.exportCancelled'));return result}const blob=new Blob([contents],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);toast(t('profile.exportSaved',{name}));return{saved:true,name}}
-async function exportProfile(){try{await downloadJson(profile,`${$('profileName').value||'spade65-profile'}.json`)}catch(error){toast(error.message,true)}}
-function renderAllEditors(){selectedKey=null;activeMacro=0;activeAppLayer=0;renderKeyboard();renderColorKeyboard();renderMacros();renderAppLayers();renderTimeline()}
-function importProfile(file){const reader=new FileReader();reader.onload=async()=>{try{const data=JSON.parse(reader.result);await api('validate',{profile:data});profile=data;renderAllEditors();toast(t('profile.imported'))}catch(error){toast(error.message,true)}};reader.readAsText(file)}
-function importVendor(file){const reader=new FileReader();reader.onload=async()=>{try{const document=JSON.parse(reader.result),result=await api('vendor-convert',{document,profile});profile=result.profile;renderAllEditors();toast(t('profile.vendorImported',{areas:result.imported.join(', ')}))}catch(error){toast(error.message,true)}};reader.readAsText(file)}
-async function backupLibrary(){try{await downloadJson({format:'spade65-library-v1',profiles:storedProfiles(),current_profile:profile,profile_name:$('profileName').value,layout:layoutVariant,device_layouts:storedDeviceLayouts(),language:currentLanguage},`spade65-library-${new Date().toISOString().slice(0,10)}.json`)}catch(error){toast(error.message,true)}}
-function restoreLibrary(file){const reader=new FileReader();reader.onload=async()=>{try{const data=JSON.parse(reader.result);if(data.format!=='spade65-library-v1'||!data.profiles||typeof data.profiles!=='object'||Array.isArray(data.profiles))throw new Error(t('profile.unsupportedBackup'));for(const item of Object.values(data.profiles))await api('validate',{profile:item});if(data.current_profile)await api('validate',{profile:data.current_profile});if(!confirm(t('profile.confirmRestore',{count:Object.keys(data.profiles).length})))return;localStorage.setItem('spade65-profiles',JSON.stringify(data.profiles));restoreLayoutPreferences(data);if(data.current_profile)profile=data.current_profile;$('profileName').value=data.profile_name||t('profile.restoredName');if(data.language)await setLanguage(data.language);renderSavedProfiles();renderAllEditors();toast(t('profile.libraryRestored'))}catch(error){toast(error.message,true)}};reader.readAsText(file)}
-function newProfile(){if(!confirm(t('profile.confirmDiscard')))return;profile=cloneJson(meta.profile);colorKeys.clear();renderAllEditors();toast(t('profile.created'))}
+function applyTranslations(root = document) {
+  root.querySelectorAll('[data-i18n]').forEach(element => element.textContent = t(element.dataset.i18n));
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(element => element.placeholder = t(element.dataset.i18nPlaceholder));
+  root.querySelectorAll('[data-i18n-title]').forEach(element => element.title = t(element.dataset.i18nTitle));
+  root.querySelectorAll('[data-i18n-aria-label]').forEach(element => element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel)));
+  document.documentElement.lang = currentLanguage;
+  document.title = t('app.title')
+}
 
-function setSelectedColor(){if(!colorKeys.size)return toast(t('lighting.selectColorKey'),true);for(const key of colorKeys)profile.colors[key]=$('colorPicker').value;renderColorKeyboard();renderLayerSummary();toast(t('lighting.colorStored',{count:colorKeys.size}))}
-function clearColors(){profile.colors={};colorKeys.clear();renderColorKeyboard();renderLayerSummary()}
-async function streamFrame(){if(streamBusy)return;streamBusy=true;try{await api('stream',actionPayload({profile}))}catch(error){stopAnimation();stopTimeline();toast(error.message,true)}finally{streamBusy=false}}
-function audioLevel(){if(!audioAnalyser)return 0;const data=new Uint8Array(audioAnalyser.frequencyBinCount);audioAnalyser.getByteFrequencyData(data);return data.reduce((sum,n)=>sum+n,0)/(data.length*255)}
-async function startAudio(){if(audioAnalyser)return;audioStream=await navigator.mediaDevices.getUserMedia({audio:true});audioContext=new AudioContext();const source=audioContext.createMediaStreamSource(audioStream);audioAnalyser=audioContext.createAnalyser();audioAnalyser.fftSize=256;source.connect(audioAnalyser)}
-function stopAudio(){if(audioStream)audioStream.getTracks().forEach(track=>track.stop());if(audioContext)audioContext.close();audioStream=null;audioContext=null;audioAnalyser=null}
-function hexRgb(value){const hex=value.replace('#','');return[0,2,4].map(offset=>parseInt(hex.slice(offset,offset+2),16))}
-function paletteRgb(colors,position,gradient=true){const palette=(colors?.length?colors:['#ff0000']).map(hexRgb);if(!gradient||palette.length===1)return palette[0];const scaled=((position%1)+1)%1*(palette.length-1),index=Math.floor(scaled),amount=scaled-index,next=Math.min(index+1,palette.length-1);return palette[index].map((value,channel)=>Math.round(value+(palette[next][channel]-value)*amount))}
-function blendRgb(base,top,alpha){return base.map((value,index)=>Math.round(value*(1-alpha)+top[index]*alpha))}
-function layerPixel(layer,key,x,y,index,level){if(layer.enabled===false||(layer.keys?.length&&!layer.keys.includes(key)))return null;const speed=Number(layer.speed||1),phase=animationPhase*speed,direction=(layer.reverse?-1:1)*(layer.bidirectional&&y%2?-1:1),dx=x-6.5-Number(layer.center_x||0),dy=y-2-Number(layer.center_y||0),angle=(Math.atan2(dy,dx)*180/Math.PI+360+Number(layer.angle||0))%360,distance=Math.sqrt(dx*dx+dy*dy),band=200/Math.max(50,Number(layer.bandwidth||200)),gap=Number(layer.gap||0)/100,density=Math.max(1,Number(layer.number||5));let position=0.95,light=1;if(layer.mode==='wave')position=(Math.sin((x*band+direction*phase/8)+gap)+1)/2;else if(layer.mode==='conic')position=(angle+direction*phase*2)%360/360;else if(layer.mode==='spiral')position=(angle+distance*35*band+direction*phase*2)%360/360;else if(layer.mode==='cycle')position=(index/70+direction*phase/120)%1;else if(layer.mode==='linear-wave')position=(x*band/8+y/14+Number(layer.angle||0)/360+direction*phase/100+gap)%1;else if(layer.mode==='ripple')position=(distance*band/5-direction*phase/80+gap)%1;else if(layer.mode==='breathe'){position=0;light=.25+.75*(1+Math.sin(phase/18))/2}else if(layer.mode==='rain'){position=.55;light=((x*19+y*37+direction*phase*density)%100)>100-density*6?1:.08}else if(layer.mode==='fire'){position=Math.random()*.14;light=.25+Math.random()*.06*Math.max(1,Number(layer.fire||1))}else if(layer.mode==='trigger'){position=.95;light=((index*31+phase*3)%97)>90?1:.08}if(layer.bump)light*=1-Math.abs((((position%1)+1)%1)*2-1);if(layer.audio)light*=Math.min(1,level*4);const color=paletteRgb(layer.colors,position,layer.gradient!==false),alpha=Math.max(0,Math.min(1,Number(layer.opacity??100)/100*light));return{color,alpha}}
-function animateColors(){const level=audioLevel(),layers=appLayers();let index=0;rows.forEach((row,y)=>row.forEach((key,x)=>{let output=[0,0,0];for(const layer of layers){const pixel=layerPixel(layer,key,x,y,index,level);if(pixel)output=blendRgb(output,pixel.color,pixel.alpha)}profile.colors[key]='#'+output.map(value=>value.toString(16).padStart(2,'0')).join('');index++}));animationPhase+=1;renderColorKeyboard();streamFrame()}
-function hsl(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return'#'+[f(0),f(8),f(4)].map(x=>Math.round(255*x).toString(16).padStart(2,'0')).join('')}
-async function toggleAnimation(){if(animationTimer)return stopAnimation();try{stopTimeline();saveAppLayer();if(appLayers().some(layer=>layer.enabled!==false&&layer.audio))await startAudio();$('animationBtn').textContent=t('action.stopAnimation');animationTimer=setInterval(animateColors,1000/Number($('fps').value));animateColors()}catch(error){stopAudio();toast(t('lighting.audioUnavailable',{error:error.message}),true)}}
-function stopAnimation(){clearInterval(animationTimer);animationTimer=null;stopAudio();$('animationBtn').textContent=t('action.startAnimation')}
-function timeline(){const settings=profileSettings();if(!settings.custom_timeline||typeof settings.custom_timeline!=='object')settings.custom_timeline={loop:true,frames:[]};if(!Array.isArray(settings.custom_timeline.frames))settings.custom_timeline.frames=[];settings.custom_timeline.frames=settings.custom_timeline.frames.slice(0,200);return settings.custom_timeline}
-function renderTimeline(){const data=timeline(),list=$('timelineList');list.innerHTML='';data.frames.forEach((frame,index)=>{const row=document.createElement('div');row.className='timeline-frame';const label=document.createElement('button');label.textContent=t('timeline.frame',{number:index+1,count:Object.keys(frame.colors||{}).length});label.onclick=()=>{profile.colors=cloneJson(frame.colors||{});renderColorKeyboard();toast(t('timeline.frameLoaded',{number:index+1}))};const duration=document.createElement('input');duration.type='number';duration.min=20;duration.max=60000;duration.value=frame.duration_ms||100;duration.title=t('timeline.durationTitle');duration.onchange=()=>frame.duration_ms=Math.max(20,Math.min(60000,Number(duration.value)));const del=document.createElement('button');del.textContent='×';del.className='danger';del.onclick=()=>{data.frames.splice(index,1);renderTimeline()};row.append(label,duration,del);list.append(row)});$('timelineLoop').checked=data.loop!==false;$('playTimelineBtn').disabled=!data.frames.length;$('playTimelineBtn').textContent=t(timelineTimer?'action.stopTimeline':'action.playTimeline')}
-function captureTimelineFrame(){const data=timeline();if(data.frames.length>=200)return toast(t('timeline.maximum'),true);data.frames.push({duration_ms:100,colors:cloneJson(profile.colors)});renderTimeline();toast(t('timeline.captured'))}
-function playTimelineFrame(){const data=timeline();if(!timelineTimer||!data.frames.length)return stopTimeline();if(timelineIndex>=data.frames.length){if(data.loop!==false)timelineIndex=0;else return stopTimeline()}const frame=data.frames[timelineIndex++];profile.colors=cloneJson(frame.colors||{});renderColorKeyboard();streamFrame();timelineTimer=setTimeout(playTimelineFrame,Math.max(20,Math.min(60000,Number(frame.duration_ms||100))))}
-function toggleTimeline(){if(timelineTimer)return stopTimeline();if(!timeline().frames.length)return;stopAnimation();timelineIndex=0;timelineTimer=true;renderTimeline();playTimelineFrame()}
-function stopTimeline(){if(timelineTimer!==true)clearTimeout(timelineTimer);timelineTimer=null;timelineIndex=0;if($('playTimelineBtn'))renderTimeline()}
-function renderDiagnostics(){$('deviceJson').textContent=JSON.stringify(meta.devices,null,2)}
-function renderAbout(){if(meta)$('aboutVersion').textContent=meta.version}
-function renderServiceSetup(){if(!meta?.service_setup)return;const setup=meta.service_setup,platform=t(`service.platform.${setup.platform}`);$('servicePlatform').textContent=platform;$('servicePlatform').removeAttribute('data-i18n');$('serviceGuideLink').href=`https://github.com/dirhamtriyadi/spade65-non-qmk/blob/main/docs/${currentLanguage==='id'?'id/':''}host-features.md`;$('serviceReleaseWorkflow').hidden=!setup.packaged;if(setup.packaged){$('servicePackageNote').textContent=t('service.packageNote',{platform});$('servicePrepareHint').textContent=t('service.prepareHint',{configPath:setup.config_path});$('serviceActivateHint').textContent=t(`service.activateHint.${setup.platform}`,{launcherPath:setup.launcher_path});$('servicePrepareCommands').textContent=setup.prepare_commands;$('serviceActivateCommands').textContent=setup.activate_commands}else{$('servicePackageNote').textContent=t('service.sourceDocsOnly')}}
-async function copyServiceCommands(field,successKey){const commands=meta?.service_setup?.[field];if(!commands)return;try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(commands);else{const area=document.createElement('textarea');area.value=commands;area.style.position='fixed';area.style.opacity='0';document.body.append(area);area.select();if(!document.execCommand('copy'))throw new Error('copy failed');area.remove()}toast(t(successKey))}catch(error){toast(t('service.copyFailed'),true)}}
+function updatePageHeader(page) {
+  $('pageTitle').dataset.i18n = pageLabels[page];
+  $('pageSubtitle').dataset.i18n = subtitles[page];
+  $('pageTitle').textContent = t(pageLabels[page]);
+  $('pageSubtitle').textContent = t(subtitles[page])
+}
 
-document.querySelectorAll('#nav button').forEach(button=>button.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x===button));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(`page-${button.dataset.page}`).classList.add('active');updatePageHeader(button.dataset.page)});
-$('copyServicePrepareBtn').onclick=()=>copyServiceCommands('prepare_commands','service.prepareCopied');
-$('copyServiceActivateBtn').onclick=()=>copyServiceCommands('activate_commands','service.activateCopied');
-document.querySelectorAll('#layerTabs button').forEach(button=>button.onclick=()=>{currentLayer=button.dataset.layer;document.querySelectorAll('#layerTabs button').forEach(x=>x.classList.toggle('active',x===button));renderKeyboard()});
-$('languageSelect').onchange=event=>setLanguage(event.target.value);
-$('quitBtn').onclick=quitApplication;
-for(const id of ['layoutVariant','lightingLayoutVariant'])$(id).onchange=e=>chooseLayout(e.target.value);
-$('deviceSelect').onchange=()=>syncLayoutFromSelectedDevice();$('refreshBtn').onclick=refresh;$('assignmentType').onchange=assignmentTypeChanged;$('usagePreset').onchange=e=>{if(e.target.value)$('usageInput').value=e.target.value};$('assignBtn').onclick=saveAssignment;$('winLock').onchange=e=>toggleWinLock(e.target.checked);$('wasdArrows').onchange=e=>toggleWasdArrows(e.target.checked);document.querySelectorAll('.disable-group').forEach(button=>button.onclick=()=>disableGroup(button.dataset.group));$('undoDisableBtn').onclick=undoDisabled;$('newProfileBtn').onclick=newProfile;$('saveProfileBtn').onclick=saveProfile;$('deleteProfileBtn').onclick=deleteSavedProfile;$('savedProfile').onchange=e=>loadSavedProfile(e.target.value);$('exportProfileBtn').onclick=exportProfile;$('importProfileBtn').onclick=()=>$('profileFile').click();$('profileFile').onchange=e=>e.target.files[0]&&importProfile(e.target.files[0]);$('vendorImportBtn').onclick=()=>$('vendorFile').click();$('vendorFile').onchange=e=>e.target.files[0]&&importVendor(e.target.files[0]);$('backupLibraryBtn').onclick=backupLibrary;$('restoreLibraryBtn').onclick=()=>$('libraryFile').click();$('libraryFile').onchange=e=>e.target.files[0]&&restoreLibrary(e.target.files[0]);$('applyProfileBtn').onclick=applyProfile;
-$('brightness').oninput=e=>$('brightnessOut').value=e.target.value;$('speed').oninput=e=>$('speedOut').value=e.target.value;
-$('appSpeed').oninput=e=>{$('appSpeedOut').value=e.target.value;saveAppLayer()};$('appOpacity').oninput=e=>{$('appOpacityOut').value=e.target.value;saveAppLayer()};$('appBandwidth').oninput=e=>{$('appBandwidthOut').value=e.target.value;saveAppLayer()};$('appAngle').oninput=e=>{$('appAngleOut').value=e.target.value;saveAppLayer()};
-$('animation').onchange=saveAppLayer;for(const id of ['appNumber','appGap','appFire','appCenterX','appCenterY','appGradient','appReverse','appBump','appBidirectional','audioSync'])$(id).onchange=saveAppLayer;document.querySelectorAll('.app-color').forEach(input=>input.oninput=saveAppLayer);$('addAppLayerBtn').onclick=addAppLayer;$('removeAppLayerBtn').onclick=removeAppLayer;$('setAppRangeBtn').onclick=setAppRange;$('clearAppRangeBtn').onclick=clearAppRange;
-$('applyEffectBtn').onclick=()=>doAction('rgb',{effect:$('effectSelect').value,brightness:Number($('brightness').value),speed:Number($('speed').value),color_index:Number($('colorIndex').value),multicolor:$('multicolor').checked},t('lighting.builtInApplied'));
-$('setColorBtn').onclick=setSelectedColor;$('clearColorsBtn').onclick=clearColors;$('applyColorsBtn').onclick=()=>doAction('per-key',{profile,brightness:Number($('brightness').value),speed:Number($('speed').value)},t('lighting.perKeyApplied'));$('streamOnceBtn').onclick=()=>{saveAppLayer();animateColors()};$('animationBtn').onclick=toggleAnimation;
-$('captureFrameBtn').onclick=captureTimelineFrame;$('playTimelineBtn').onclick=toggleTimeline;$('timelineLoop').onchange=e=>timeline().loop=e.target.checked;
-$('addMacroBtn').onclick=addMacro;$('deleteMacroBtn').onclick=deleteMacro;$('addEventBtn').onclick=addEvent;$('recordMacroBtn').onclick=toggleMacroRecording;$('macroName').onchange=e=>{if(profile.macros[activeMacro]){profile.macros[activeMacro].name=e.target.value.trim()||t('macro.defaultName',{index:profile.macros[activeMacro].index});renderMacros()}};$('macroRepeat').onchange=e=>{if(profile.macros[activeMacro])profile.macros[activeMacro].repeat=Number(e.target.value)};
-$('debounceBtn').onclick=()=>doAction('debounce',{milliseconds:Number($('debounce').value)},t('settings.debounceApplied'));$('sleepBtn').onclick=()=>doAction('sleep',{light_off:Number($('lightOff').value),hibernate:Number($('hibernate').value)},t('settings.timersApplied'));$('resetBtn').onclick=()=>doAction('reset',{confirmation:$('resetText').value},t('settings.resetSent'));
-$('validateBtn').onclick=async()=>{delete $('validationOutput').dataset.i18n;try{const result=await api('validate',{profile});$('validationOutput').textContent=JSON.stringify(result,null,2);toast(t('diagnostics.profileValid'))}catch(error){$('validationOutput').textContent=error.message;toast(error.message,true)}};
-async function initialize(){await initI18n();await refresh();const initialPage=location.hash.slice(1);if(initialPage&&subtitles[initialPage])document.querySelector(`#nav button[data-page="${initialPage}"]`).click();setInterval(pollDeviceChanges,2000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollDeviceChanges()})}
-initialize().catch(error=>toast(error.message,true));
+function renderLanguageOptions() {
+  const select = $('languageSelect');
+  select.innerHTML = '';
+  for (const item of languageManifest.languages) {
+    const option = document.createElement('option');
+    option.value = item.code;
+    option.textContent = item.name;
+    select.append(option)
+  }
+  select.value = currentLanguage
+}
+async function setLanguage(requested, persist = true) {
+  const supported = new Set(languageManifest.languages.map(item => item.code)),
+    target = supported.has(requested) ? requested : (languageManifest.default || DEFAULT_LANGUAGE);
+  if (!catalogs[DEFAULT_LANGUAGE]) catalogs[DEFAULT_LANGUAGE] = await fetchJson('/locales/en.json');
+  let selected = target;
+  if (target !== DEFAULT_LANGUAGE && !catalogs[target]) {
+    try {
+      catalogs[target] = await fetchJson(`/locales/${target}.json`)
+    } catch (error) {
+      console.warn(`Unable to load locale ${target}; using English`, error);
+      selected = DEFAULT_LANGUAGE
+    }
+  }
+  currentLanguage = selected;
+  if (persist) localStorage.setItem(I18N_STORAGE_KEY, currentLanguage);
+  renderLanguageOptions();
+  applyTranslations();
+  renderLocalizedDynamic()
+}
+
+function renderLocalizedDynamic() {
+  const active = document.querySelector('#nav button.active');
+  if (active) updatePageHeader(active.dataset.page);
+  renderAbout();
+  renderServiceSetup();
+  if (!meta || !profile) return;
+  renderSavedProfiles($('savedProfile').value);
+  renderEffects();
+  renderUsageList();
+  renderKeyboard();
+  renderMacros();
+  renderAppLayers();
+  renderTimeline();
+  renderConnectionStatus();
+  renderDiagnostics();
+  $('animationBtn').textContent = t(animationTimer ? 'action.stopAnimation' : 'action.startAnimation')
+}
+async function initI18n() {
+  seedEnglishCatalog();
+  try {
+    const manifest = await fetchJson('/locales/index.json');
+    if (validManifest(manifest)) languageManifest = manifest
+  } catch (error) {
+    console.warn('Unable to load locale manifest; using built-in language list', error)
+  }
+  try {
+    catalogs[DEFAULT_LANGUAGE] = {
+      ...catalogs[DEFAULT_LANGUAGE],
+      ...await fetchJson('/locales/en.json')
+    }
+  } catch (error) {
+    console.warn('Unable to load English locale catalog; using document text', error)
+  }
+  const saved = localStorage.getItem(I18N_STORAGE_KEY) || languageManifest.default || DEFAULT_LANGUAGE;
+  await setLanguage(saved, false)
+}
+const rows = [
+  ['esc', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n0', 'minus', 'plus', 'bksp'],
+  ['tab', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'lqu', 'rqu', 'k29', 'delete'],
+  ['caps', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'sem', 'quo', 'k42', 'enter', 'pageup'],
+  ['lshift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'comma', 'dot', 'qmark', 'rshift', 'up', 'pagedown'],
+  ['lctrl', 'win', 'lalt', 'lspace', 'ralt', 'mspace', 'rspace', 'fn', 'rctrl', 'left', 'down', 'right']
+];
+const titles = {
+  esc: 'Esc',
+  bksp: 'Backspace',
+  caps: 'Caps',
+  lshift: 'L Shift',
+  rshift: 'R Shift',
+  lctrl: 'L Ctrl',
+  rctrl: 'R Ctrl',
+  lalt: 'L Alt',
+  ralt: 'R Alt',
+  lspace: 'Space',
+  mspace: 'Space',
+  rspace: 'Space',
+  pageup: 'Pg Up',
+  pagedown: 'Pg Dn',
+  lqu: '[',
+  rqu: ']',
+  sem: ';',
+  quo: "'",
+  qmark: '/',
+  comma: ',',
+  dot: '.',
+  minus: '-',
+  plus: '=',
+  win: 'Win',
+  k29: '\\',
+  k42: '\\'
+};
+const isoPositions = [
+  [70, 21, 35, 35],
+  [109, 21, 35, 35],
+  [148, 21, 35, 35],
+  [186, 21, 35, 35],
+  [226, 21, 35, 35],
+  [264, 21, 35, 35],
+  [303, 21, 35, 35],
+  [342, 21, 35, 35],
+  [381, 21, 35, 35],
+  [420, 21, 35, 35],
+  [458, 21, 35, 35],
+  [497, 21, 35, 35],
+  [536, 21, 35, 35],
+  [576, 21, 70, 35],
+  [70, 61, 55, 35],
+  [128, 61, 35, 35],
+  [168, 61, 35, 35],
+  [206, 61, 35, 35],
+  [245, 61, 35, 35],
+  [284, 61, 35, 35],
+  [323, 61, 35, 35],
+  [362, 61, 35, 35],
+  [400, 61, 35, 35],
+  [439, 61, 35, 35],
+  [478, 61, 35, 35],
+  [517, 61, 35, 35],
+  [556, 61, 35, 35],
+  [604, 61, 0, 0],
+  [652, 61, 35, 35],
+  [70, 100, 64, 35],
+  [138, 100, 35, 35],
+  [177, 100, 35, 35],
+  [215, 100, 35, 35],
+  [254, 100, 35, 35],
+  [293, 100, 35, 35],
+  [332, 100, 35, 35],
+  [371, 100, 35, 35],
+  [410, 100, 35, 35],
+  [448, 100, 35, 35],
+  [487, 100, 35, 35],
+  [526, 100, 35, 35],
+  [565, 100, 35, 35],
+  [606, 61, 41, 74],
+  [652, 100, 35, 35],
+  [70, 138, 83, 35],
+  [157, 138, 35, 35],
+  [196, 138, 35, 35],
+  [235, 138, 35, 35],
+  [274, 138, 35, 35],
+  [313, 138, 35, 35],
+  [352, 138, 35, 35],
+  [390, 138, 35, 35],
+  [430, 138, 35, 35],
+  [468, 138, 35, 35],
+  [507, 138, 35, 35],
+  [546, 138, 64, 35],
+  [614, 138, 35, 35],
+  [652, 138, 35, 35],
+  [70, 177, 45, 35],
+  [118, 177, 45, 35],
+  [167, 177, 45, 35],
+  [216, 177, 0, 0],
+  [303, 177, 0, 0],
+  [216, 177, 239, 35],
+  [352, 177, 0, 0],
+  [458, 177, 45, 35],
+  [507, 177, 45, 35],
+  [575, 177, 35, 35],
+  [614, 177, 35, 35],
+  [652, 177, 35, 35]
+];
+const ansiPositions = [
+  [70, 23, 35, 35],
+  [109, 23, 35, 35],
+  [148, 23, 35, 35],
+  [186, 23, 35, 35],
+  [225, 23, 35, 35],
+  [264, 23, 35, 35],
+  [303, 23, 35, 35],
+  [342, 23, 35, 35],
+  [381, 23, 35, 35],
+  [420, 23, 35, 35],
+  [458, 23, 35, 35],
+  [497, 23, 35, 35],
+  [536, 23, 35, 35],
+  [577, 23, 70, 35],
+  [70, 61, 55, 35],
+  [128, 61, 35, 35],
+  [167, 61, 35, 35],
+  [206, 61, 35, 35],
+  [245, 61, 35, 35],
+  [284, 61, 35, 35],
+  [323, 61, 35, 35],
+  [362, 61, 35, 35],
+  [400, 61, 35, 35],
+  [439, 61, 35, 35],
+  [478, 61, 35, 35],
+  [517, 61, 35, 35],
+  [556, 61, 35, 35],
+  [595, 61, 54, 35],
+  [652, 61, 35, 35],
+  [70, 100, 65, 35],
+  [138, 100, 35, 35],
+  [177, 100, 35, 35],
+  [216, 100, 35, 35],
+  [255, 100, 35, 35],
+  [293, 100, 35, 35],
+  [332, 100, 35, 35],
+  [371, 100, 35, 35],
+  [410, 100, 35, 35],
+  [449, 100, 35, 35],
+  [488, 100, 35, 35],
+  [526, 100, 35, 35],
+  [548, 100, 0, 0],
+  [566, 100, 82, 35],
+  [652, 100, 35, 35],
+  [70, 138, 84, 35],
+  [158, 138, 35, 35],
+  [197, 138, 35, 35],
+  [235, 138, 35, 35],
+  [274, 138, 35, 35],
+  [313, 138, 35, 35],
+  [352, 138, 35, 35],
+  [391, 138, 35, 35],
+  [430, 138, 35, 35],
+  [468, 138, 35, 35],
+  [507, 138, 35, 35],
+  [546, 138, 64, 35],
+  [614, 138, 35, 35],
+  [652, 138, 35, 35],
+  [70, 177, 45, 35],
+  [118, 177, 45, 35],
+  [166, 177, 45, 35],
+  [216, 177, 0, 0],
+  [303, 177, 0, 0],
+  [216, 177, 239, 35],
+  [353, 177, 0, 0],
+  [459, 177, 45, 35],
+  [507, 177, 45, 35],
+  [575, 177, 35, 35],
+  [614, 177, 35, 35],
+  [652, 177, 35, 35]
+];
+const splitPositions = {
+  iso: {
+    61: [216, 177, 82, 35],
+    62: [303, 177, 45, 35],
+    63: [216, 177, 0, 0],
+    64: [352, 177, 102, 35]
+  },
+  ansi: {
+    61: [216, 177, 82, 35],
+    62: [303, 177, 45, 35],
+    63: [216, 177, 0, 0],
+    64: [353, 177, 103, 35]
+  }
+};
+
+function keyPosition(index) {
+  const family = layoutVariant.startsWith('iso') ? 'iso' : 'ansi',
+    positions = family === 'iso' ? isoPositions : ansiPositions;
+  if (layoutVariant.endsWith('split') && splitPositions[family][index]) return splitPositions[family][index];
+  return positions[index]
+}
+
+async function api(action, data = {}, method = 'POST') {
+  const options = {
+    method,
+    headers: {
+      'X-Spade65-Token': token
+    }
+  };
+  if (method === 'POST') {
+    options.headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(data)
+  }
+  const response = await fetch(`/api/${action}`, options);
+  const result = await response.json();
+  if (!response.ok || result.ok === false) throw new Error(result.error || `HTTP ${response.status}`);
+  return result;
+}
+
+function fetchGuiStatus() {
+  if (!statusFetchPromise) statusFetchPromise = api('status', {}, 'GET').finally(() => statusFetchPromise = null);
+  return statusFetchPromise
+}
+
+function deviceSignature(devices) {
+  return JSON.stringify((devices || []).map(item => [item.path, item.vid, item.pid, item.usages]).sort((left, right) => String(left[0]).localeCompare(String(right[0]))))
+}
+
+function toast(message, error = false) {
+  const el = $('toast');
+  el.textContent = message;
+  el.className = `show${error?' error':''}`;
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.className = '', 3500)
+}
+async function quitApplication() {
+  if (!confirm(t('app.confirmQuit'))) return;
+  try {
+    await api('quit');
+    $('quitBtn').disabled = true;
+    toast(t('app.shuttingDown'))
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+
+function device() {
+  return $('deviceSelect').value || null
+}
+
+function selectedLayoutDevice() {
+  const path = device();
+  return path && meta ? meta.devices.find(item => item.path === path && item.usages.includes(layoutState.CONFIG_USAGE)) || null : null
+}
+
+function storedDeviceLayouts() {
+  return layoutState.parseDeviceLayouts(localStorage.getItem(LAYOUT_STORAGE_KEY))
+}
+
+function saveDeviceLayouts(layouts) {
+  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layoutState.parseDeviceLayouts(layouts)))
+}
+
+function applyLayoutDisplay(layout, connected, render = true) {
+  layoutVariant = layoutState.isValidLayout(layout) ? layout : layoutState.DEFAULT_LAYOUT;
+  for (const id of ['layoutVariant', 'lightingLayoutVariant']) {
+    const select = $(id);
+    select.value = layoutVariant;
+    select.disabled = !connected
+  }
+  const sourceKey = connected ? 'layout.detected' : 'layout.noDevice';
+  for (const id of ['keymapLayoutSource', 'lightingLayoutSource']) {
+    const source = $(id);
+    source.dataset.i18n = sourceKey;
+    source.textContent = t(sourceKey)
+  }
+  if (render && profile) {
+    renderKeyboard();
+    renderColorKeyboard()
+  }
+}
+
+function syncLayoutFromSelectedDevice(render = true) {
+  const result = layoutState.resolveLayout(selectedLayoutDevice(), storedDeviceLayouts(), localStorage.getItem(LEGACY_LAYOUT_STORAGE_KEY));
+  activeLayoutKey = result.key;
+  if (result.connected) {
+    if (result.changed) saveDeviceLayouts(result.layouts);
+    localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)
+  }
+  applyLayoutDisplay(result.layout, result.connected, render)
+}
+
+function chooseLayout(value) {
+  if (!activeLayoutKey || !layoutState.isValidLayout(value)) {
+    syncLayoutFromSelectedDevice();
+    return
+  }
+  const layouts = storedDeviceLayouts();
+  layouts[activeLayoutKey] = value;
+  saveDeviceLayouts(layouts);
+  applyLayoutDisplay(value, true)
+}
+
+function restoreLayoutPreferences(data) {
+  const legacy = layoutState.isValidLayout(data.layout) ? data.layout : null,
+    hasMap = data.device_layouts && typeof data.device_layouts === 'object' && !Array.isArray(data.device_layouts),
+    key = layoutState.deviceKey(selectedLayoutDevice());
+  if (hasMap) {
+    const layouts = layoutState.parseDeviceLayouts(data.device_layouts);
+    if (key && legacy && !layouts[key]) layouts[key] = legacy;
+    saveDeviceLayouts(layouts);
+    if (!key && legacy && !Object.keys(layouts).length) localStorage.setItem(LEGACY_LAYOUT_STORAGE_KEY, legacy);
+    else localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)
+  } else if (legacy) {
+    if (key) {
+      const layouts = storedDeviceLayouts();
+      layouts[key] = legacy;
+      saveDeviceLayouts(layouts);
+      localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)
+    } else localStorage.setItem(LEGACY_LAYOUT_STORAGE_KEY, legacy)
+  }
+  syncLayoutFromSelectedDevice(false)
+}
+
+function actionPayload(extra = {}) {
+  return {
+    device: device(),
+    ...extra
+  }
+}
+
+function storedProfiles() {
+  try {
+    const value = JSON.parse(localStorage.getItem('spade65-profiles') || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+function renderSavedProfiles(selected = '') {
+  const select = $('savedProfile'),
+    items = storedProfiles();
+  select.innerHTML = '';
+  const unsaved = document.createElement('option');
+  unsaved.value = '';
+  unsaved.textContent = t('profile.unsaved');
+  select.append(unsaved);
+  Object.keys(items).sort().forEach(name => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    select.append(option)
+  });
+  select.value = selected
+}
+async function loadSavedProfile(name) {
+  if (!name) return;
+  try {
+    const item = storedProfiles()[name];
+    await api('validate', {
+      profile: item
+    });
+    profile = cloneJson(item);
+    $('profileName').value = name;
+    selectedKey = null;
+    activeMacro = 0;
+    activeAppLayer = 0;
+    renderKeyboard();
+    renderColorKeyboard();
+    renderMacros();
+    renderAppLayers();
+    renderTimeline();
+    toast(t('profile.loaded', {
+      name
+    }))
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+async function saveProfile() {
+  try {
+    await api('validate', {
+      profile
+    });
+    const name = $('profileName').value.trim();
+    if (!name) return toast(t('profile.nameRequired'), true);
+    const items = storedProfiles();
+    items[name] = cloneJson(profile);
+    localStorage.setItem('spade65-profiles', JSON.stringify(items));
+    renderSavedProfiles(name);
+    toast(t('profile.savedLocal', {
+      name
+    }))
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+
+function deleteSavedProfile() {
+  const name = $('savedProfile').value;
+  if (!name) return toast(t('profile.selectSaved'), true);
+  if (!confirm(t('profile.confirmDelete', {
+      name
+    }))) return;
+  const items = storedProfiles();
+  delete items[name];
+  localStorage.setItem('spade65-profiles', JSON.stringify(items));
+  renderSavedProfiles();
+  toast(t('profile.deleted', {
+    name
+  }))
+}
+
+async function refresh() {
+  try {
+    meta = await fetchGuiStatus();
+    deviceSnapshot = deviceSignature(meta.devices);
+    if (!profile) profile = cloneJson(meta.profile);
+    renderDevices();
+    syncLayoutFromSelectedDevice(false);
+    renderEffects();
+    renderUsageList();
+    renderSavedProfiles($('savedProfile').value);
+    renderKeyboard();
+    renderColorKeyboard();
+    renderMacros();
+    renderAppLayers();
+    renderTimeline();
+    renderDiagnostics();
+    renderAbout();
+    renderServiceSetup();
+    renderConnectionStatus()
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+async function pollDeviceChanges() {
+  if (devicePollBusy || document.hidden || !meta) return;
+  devicePollBusy = true;
+  try {
+    const status = await fetchGuiStatus(),
+      snapshot = deviceSignature(status.devices);
+    if (snapshot === deviceSnapshot) return;
+    meta = {
+      ...meta,
+      devices: status.devices
+    };
+    deviceSnapshot = snapshot;
+    renderDevices();
+    syncLayoutFromSelectedDevice();
+    renderDiagnostics();
+    renderConnectionStatus()
+  } catch (error) {
+    console.warn('Unable to refresh Spade65 device presence', error)
+  } finally {
+    devicePollBusy = false
+  }
+}
+
+function renderConnectionStatus() {
+  if (!meta) return;
+  const connected = meta.devices.length > 0;
+  $('connectionDot').classList.toggle('online', connected);
+  $('connectionText').textContent = connected ? t('status.connected', {
+    name: meta.devices[0].name
+  }) : t('status.noDevice');
+  $('transportBadge').textContent = connected ? `${meta.devices[0].transport} ${meta.devices[0].vid}:${meta.devices[0].pid}` : t('status.notConnected');
+  $('descriptorBadge').textContent = meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable')
+}
+
+function renderDevices() {
+  const select = $('deviceSelect'),
+    old = select.value;
+  select.innerHTML = '';
+  for (const item of meta.devices.filter(d => d.usages.includes('ff02:0001'))) {
+    const o = document.createElement('option');
+    o.value = item.path;
+    o.textContent = `${item.name} · ${item.transport} · ${item.path}`;
+    select.append(o)
+  }
+  if ([...select.options].some(o => o.value === old)) select.value = old
+}
+
+function renderEffects() {
+  const select = $('effectSelect'),
+    selected = select.value || 'fixed';
+  select.innerHTML = '';
+  for (const effect of meta.effects) {
+    const o = document.createElement('option'),
+      key = `effect.${effect}`,
+      translated = t(key);
+    o.value = effect;
+    o.textContent = translated === key ? effect.replaceAll('-', ' ') : translated;
+    select.append(o)
+  }
+  select.value = [...select.options].some(option => option.value === selected) ? selected : 'fixed'
+}
+
+function renderUsageList() {
+  const list = $('usageList'),
+    preset = $('usagePreset'),
+    selected = preset.value;
+  list.innerHTML = '';
+  preset.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = t('keymap.chooseFunction');
+  preset.append(placeholder);
+  for (const name of Object.keys(meta.usages).sort()) {
+    const o = document.createElement('option');
+    o.value = name;
+    list.append(o)
+  }
+  for (const [group, names] of Object.entries(meta.usage_groups)) {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = t(`usageGroup.${group}`);
+    for (const name of names) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = `${name} · 0x${meta.usages[name].toString(16).padStart(2,'0')}`;
+      optgroup.append(option)
+    }
+    preset.append(optgroup)
+  }
+  if ([...preset.options].some(option => option.value === selected)) preset.value = selected
+}
+
+function keyLabel(key) {
+  return titles[key] || key.replace(/^n(?=\d)/, '')
+}
+
+function buildKeyboard(container, mode) {
+  container.innerHTML = '';
+  rows.flat().forEach((key, index) => {
+    const [x, y, w, h] = keyPosition(index);
+    if (!w || !h) return;
+    const b = document.createElement('button');
+    b.className = 'key';
+    b.dataset.key = key;
+    b.style.cssText = `--x:${x/7.57}%;--y:${y/2.36}%;--w:${w/7.57}%;--h:${h/2.36}%`;
+    b.textContent = keyLabel(key);
+    if (mode === 'assign' && profile.layers[currentLayer][key]) b.classList.add('assigned');
+    if (mode === 'assign' && selectedKey === key) b.classList.add('selected');
+    if (mode === 'color' && colorKeys.has(key)) b.classList.add('selected');
+    if (mode === 'color' && profile.colors[key]) {
+      const sw = document.createElement('i');
+      sw.className = 'swatch';
+      const c = profile.colors[key];
+      sw.style.background = Array.isArray(c) ? `rgb(${c.join(',')})` : c;
+      b.append(sw)
+    }
+    b.onclick = () => mode === 'assign' ? selectKey(key) : toggleColorKey(key);
+    container.append(b)
+  })
+}
+
+function profileSettings() {
+  if (!profile.settings || typeof profile.settings !== 'object') profile.settings = {
+    win_lock: false,
+    wasd_arrows: false
+  };
+  return profile.settings
+}
+
+function renderKeyboard() {
+  buildKeyboard($('keyboard'), 'assign');
+  renderLayerSummary();
+  $('selectedKey').textContent = selectedKey ? keyLabel(selectedKey) : t('common.none');
+  $('winLock').checked = !!profileSettings().win_lock;
+  $('wasdArrows').checked = !!profileSettings().wasd_arrows;
+  if (selectedKey) loadAssignment()
+}
+
+function renderColorKeyboard() {
+  buildKeyboard($('colorKeyboard'), 'color');
+  renderAppRangeSummary()
+}
+
+function selectKey(key) {
+  selectedKey = key;
+  $('selectedKey').textContent = keyLabel(key);
+  renderKeyboard()
+}
+
+function toggleColorKey(key) {
+  colorKeys.has(key) ? colorKeys.delete(key) : colorKeys.add(key);
+  renderColorKeyboard()
+}
+
+function loadAssignment() {
+  const value = profile.layers[currentLayer][selectedKey];
+  document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = false);
+  if (value === undefined) {
+    $('assignmentType').value = 'default';
+    $('usageInput').value = ''
+  } else if (typeof value === 'object' && 'macro' in value) {
+    $('assignmentType').value = 'macro';
+    $('macroAssign').value = value.macro
+  } else {
+    $('assignmentType').value = 'usage';
+    $('usageInput').value = typeof value === 'object' ? value.usage : value;
+    const mods = typeof value === 'object' ? (value.modifiers || 0) : 0;
+    document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = !!(mods & Number(x.value)))
+  }
+  assignmentTypeChanged()
+}
+
+function assignmentTypeChanged() {
+  const type = $('assignmentType').value;
+  $('usageWrap').hidden = type !== 'usage';
+  $('modifierWrap').hidden = type !== 'usage';
+  $('macroWrap').hidden = type !== 'macro'
+}
+
+function saveAssignment() {
+  if (!selectedKey) return toast(t('keymap.selectFirst'), true);
+  const type = $('assignmentType').value;
+  if (type === 'default') delete profile.layers[currentLayer][selectedKey];
+  else if (type === 'macro') {
+    if (!profile.macros.length) return toast(t('keymap.createMacroFirst'), true);
+    profile.layers[currentLayer][selectedKey] = {
+      macro: Number($('macroAssign').value)
+    }
+  } else {
+    const usage = $('usageInput').value.trim();
+    if (!usage) return toast(t('keymap.usageRequired'), true);
+    let modifiers = 0;
+    document.querySelectorAll('#modifierWrap input:checked').forEach(x => modifiers |= Number(x.value));
+    profile.layers[currentLayer][selectedKey] = modifiers ? {
+      usage,
+      modifiers
+    } : usage
+  }
+  renderKeyboard();
+  toast(t('keymap.assignmentSaved', {
+    key: keyLabel(selectedKey),
+    layer: currentLayer
+  }))
+}
+
+function renderLayerSummary() {
+  const box = $('layerSummary');
+  box.innerHTML = '';
+  for (const layer of ['normal', 'fn1', 'fn2']) {
+    const div = document.createElement('div');
+    div.textContent = t('keymap.assignments', {
+      layer: layer.toUpperCase(),
+      count: Object.keys(profile.layers[layer]).length
+    });
+    box.append(div)
+  }
+  const div = document.createElement('div');
+  div.textContent = t('keymap.colors', {
+    count: Object.keys(profile.colors).length
+  });
+  box.append(div)
+}
+
+function backupKeys(name, keys) {
+  const settings = profileSettings();
+  settings[name] = {};
+  for (const key of keys) settings[name][key] = hasOwn(profile.layers.normal, key) ? {
+    present: true,
+    value: cloneJson(profile.layers.normal[key])
+  } : {
+    present: false
+  }
+}
+
+function restoreKeys(name) {
+  const settings = profileSettings(),
+    backup = settings[name] || {};
+  for (const [key, item] of Object.entries(backup)) item.present ? profile.layers.normal[key] = item.value : delete profile.layers.normal[key];
+  delete settings[name]
+}
+
+function toggleWinLock(enabled) {
+  const settings = profileSettings();
+  if (enabled && !settings.win_lock) {
+    backupKeys('win_lock_backup', ['win']);
+    profile.layers.normal.win = 'disabled'
+  } else if (!enabled && settings.win_lock) restoreKeys('win_lock_backup');
+  settings.win_lock = enabled;
+  renderKeyboard();
+  toast(t(enabled ? 'keymap.winDisabled' : 'keymap.winRestored'))
+}
+
+function toggleWasdArrows(enabled) {
+  const settings = profileSettings(),
+    keys = ['w', 'a', 's', 'd', 'up', 'left', 'down', 'right'];
+  if (enabled && !settings.wasd_arrows) {
+    backupKeys('wasd_arrows_backup', keys);
+    Object.assign(profile.layers.normal, {
+      w: 'up',
+      a: 'left',
+      s: 'down',
+      d: 'right',
+      up: 'w',
+      left: 'a',
+      down: 's',
+      right: 'd'
+    })
+  } else if (!enabled && settings.wasd_arrows) restoreKeys('wasd_arrows_backup');
+  settings.wasd_arrows = enabled;
+  renderKeyboard();
+  toast(t(enabled ? 'keymap.wasdSwapped' : 'keymap.wasdRestored'))
+}
+
+function disableGroup(group) {
+  const groups = {
+    numbers: ['n0', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9'],
+    letters: [...'abcdefghijklmnopqrstuvwxyz'],
+    symbols: ['minus', 'plus', 'lqu', 'rqu', 'k29', 'k42', 'sem', 'quo', 'comma', 'dot', 'qmark'],
+    controls: ['esc', 'bksp', 'tab', 'caps', 'enter', 'delete', 'pageup', 'pagedown', 'lshift', 'rshift', 'lctrl', 'rctrl', 'lalt', 'ralt', 'win', 'fn', 'up', 'down', 'left', 'right', 'lspace', 'mspace', 'rspace'],
+    all: meta.buttons
+  };
+  for (const key of groups[group]) profile.layers[currentLayer][key] = 'disabled';
+  renderKeyboard();
+  toast(t('keymap.groupDisabled', {
+    group: t(group === 'all' ? 'group.allKeys' : `group.${group}`),
+    layer: currentLayer
+  }))
+}
+
+function undoDisabled() {
+  for (const [key, value] of Object.entries(profile.layers[currentLayer]))
+    if (value === 'disabled' || value === 0) delete profile.layers[currentLayer][key];
+  renderKeyboard();
+  toast(t('keymap.disabledRemoved', {
+    layer: currentLayer
+  }))
+}
+
+function newAppLayer() {
+  return {
+    mode: 'wave',
+    enabled: true,
+    speed: 5,
+    opacity: 100,
+    bandwidth: 200,
+    angle: 0,
+    number: 5,
+    gap: 0,
+    fire: 1,
+    center_x: 0,
+    center_y: 0,
+    gradient: true,
+    reverse: false,
+    bump: false,
+    bidirectional: false,
+    audio: false,
+    colors: ['#ff0000', '#00ffff', '#8000ff'],
+    keys: []
+  }
+}
+
+function appLayers() {
+  const settings = profileSettings();
+  if (!Array.isArray(settings.app_effects) || !settings.app_effects.length) settings.app_effects = [newAppLayer()];
+  settings.app_effects = settings.app_effects.slice(0, 10).map(value => {
+    const layer = value && typeof value === 'object' && !Array.isArray(value) ? {
+      ...newAppLayer(),
+      ...value
+    } : newAppLayer();
+    layer.keys = Array.isArray(layer.keys) ? layer.keys.filter(key => meta?.buttons.includes(key)) : [];
+    layer.colors = Array.isArray(layer.colors) ? layer.colors.slice(0, 20).filter(color => /^#[0-9a-f]{6}$/i.test(color)) : [];
+    if (!layer.colors.length) layer.colors = newAppLayer().colors;
+    return layer
+  });
+  return settings.app_effects
+}
+
+function appLayer() {
+  activeAppLayer = Math.min(activeAppLayer, appLayers().length - 1);
+  return appLayers()[activeAppLayer]
+}
+
+function animationKey(mode) {
+  return mode === 'linear-wave' ? 'linearWave' : mode
+}
+
+function renderAppLayers() {
+  const list = $('appLayerList');
+  list.innerHTML = '';
+  appLayers().forEach((layer, index) => {
+    const row = document.createElement('div');
+    row.className = `effect-layer${index===activeAppLayer?' active':''}`;
+    const enabled = document.createElement('input');
+    enabled.type = 'checkbox';
+    enabled.checked = layer.enabled !== false;
+    enabled.title = t('lighting.toggleLayer');
+    enabled.onclick = event => event.stopPropagation();
+    enabled.onchange = () => layer.enabled = enabled.checked;
+    const name = document.createElement('button');
+    name.textContent = `${index+1} · ${t(`animation.${animationKey(layer.mode||'wave')}`)}`;
+    name.onclick = () => {
+      activeAppLayer = index;
+      renderAppLayers();
+      loadAppLayer()
+    };
+    row.append(enabled, name);
+    list.append(row)
+  });
+  $('removeAppLayerBtn').disabled = appLayers().length <= 1;
+  loadAppLayer()
+}
+
+function loadAppLayer() {
+  const layer = appLayer();
+  $('animation').value = layer.mode;
+  $('appSpeed').value = layer.speed;
+  $('appSpeedOut').value = layer.speed;
+  $('appOpacity').value = layer.opacity;
+  $('appOpacityOut').value = layer.opacity;
+  $('appBandwidth').value = layer.bandwidth;
+  $('appBandwidthOut').value = layer.bandwidth;
+  $('appAngle').value = layer.angle;
+  $('appAngleOut').value = layer.angle;
+  $('appNumber').value = layer.number;
+  $('appGap').value = layer.gap;
+  $('appFire').value = layer.fire;
+  $('appCenterX').value = layer.center_x;
+  $('appCenterY').value = layer.center_y;
+  $('appGradient').checked = layer.gradient !== false;
+  $('appReverse').checked = !!layer.reverse;
+  $('appBump').checked = !!layer.bump;
+  $('appBidirectional').checked = !!layer.bidirectional;
+  $('audioSync').checked = !!layer.audio;
+  document.querySelectorAll('.app-color').forEach((input, index) => input.value = layer.colors?.[index] || '#000000');
+  renderAppRangeSummary()
+}
+
+function saveAppLayer() {
+  const layer = appLayer();
+  layer.mode = $('animation').value;
+  layer.speed = Number($('appSpeed').value);
+  layer.opacity = Number($('appOpacity').value);
+  layer.bandwidth = Number($('appBandwidth').value);
+  layer.angle = Number($('appAngle').value);
+  layer.number = Number($('appNumber').value);
+  layer.gap = Number($('appGap').value);
+  layer.fire = Number($('appFire').value);
+  layer.center_x = Number($('appCenterX').value);
+  layer.center_y = Number($('appCenterY').value);
+  layer.gradient = $('appGradient').checked;
+  layer.reverse = $('appReverse').checked;
+  layer.bump = $('appBump').checked;
+  layer.bidirectional = $('appBidirectional').checked;
+  layer.audio = $('audioSync').checked;
+  layer.colors = [...document.querySelectorAll('.app-color')].map(input => input.value);
+  renderAppLayers()
+}
+
+function addAppLayer() {
+  if (appLayers().length >= 10) return toast(t('lighting.maxLayers'), true);
+  appLayers().push(newAppLayer());
+  activeAppLayer = appLayers().length - 1;
+  renderAppLayers();
+  toast(t('lighting.layerAdded'))
+}
+
+function removeAppLayer() {
+  if (appLayers().length <= 1) return;
+  appLayers().splice(activeAppLayer, 1);
+  activeAppLayer = Math.max(0, activeAppLayer - 1);
+  renderAppLayers();
+  toast(t('lighting.layerRemoved'))
+}
+
+function setAppRange() {
+  appLayer().keys = [...colorKeys];
+  renderAppRangeSummary();
+  toast(colorKeys.size ? t('lighting.effectSelectedKeys', {
+    count: colorKeys.size
+  }) : t('lighting.effectAllKeys'))
+}
+
+function clearAppRange() {
+  appLayer().keys = [];
+  renderAppRangeSummary();
+  toast(t('lighting.effectAllKeys'))
+}
+
+function renderAppRangeSummary() {
+  const target = $('appRangeSummary');
+  if (!target || !profile) return;
+  const keys = appLayer().keys || [];
+  target.textContent = keys.length ? t('lighting.currentRangeSelected', {
+    count: keys.length
+  }) : t('lighting.currentRangeAll')
+}
+
+function macroDisplayName(macro) {
+  return macro.name || t('macro.defaultName', {
+    index: macro.index
+  })
+}
+
+function renderMacros() {
+  const list = $('macroList');
+  list.innerHTML = '';
+  profile.macros.forEach((macro, i) => {
+    const b = document.createElement('button');
+    b.className = i === activeMacro ? 'active' : '';
+    b.textContent = `M${macro.index} · ${macroDisplayName(macro)} (${macro.events.length})`;
+    b.onclick = () => {
+      if (recordingMacro) stopMacroRecording();
+      activeMacro = i;
+      renderMacros()
+    };
+    list.append(b)
+  });
+  const macro = profile.macros[activeMacro];
+  $('macroTitle').textContent = macro ? `M${macro.index} · ${macroDisplayName(macro)}` : t('macro.editor');
+  $('macroName').value = macro?.name ?? '';
+  $('macroRepeat').value = macro?.repeat ?? 1;
+  $('eventList').innerHTML = '';
+  if (macro) macro.events.forEach((event, i) => renderEvent(event, i));
+  $('deleteMacroBtn').disabled = !macro;
+  $('addEventBtn').disabled = !macro;
+  $('recordMacroBtn').disabled = !macro;
+  $('recordMacroBtn').textContent = t(recordingMacro ? 'action.stopRecording' : 'action.record');
+  renderMacroAssign()
+}
+
+function renderMacroAssign() {
+  const s = $('macroAssign');
+  s.innerHTML = '';
+  for (const macro of profile.macros) {
+    const o = document.createElement('option');
+    o.value = macro.index;
+    o.textContent = `M${macro.index} · ${macroDisplayName(macro)}`;
+    s.append(o)
+  }
+}
+
+function renderEvent(event, index) {
+  const row = document.createElement('div');
+  row.className = 'event';
+  const delay = document.createElement('input');
+  delay.type = 'number';
+  delay.min = 0;
+  delay.max = 32767;
+  delay.value = event.delay_ms;
+  delay.onchange = () => event.delay_ms = Number(delay.value);
+  const usage = document.createElement('input');
+  usage.value = event.usage;
+  usage.setAttribute('list', 'usageList');
+  usage.onchange = () => event.usage = usage.value;
+  const state = document.createElement('select');
+  for (const [value, key] of [
+      ['true', 'macro.keyDown'],
+      ['false', 'macro.keyUp']
+    ]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = t(key);
+    state.append(option)
+  }
+  state.value = String(event.pressed);
+  state.onchange = () => event.pressed = state.value === 'true';
+  const del = document.createElement('button');
+  del.textContent = '×';
+  del.className = 'danger';
+  del.onclick = () => {
+    profile.macros[activeMacro].events.splice(index, 1);
+    renderMacros()
+  };
+  row.append(delay, usage, state, del);
+  $('eventList').append(row)
+}
+
+function addMacro() {
+  if (profile.macros.length >= 10) return toast(t('macro.maximumTen'), true);
+  const used = new Set(profile.macros.map(m => m.index));
+  let index = 0;
+  while (used.has(index)) index++;
+  profile.macros.push({
+    index,
+    name: t('macro.defaultName', {
+      index
+    }),
+    repeat: 1,
+    events: []
+  });
+  activeMacro = profile.macros.length - 1;
+  renderMacros()
+}
+
+function deleteMacro() {
+  const macro = profile.macros[activeMacro];
+  if (!macro) return;
+  for (const layer of Object.values(profile.layers))
+    for (const [key, value] of Object.entries(layer))
+      if (typeof value === 'object' && value.macro === macro.index) delete layer[key];
+  profile.macros.splice(activeMacro, 1);
+  activeMacro = Math.max(0, activeMacro - 1);
+  renderMacros();
+  renderKeyboard()
+}
+
+function addEvent() {
+  const macro = profile.macros[activeMacro];
+  if (!macro) return;
+  if (macro.events.length >= 84) return toast(t('macro.maximumEvents'), true);
+  macro.events.push({
+    delay_ms: 20,
+    usage: 'a',
+    pressed: macro.events.length % 2 === 0
+  });
+  renderMacros()
+}
+
+function eventUsage(event) {
+  if (event.code.startsWith('Key')) return event.code.slice(3).toLowerCase();
+  if (event.code.startsWith('Digit')) return event.code.slice(5);
+  if (/^F\d+$/.test(event.code)) return event.code.toLowerCase();
+  return {
+    Enter: 'enter',
+    Escape: 'esc',
+    Backspace: 'backspace',
+    Tab: 'tab',
+    Space: 'space',
+    Minus: 'minus',
+    Equal: 'equal',
+    BracketLeft: 'left-bracket',
+    BracketRight: 'right-bracket',
+    Backslash: 'backslash',
+    Semicolon: 'semicolon',
+    Quote: 'quote',
+    Backquote: 'grave',
+    Comma: 'comma',
+    Period: 'dot',
+    Slash: 'slash',
+    CapsLock: 'caps-lock',
+    PrintScreen: 'print-screen',
+    ScrollLock: 'scroll-lock',
+    Pause: 'pause',
+    Insert: 'insert',
+    Home: 'home',
+    PageUp: 'page-up',
+    Delete: 'delete',
+    End: 'end',
+    PageDown: 'page-down',
+    ArrowRight: 'right',
+    ArrowLeft: 'left',
+    ArrowDown: 'down',
+    ArrowUp: 'up',
+    ControlLeft: 'left-ctrl',
+    ShiftLeft: 'left-shift',
+    AltLeft: 'left-alt',
+    MetaLeft: 'left-gui',
+    ControlRight: 'right-ctrl',
+    ShiftRight: 'right-shift',
+    AltRight: 'right-alt',
+    MetaRight: 'right-gui'
+  } [event.code] || null
+}
+
+function recordMacroEvent(event) {
+  if (!recordingMacro || event.repeat) return;
+  const usage = eventUsage(event);
+  if (!usage) return;
+  const isDown = event.type === 'keydown';
+  if (isDown && recordPressed.has(event.code) || !isDown && !recordPressed.has(event.code)) return;
+  isDown ? recordPressed.add(event.code) : recordPressed.delete(event.code);
+  const macro = profile.macros[activeMacro];
+  if (macro.events.length >= 84) {
+    stopMacroRecording();
+    return toast(t('macro.maximumReached'), true)
+  }
+  const now = performance.now();
+  macro.events.push({
+    delay_ms: Math.max(0, Math.round(now - recordLast)),
+    usage,
+    pressed: isDown
+  });
+  recordLast = now;
+  event.preventDefault();
+  renderMacros()
+}
+
+function startMacroRecording() {
+  const macro = profile.macros[activeMacro];
+  if (!macro) return;
+  if (macro.events.length && !confirm(t('macro.confirmClear'))) return;
+  macro.events = [];
+  recordPressed.clear();
+  recordLast = performance.now();
+  recordingMacro = true;
+  document.addEventListener('keydown', recordMacroEvent, true);
+  document.addEventListener('keyup', recordMacroEvent, true);
+  renderMacros();
+  toast(t('macro.recording'))
+}
+
+function stopMacroRecording() {
+  recordingMacro = false;
+  recordPressed.clear();
+  document.removeEventListener('keydown', recordMacroEvent, true);
+  document.removeEventListener('keyup', recordMacroEvent, true);
+  renderMacros();
+  toast(t('macro.stopped'))
+}
+
+function toggleMacroRecording() {
+  recordingMacro ? stopMacroRecording() : startMacroRecording()
+}
+
+async function doAction(action, payload, success) {
+  try {
+    await api(action, actionPayload(payload));
+    toast(success)
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+async function applyProfile() {
+  if (!confirm(t('profile.confirmApply'))) return;
+  if (prompt(t('profile.typeApply')) !== 'APPLY PROFILE') return toast(t('profile.cancelled'), true);
+  await doAction('profile', {
+    profile,
+    confirmation: 'APPLY PROFILE'
+  }, t('profile.applied'))
+}
+async function downloadJson(data, name) {
+  const contents = JSON.stringify(data, null, 2) + '\n',
+    nativeSave = window.pywebview?.api?.save_json;
+  if (nativeSave) {
+    const result = await nativeSave(contents, name);
+    toast(result.saved ? t('profile.exportSaved', {
+      name: result.name
+    }) : t('profile.exportCancelled'));
+    return result
+  }
+  const blob = new Blob([contents], {
+      type: 'application/json'
+    }),
+    a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(t('profile.exportSaved', {
+    name
+  }));
+  return {
+    saved: true,
+    name
+  }
+}
+async function exportProfile() {
+  try {
+    await downloadJson(profile, `${$('profileName').value||'spade65-profile'}.json`)
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+
+function renderAllEditors() {
+  selectedKey = null;
+  activeMacro = 0;
+  activeAppLayer = 0;
+  renderKeyboard();
+  renderColorKeyboard();
+  renderMacros();
+  renderAppLayers();
+  renderTimeline()
+}
+
+function importProfile(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      await api('validate', {
+        profile: data
+      });
+      profile = data;
+      renderAllEditors();
+      toast(t('profile.imported'))
+    } catch (error) {
+      toast(error.message, true)
+    }
+  };
+  reader.readAsText(file)
+}
+
+function importVendor(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const document = JSON.parse(reader.result),
+        result = await api('vendor-convert', {
+          document,
+          profile
+        });
+      profile = result.profile;
+      renderAllEditors();
+      toast(t('profile.vendorImported', {
+        areas: result.imported.join(', ')
+      }))
+    } catch (error) {
+      toast(error.message, true)
+    }
+  };
+  reader.readAsText(file)
+}
+async function backupLibrary() {
+  try {
+    await downloadJson({
+      format: 'spade65-library-v1',
+      profiles: storedProfiles(),
+      current_profile: profile,
+      profile_name: $('profileName').value,
+      layout: layoutVariant,
+      device_layouts: storedDeviceLayouts(),
+      language: currentLanguage
+    }, `spade65-library-${new Date().toISOString().slice(0,10)}.json`)
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+
+function restoreLibrary(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (data.format !== 'spade65-library-v1' || !data.profiles || typeof data.profiles !== 'object' || Array.isArray(data.profiles)) throw new Error(t('profile.unsupportedBackup'));
+      for (const item of Object.values(data.profiles)) await api('validate', {
+        profile: item
+      });
+      if (data.current_profile) await api('validate', {
+        profile: data.current_profile
+      });
+      if (!confirm(t('profile.confirmRestore', {
+          count: Object.keys(data.profiles).length
+        }))) return;
+      localStorage.setItem('spade65-profiles', JSON.stringify(data.profiles));
+      restoreLayoutPreferences(data);
+      if (data.current_profile) profile = data.current_profile;
+      $('profileName').value = data.profile_name || t('profile.restoredName');
+      if (data.language) await setLanguage(data.language);
+      renderSavedProfiles();
+      renderAllEditors();
+      toast(t('profile.libraryRestored'))
+    } catch (error) {
+      toast(error.message, true)
+    }
+  };
+  reader.readAsText(file)
+}
+
+function newProfile() {
+  if (!confirm(t('profile.confirmDiscard'))) return;
+  profile = cloneJson(meta.profile);
+  colorKeys.clear();
+  renderAllEditors();
+  toast(t('profile.created'))
+}
+
+function setSelectedColor() {
+  if (!colorKeys.size) return toast(t('lighting.selectColorKey'), true);
+  for (const key of colorKeys) profile.colors[key] = $('colorPicker').value;
+  renderColorKeyboard();
+  renderLayerSummary();
+  toast(t('lighting.colorStored', {
+    count: colorKeys.size
+  }))
+}
+
+function clearColors() {
+  profile.colors = {};
+  colorKeys.clear();
+  renderColorKeyboard();
+  renderLayerSummary()
+}
+async function streamFrame() {
+  if (streamBusy) return;
+  streamBusy = true;
+  try {
+    await api('stream', actionPayload({
+      profile
+    }))
+  } catch (error) {
+    stopAnimation();
+    stopTimeline();
+    toast(error.message, true)
+  } finally {
+    streamBusy = false
+  }
+}
+
+function audioLevel() {
+  if (!audioAnalyser) return 0;
+  const data = new Uint8Array(audioAnalyser.frequencyBinCount);
+  audioAnalyser.getByteFrequencyData(data);
+  return data.reduce((sum, n) => sum + n, 0) / (data.length * 255)
+}
+async function startAudio() {
+  if (audioAnalyser) return;
+  audioStream = await navigator.mediaDevices.getUserMedia({
+    audio: true
+  });
+  audioContext = new AudioContext();
+  const source = audioContext.createMediaStreamSource(audioStream);
+  audioAnalyser = audioContext.createAnalyser();
+  audioAnalyser.fftSize = 256;
+  source.connect(audioAnalyser)
+}
+
+function stopAudio() {
+  if (audioStream) audioStream.getTracks().forEach(track => track.stop());
+  if (audioContext) audioContext.close();
+  audioStream = null;
+  audioContext = null;
+  audioAnalyser = null
+}
+
+function hexRgb(value) {
+  const hex = value.replace('#', '');
+  return [0, 2, 4].map(offset => parseInt(hex.slice(offset, offset + 2), 16))
+}
+
+function paletteRgb(colors, position, gradient = true) {
+  const palette = (colors?.length ? colors : ['#ff0000']).map(hexRgb);
+  if (!gradient || palette.length === 1) return palette[0];
+  const scaled = ((position % 1) + 1) % 1 * (palette.length - 1),
+    index = Math.floor(scaled),
+    amount = scaled - index,
+    next = Math.min(index + 1, palette.length - 1);
+  return palette[index].map((value, channel) => Math.round(value + (palette[next][channel] - value) * amount))
+}
+
+function blendRgb(base, top, alpha) {
+  return base.map((value, index) => Math.round(value * (1 - alpha) + top[index] * alpha))
+}
+
+function layerPixel(layer, key, x, y, index, level) {
+  if (layer.enabled === false || (layer.keys?.length && !layer.keys.includes(key))) return null;
+  const speed = Number(layer.speed || 1),
+    phase = animationPhase * speed,
+    direction = (layer.reverse ? -1 : 1) * (layer.bidirectional && y % 2 ? -1 : 1),
+    dx = x - 6.5 - Number(layer.center_x || 0),
+    dy = y - 2 - Number(layer.center_y || 0),
+    angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360 + Number(layer.angle || 0)) % 360,
+    distance = Math.sqrt(dx * dx + dy * dy),
+    band = 200 / Math.max(50, Number(layer.bandwidth || 200)),
+    gap = Number(layer.gap || 0) / 100,
+    density = Math.max(1, Number(layer.number || 5));
+  let position = 0.95,
+    light = 1;
+  if (layer.mode === 'wave') position = (Math.sin((x * band + direction * phase / 8) + gap) + 1) / 2;
+  else if (layer.mode === 'conic') position = (angle + direction * phase * 2) % 360 / 360;
+  else if (layer.mode === 'spiral') position = (angle + distance * 35 * band + direction * phase * 2) % 360 / 360;
+  else if (layer.mode === 'cycle') position = (index / 70 + direction * phase / 120) % 1;
+  else if (layer.mode === 'linear-wave') position = (x * band / 8 + y / 14 + Number(layer.angle || 0) / 360 + direction * phase / 100 + gap) % 1;
+  else if (layer.mode === 'ripple') position = (distance * band / 5 - direction * phase / 80 + gap) % 1;
+  else if (layer.mode === 'breathe') {
+    position = 0;
+    light = .25 + .75 * (1 + Math.sin(phase / 18)) / 2
+  } else if (layer.mode === 'rain') {
+    position = .55;
+    light = ((x * 19 + y * 37 + direction * phase * density) % 100) > 100 - density * 6 ? 1 : .08
+  } else if (layer.mode === 'fire') {
+    position = Math.random() * .14;
+    light = .25 + Math.random() * .06 * Math.max(1, Number(layer.fire || 1))
+  } else if (layer.mode === 'trigger') {
+    position = .95;
+    light = ((index * 31 + phase * 3) % 97) > 90 ? 1 : .08
+  }
+  if (layer.bump) light *= 1 - Math.abs((((position % 1) + 1) % 1) * 2 - 1);
+  if (layer.audio) light *= Math.min(1, level * 4);
+  const color = paletteRgb(layer.colors, position, layer.gradient !== false),
+    alpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100 * light));
+  return {
+    color,
+    alpha
+  }
+}
+
+function animateColors() {
+  const level = audioLevel(),
+    layers = appLayers();
+  let index = 0;
+  rows.forEach((row, y) => row.forEach((key, x) => {
+    let output = [0, 0, 0];
+    for (const layer of layers) {
+      const pixel = layerPixel(layer, key, x, y, index, level);
+      if (pixel) output = blendRgb(output, pixel.color, pixel.alpha)
+    }
+    profile.colors[key] = '#' + output.map(value => value.toString(16).padStart(2, '0')).join('');
+    index++
+  }));
+  animationPhase += 1;
+  renderColorKeyboard();
+  streamFrame()
+}
+
+function hsl(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const k = n => (n + h / 30) % 12,
+    a = s * Math.min(l, 1 - l),
+    f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(255 * x).toString(16).padStart(2, '0')).join('')
+}
+async function toggleAnimation() {
+  if (animationTimer) return stopAnimation();
+  try {
+    stopTimeline();
+    saveAppLayer();
+    if (appLayers().some(layer => layer.enabled !== false && layer.audio)) await startAudio();
+    $('animationBtn').textContent = t('action.stopAnimation');
+    animationTimer = setInterval(animateColors, 1000 / Number($('fps').value));
+    animateColors()
+  } catch (error) {
+    stopAudio();
+    toast(t('lighting.audioUnavailable', {
+      error: error.message
+    }), true)
+  }
+}
+
+function stopAnimation() {
+  clearInterval(animationTimer);
+  animationTimer = null;
+  stopAudio();
+  $('animationBtn').textContent = t('action.startAnimation')
+}
+
+function timeline() {
+  const settings = profileSettings();
+  if (!settings.custom_timeline || typeof settings.custom_timeline !== 'object') settings.custom_timeline = {
+    loop: true,
+    frames: []
+  };
+  if (!Array.isArray(settings.custom_timeline.frames)) settings.custom_timeline.frames = [];
+  settings.custom_timeline.frames = settings.custom_timeline.frames.slice(0, 200);
+  return settings.custom_timeline
+}
+
+function renderTimeline() {
+  const data = timeline(),
+    list = $('timelineList');
+  list.innerHTML = '';
+  data.frames.forEach((frame, index) => {
+    const row = document.createElement('div');
+    row.className = 'timeline-frame';
+    const label = document.createElement('button');
+    label.textContent = t('timeline.frame', {
+      number: index + 1,
+      count: Object.keys(frame.colors || {}).length
+    });
+    label.onclick = () => {
+      profile.colors = cloneJson(frame.colors || {});
+      renderColorKeyboard();
+      toast(t('timeline.frameLoaded', {
+        number: index + 1
+      }))
+    };
+    const duration = document.createElement('input');
+    duration.type = 'number';
+    duration.min = 20;
+    duration.max = 60000;
+    duration.value = frame.duration_ms || 100;
+    duration.title = t('timeline.durationTitle');
+    duration.onchange = () => frame.duration_ms = Math.max(20, Math.min(60000, Number(duration.value)));
+    const del = document.createElement('button');
+    del.textContent = '×';
+    del.className = 'danger';
+    del.onclick = () => {
+      data.frames.splice(index, 1);
+      renderTimeline()
+    };
+    row.append(label, duration, del);
+    list.append(row)
+  });
+  $('timelineLoop').checked = data.loop !== false;
+  $('playTimelineBtn').disabled = !data.frames.length;
+  $('playTimelineBtn').textContent = t(timelineTimer ? 'action.stopTimeline' : 'action.playTimeline')
+}
+
+function captureTimelineFrame() {
+  const data = timeline();
+  if (data.frames.length >= 200) return toast(t('timeline.maximum'), true);
+  data.frames.push({
+    duration_ms: 100,
+    colors: cloneJson(profile.colors)
+  });
+  renderTimeline();
+  toast(t('timeline.captured'))
+}
+
+function playTimelineFrame() {
+  const data = timeline();
+  if (!timelineTimer || !data.frames.length) return stopTimeline();
+  if (timelineIndex >= data.frames.length) {
+    if (data.loop !== false) timelineIndex = 0;
+    else return stopTimeline()
+  }
+  const frame = data.frames[timelineIndex++];
+  profile.colors = cloneJson(frame.colors || {});
+  renderColorKeyboard();
+  streamFrame();
+  timelineTimer = setTimeout(playTimelineFrame, Math.max(20, Math.min(60000, Number(frame.duration_ms || 100))))
+}
+
+function toggleTimeline() {
+  if (timelineTimer) return stopTimeline();
+  if (!timeline().frames.length) return;
+  stopAnimation();
+  timelineIndex = 0;
+  timelineTimer = true;
+  renderTimeline();
+  playTimelineFrame()
+}
+
+function stopTimeline() {
+  if (timelineTimer !== true) clearTimeout(timelineTimer);
+  timelineTimer = null;
+  timelineIndex = 0;
+  if ($('playTimelineBtn')) renderTimeline()
+}
+
+function renderDiagnostics() {
+  $('deviceJson').textContent = JSON.stringify(meta.devices, null, 2)
+}
+
+function renderAbout() {
+  if (meta) $('aboutVersion').textContent = meta.version
+}
+
+function renderServiceSetup() {
+  if (!meta?.service_setup) return;
+  const setup = meta.service_setup,
+    platform = t(`service.platform.${setup.platform}`);
+  $('servicePlatform').textContent = platform;
+  $('servicePlatform').removeAttribute('data-i18n');
+  $('serviceGuideLink').href = `https://github.com/dirhamtriyadi/spade65-non-qmk/blob/main/docs/${currentLanguage==='id'?'id/':''}host-features.md`;
+  $('serviceReleaseWorkflow').hidden = !setup.packaged;
+  if (setup.packaged) {
+    $('servicePackageNote').textContent = t('service.packageNote', {
+      platform
+    });
+    $('servicePrepareHint').textContent = t('service.prepareHint', {
+      configPath: setup.config_path
+    });
+    $('serviceActivateHint').textContent = t(`service.activateHint.${setup.platform}`, {
+      launcherPath: setup.launcher_path
+    });
+    $('servicePrepareCommands').textContent = setup.prepare_commands;
+    $('serviceActivateCommands').textContent = setup.activate_commands
+  } else {
+    $('servicePackageNote').textContent = t('service.sourceDocsOnly')
+  }
+}
+async function copyServiceCommands(field, successKey) {
+  const commands = meta?.service_setup?.[field];
+  if (!commands) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(commands);
+    else {
+      const area = document.createElement('textarea');
+      area.value = commands;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.append(area);
+      area.select();
+      if (!document.execCommand('copy')) throw new Error('copy failed');
+      area.remove()
+    }
+    toast(t(successKey))
+  } catch (error) {
+    toast(t('service.copyFailed'), true)
+  }
+}
+
+document.querySelectorAll('#nav button').forEach(button => button.onclick = () => {
+  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('active', x === button));
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  $(`page-${button.dataset.page}`).classList.add('active');
+  updatePageHeader(button.dataset.page)
+});
+$('copyServicePrepareBtn').onclick = () => copyServiceCommands('prepare_commands', 'service.prepareCopied');
+$('copyServiceActivateBtn').onclick = () => copyServiceCommands('activate_commands', 'service.activateCopied');
+document.querySelectorAll('#layerTabs button').forEach(button => button.onclick = () => {
+  currentLayer = button.dataset.layer;
+  document.querySelectorAll('#layerTabs button').forEach(x => x.classList.toggle('active', x === button));
+  renderKeyboard()
+});
+$('languageSelect').onchange = event => setLanguage(event.target.value);
+$('quitBtn').onclick = quitApplication;
+for (const id of ['layoutVariant', 'lightingLayoutVariant']) $(id).onchange = e => chooseLayout(e.target.value);
+$('deviceSelect').onchange = () => syncLayoutFromSelectedDevice();
+$('refreshBtn').onclick = refresh;
+$('assignmentType').onchange = assignmentTypeChanged;
+$('usagePreset').onchange = e => {
+  if (e.target.value) $('usageInput').value = e.target.value
+};
+$('assignBtn').onclick = saveAssignment;
+$('winLock').onchange = e => toggleWinLock(e.target.checked);
+$('wasdArrows').onchange = e => toggleWasdArrows(e.target.checked);
+document.querySelectorAll('.disable-group').forEach(button => button.onclick = () => disableGroup(button.dataset.group));
+$('undoDisableBtn').onclick = undoDisabled;
+$('newProfileBtn').onclick = newProfile;
+$('saveProfileBtn').onclick = saveProfile;
+$('deleteProfileBtn').onclick = deleteSavedProfile;
+$('savedProfile').onchange = e => loadSavedProfile(e.target.value);
+$('exportProfileBtn').onclick = exportProfile;
+$('importProfileBtn').onclick = () => $('profileFile').click();
+$('profileFile').onchange = e => e.target.files[0] && importProfile(e.target.files[0]);
+$('vendorImportBtn').onclick = () => $('vendorFile').click();
+$('vendorFile').onchange = e => e.target.files[0] && importVendor(e.target.files[0]);
+$('backupLibraryBtn').onclick = backupLibrary;
+$('restoreLibraryBtn').onclick = () => $('libraryFile').click();
+$('libraryFile').onchange = e => e.target.files[0] && restoreLibrary(e.target.files[0]);
+$('applyProfileBtn').onclick = applyProfile;
+$('brightness').oninput = e => $('brightnessOut').value = e.target.value;
+$('speed').oninput = e => $('speedOut').value = e.target.value;
+$('appSpeed').oninput = e => {
+  $('appSpeedOut').value = e.target.value;
+  saveAppLayer()
+};
+$('appOpacity').oninput = e => {
+  $('appOpacityOut').value = e.target.value;
+  saveAppLayer()
+};
+$('appBandwidth').oninput = e => {
+  $('appBandwidthOut').value = e.target.value;
+  saveAppLayer()
+};
+$('appAngle').oninput = e => {
+  $('appAngleOut').value = e.target.value;
+  saveAppLayer()
+};
+$('animation').onchange = saveAppLayer;
+for (const id of ['appNumber', 'appGap', 'appFire', 'appCenterX', 'appCenterY', 'appGradient', 'appReverse', 'appBump', 'appBidirectional', 'audioSync']) $(id).onchange = saveAppLayer;
+document.querySelectorAll('.app-color').forEach(input => input.oninput = saveAppLayer);
+$('addAppLayerBtn').onclick = addAppLayer;
+$('removeAppLayerBtn').onclick = removeAppLayer;
+$('setAppRangeBtn').onclick = setAppRange;
+$('clearAppRangeBtn').onclick = clearAppRange;
+$('applyEffectBtn').onclick = () => doAction('rgb', {
+  effect: $('effectSelect').value,
+  brightness: Number($('brightness').value),
+  speed: Number($('speed').value),
+  color_index: Number($('colorIndex').value),
+  multicolor: $('multicolor').checked
+}, t('lighting.builtInApplied'));
+$('setColorBtn').onclick = setSelectedColor;
+$('clearColorsBtn').onclick = clearColors;
+$('applyColorsBtn').onclick = () => doAction('per-key', {
+  profile,
+  brightness: Number($('brightness').value),
+  speed: Number($('speed').value)
+}, t('lighting.perKeyApplied'));
+$('streamOnceBtn').onclick = () => {
+  saveAppLayer();
+  animateColors()
+};
+$('animationBtn').onclick = toggleAnimation;
+$('captureFrameBtn').onclick = captureTimelineFrame;
+$('playTimelineBtn').onclick = toggleTimeline;
+$('timelineLoop').onchange = e => timeline().loop = e.target.checked;
+$('addMacroBtn').onclick = addMacro;
+$('deleteMacroBtn').onclick = deleteMacro;
+$('addEventBtn').onclick = addEvent;
+$('recordMacroBtn').onclick = toggleMacroRecording;
+$('macroName').onchange = e => {
+  if (profile.macros[activeMacro]) {
+    profile.macros[activeMacro].name = e.target.value.trim() || t('macro.defaultName', {
+      index: profile.macros[activeMacro].index
+    });
+    renderMacros()
+  }
+};
+$('macroRepeat').onchange = e => {
+  if (profile.macros[activeMacro]) profile.macros[activeMacro].repeat = Number(e.target.value)
+};
+$('debounceBtn').onclick = () => doAction('debounce', {
+  milliseconds: Number($('debounce').value)
+}, t('settings.debounceApplied'));
+$('sleepBtn').onclick = () => doAction('sleep', {
+  light_off: Number($('lightOff').value),
+  hibernate: Number($('hibernate').value)
+}, t('settings.timersApplied'));
+$('resetBtn').onclick = () => doAction('reset', {
+  confirmation: $('resetText').value
+}, t('settings.resetSent'));
+$('validateBtn').onclick = async () => {
+  delete $('validationOutput').dataset.i18n;
+  try {
+    const result = await api('validate', {
+      profile
+    });
+    $('validationOutput').textContent = JSON.stringify(result, null, 2);
+    toast(t('diagnostics.profileValid'))
+  } catch (error) {
+    $('validationOutput').textContent = error.message;
+    toast(error.message, true)
+  }
+};
+async function initialize() {
+  await initI18n();
+  await refresh();
+  const initialPage = location.hash.slice(1);
+  if (initialPage && subtitles[initialPage]) document.querySelector(`#nav button[data-page="${initialPage}"]`).click();
+  setInterval(pollDeviceChanges, 2000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) pollDeviceChanges()
+  })
+}
+initialize().catch(error => toast(error.message, true));

@@ -14,6 +14,10 @@ dependencies = []
 
 [project.optional-dependencies]
 cross-platform = ["hidapi>=0.14,<1"]
+dev = [
+    "cssbeautifier==2.0.1",
+    "jsbeautifier==2.0.3",
+]
 desktop = [
     "pywebview==6.2.1",
     "bottle==0.13.4",

@@ -174,10 +174,11 @@ python_bin="python${PYTHON_VERSION}"
 command -v "$python_bin"
 "$python_bin" -m venv .jenkins-venv
 .jenkins-venv/bin/python -m pip install --upgrade pip
-.jenkins-venv/bin/python -m pip install -e .
+.jenkins-venv/bin/python -m pip install -e '.[dev]'
 .jenkins-venv/bin/python -m unittest discover -v
 .jenkins-venv/bin/python -m compileall -q \
   spade65 spade65ctl.py packaging tests tools
+.jenkins-venv/bin/python tools/format_web.py --check
 node --check spade65/web/layout-state.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
@@ -197,11 +198,13 @@ py -%PYTHON_VERSION% -m venv .jenkins-venv
 if errorlevel 1 exit /b 1
 .jenkins-venv\Scripts\python.exe -m pip install --upgrade pip
 if errorlevel 1 exit /b 1
-.jenkins-venv\Scripts\python.exe -m pip install -e .
+.jenkins-venv\Scripts\python.exe -m pip install -e ".[dev]"
 if errorlevel 1 exit /b 1
 .jenkins-venv\Scripts\python.exe -m unittest discover -v
 if errorlevel 1 exit /b 1
 .jenkins-venv\Scripts\python.exe -m compileall -q spade65 spade65ctl.py packaging tests tools
+if errorlevel 1 exit /b 1
+.jenkins-venv\Scripts\python.exe tools\format_web.py --check
 if errorlevel 1 exit /b 1
 node --check spade65\web\layout-state.js
 if errorlevel 1 exit /b 1

@@ -74,9 +74,23 @@
       layout = isValidLayout(legacyLayout) ? legacyLayout : DEFAULT_LAYOUT;
       migrated = isValidLayout(legacyLayout);
       layouts[key] = layout;
-      return {connected: true, key, layout, layouts, changed: true, migrated};
+      return {
+        connected: true,
+        key,
+        layout,
+        layouts,
+        changed: true,
+        migrated
+      };
     }
-    return {connected: true, key, layout, layouts, changed: false, migrated};
+    return {
+      connected: true,
+      key,
+      layout,
+      layouts,
+      changed: false,
+      migrated
+    };
   }
 
   return Object.freeze({
