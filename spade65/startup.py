@@ -287,10 +287,13 @@ def _startup_target_path(
         # whatever directory happens to be current while generating the file.
         if selected.parent == path_type("."):
             return selected
-        local = Path(text).expanduser()
-        if not local.is_absolute():
-            local = local.resolve()
-        return path_type(normalize(str(local)))
+        expanded = os.path.expanduser(text)
+        # Judge absoluteness with the TARGET's rules too: "/opt/app" carries no
+        # drive, so the host's Path calls it relative on Windows and resolving
+        # it would anchor the launcher to whatever drive generated the file.
+        if path_type(expanded).is_absolute():
+            return path_type(normalize(expanded))
+        return path_type(normalize(str(Path(expanded).resolve())))
     if not selected.is_absolute():
         raise ValueError(
             f"{description} must be an absolute {family} path when generating "

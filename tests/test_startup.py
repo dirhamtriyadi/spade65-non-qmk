@@ -307,6 +307,29 @@ class StartupTests(unittest.TestCase):
                 )
                 self.assertIn(f"Exec={rendered}", entry)
 
+    def test_absolute_target_paths_are_never_anchored_to_a_host_drive(self):
+        # A POSIX path carries no drive letter, so a Windows host's Path calls
+        # "/opt/Spade65/Spade65" relative and resolving it would rewrite the
+        # launcher to D:\opt\... . Absoluteness has to be judged with the
+        # target's rules. PureWindowsPath stands in for the host Path class
+        # here; it has no .resolve(), so reaching that branch raises loudly.
+        with (
+            patch("spade65.startup.sys.platform", "linux"),
+            patch("spade65.startup.Path", PureWindowsPath),
+        ):
+            unit = render_startup(
+                PurePosixPath("/etc/spade65/background.json"),
+                platform="linux",
+                python_executable=PurePosixPath("/opt/Spade65/Spade65"),
+                frozen=True,
+            )
+        self.assertIn(
+            'ExecStart="/opt/Spade65/Spade65" service run '
+            '"/etc/spade65/background.json"',
+            unit,
+        )
+        self.assertNotIn("\\", unit)
+
     def test_bare_program_names_are_not_anchored_to_the_working_directory(self):
         # A bare name is resolved from PATH at launch; anchoring it to whatever
         # directory generated the file produces a plausible but wrong path. Only
