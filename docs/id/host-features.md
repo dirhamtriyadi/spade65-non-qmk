@@ -113,8 +113,14 @@ spade65ctl service integration ~/.config/spade65/default.json launcher-output
 ```
 
 Gunakan `--platform linux`, `windows`, atau `macos` untuk menghasilkan launcher
-platform lain. Linux menghasilkan unit systemd, Windows menghasilkan launcher
-`.cmd` untuk folder Startup, dan macOS menghasilkan LaunchAgent `.plist`.
+platform lain. Platform selain host juga membutuhkan `--target-config`,
+`--target-executable`, serta `--target-runtime packaged` atau
+`--target-runtime python`; perintah tersebut menolak menebak path konfigurasi,
+executable, atau runtime target dari host ini dan justru melaporkan opsi yang
+belum diisi. Bila `--target-config` diberikan, path konfigurasi posisional
+boleh dihilangkan. Linux menghasilkan unit systemd, Windows menghasilkan
+launcher `.cmd` untuk folder Startup, dan macOS menghasilkan LaunchAgent
+`.plist`.
 
 Service/launcher ini adalah komponen background yang tetap berjalan tanpa GUI.
 Service itu sendiri tidak memiliki ikon tray dan tidak memerlukan toolkit

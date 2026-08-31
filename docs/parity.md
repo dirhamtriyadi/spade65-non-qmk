@@ -58,9 +58,15 @@ decisions, not unfinished features.
 
 ## Hardware-test status
 
-Descriptor detection, built-in RGB, per-key RGB, streaming/AP mode, the custom
-timeline, the background service, and debounce have been validated over USB on
-`0603:0351`. Keymap/macros, dongle timers, and reset match the original backend
-frames and have offline tests, but have not been executed on hardware: keymap and
-reset have no readback from which to back up the current state, and dongle
-`0603:0356` was not connected during the latest tests.
+Descriptor detection, all 20 built-in RGB effects, per-key RGB, streaming/AP
+mode, the custom timeline, the background service, debounce, keymap/macros, and
+reset have been validated over USB on `0603:0351`; the keymap and macro test was
+applied, confirmed by physical key input, and then restored, and the keyboard
+re-enumerated correctly after the reset. Only the dongle timers remain
+unexecuted on hardware, and the reason is known rather than incidental: the
+original backend returns from `SetLightOffToDevice` when `BaseInfo.StateID` is
+the wired state and resolves the write handle from `StateList[1]`, so the frame
+is only ever addressed to `0603:0356`. That identity has never enumerated here.
+The physical 2.4 GHz receiver enumerates as `0603:0352`, and its report
+descriptors advertise no feature reports at all, so configuration over the
+receiver is impossible rather than merely refused.

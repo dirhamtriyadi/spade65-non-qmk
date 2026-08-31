@@ -66,8 +66,9 @@ berjalan pada host:
 | Library profil, layout visual terpilih, asosiasi aplikasi, playback AP/custom timeline, dan streaming audio reactive | Data lokal aplikasi | Memerlukan Spade65 atau background service opsional pada host tersebut |
 
 Keempat varian layout fisik tidak dapat dibaca dari descriptor keyboard. Saat
-perangkat terhubung, aplikasi memulihkan layout yang terakhir dipilih secara
-lokal untuk model tersebut; saat perangkat tidak terdeteksi, aplikasi
+interface konfigurasi terhubung, aplikasi memulihkan layout yang terakhir
+dipilih secara lokal untuk model tersebut; saat tidak ada yang terdeteksi —
+termasuk saat hanya receiver hanya-baca `0603:0352` yang ada — aplikasi
 menampilkan pratinjau fallback `Spade65-04 · ANSI standard`.
 
 ## Batas keselamatan
@@ -133,15 +134,26 @@ alur hardware yang aman tersedia di [`docs/id/cli.md`](docs/id/cli.md).
 ## Status verifikasi
 
 Validasi fisik terkini menggunakan perangkat Linux berkabel dengan identitas
-`0603:0351`. Penemuan descriptor, efek RGB bawaan fixed beserta kontrol
-brightness/speed, debounce, RGB per tombol, streaming real-time, satu frame
-timeline melalui background service, dan pembacaan revisi USB secara read-only
-telah berhasil dijalankan.
+`0603:0351`, bersama receiver fisik 2,4 GHz milik keyboard tersebut yang
+terdeteksi sebagai `0603:0352` dan diperiksa secara hanya-baca dengan kabel
+dilepas serta keyboard beroperasi lewat 2,4 GHz. Seluruh pemeriksaan
+konfigurasi di bawah ini dijalankan melalui perangkat berkabel. Penemuan
+descriptor, seluruh 20 efek RGB bawaan beserta kontrol brightness dan speed,
+debounce, RGB per tombol, streaming real-time, AP wave dan satu custom
+timeline, aksi RGB GUI yang terautentikasi, keymap tiga layer dan macro, reset
+konfigurasi, satu frame timeline melalui background service, dan pembacaan
+revisi USB secara read-only telah berhasil dijalankan.
 
-Write keymap dan macro, reset, serta timer dongle telah dicakup oleh pengujian
-paket dan integrasi offline, tetapi belum dikirim dalam pengujian fisik terkini.
-Keymap/reset tidak memiliki jalur readback-and-restore yang terjamin, sedangkan
-dongle PID `0603:0356` tidak terhubung. Lihat
+Write keymap, macro, dan reset kini telah dikirim ke perangkat berkabel: keymap
+dan macro sementara diverifikasi melalui input fisik lalu dipulihkan, dan
+keyboard tetap terdeteksi dengan benar setelah reset. Simpan profil yang valid
+sebelum mengulanginya, karena keyboard tetap tidak menyediakan jalur
+readback-and-restore yang terjamin.
+
+Hanya timer light-off/hibernate dongle yang masih belum dikirim. Identitas
+dongle logis `0603:0356` belum pernah terdeteksi di sini, dan receiver fisik
+yang terdeteksi, `0603:0352`, sama sekali tidak mengiklankan feature report,
+sehingga tidak dapat membawa frame tersebut. Lihat
 [`docs/id/hardware-verification.md`](docs/id/hardware-verification.md) untuk
 catatan pengujian lengkap. Cakupan otomatis atau offline tidak pernah disebut
 sebagai verifikasi perangkat fisik.

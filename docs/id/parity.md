@@ -57,9 +57,15 @@ yang belum selesai.
 
 ## Status pengujian hardware
 
-Deteksi descriptor, built-in RGB, per-key RGB, streaming/AP mode, custom timeline,
-background service, dan debounce sudah divalidasi melalui USB pada `0603:0351`.
-Keymap/macro, timer dongle, dan reset sudah cocok dengan frame backend original
-dan memiliki pengujian offline, tetapi belum dieksekusi pada hardware: keymap dan
-reset tidak memiliki readback untuk membuat backup kondisi sekarang, sedangkan
-dongle `0603:0356` tidak terhubung pada pengujian terakhir.
+Deteksi descriptor, seluruh 20 efek built-in RGB, per-key RGB, streaming/AP mode,
+custom timeline, background service, debounce, keymap/macro, dan reset sudah
+divalidasi melalui USB pada `0603:0351`; pengujian keymap dan macro diterapkan,
+dikonfirmasi melalui input fisik, lalu dipulihkan, dan keyboard kembali terdeteksi
+dengan benar setelah reset. Hanya timer dongle yang belum dieksekusi pada
+hardware, dan alasannya diketahui, bukan kebetulan: backend original langsung
+kembali dari `SetLightOffToDevice` ketika `BaseInfo.StateID` adalah identitas
+kabel dan menyelesaikan handle tulis dari `StateList[1]`, sehingga frame tersebut
+hanya pernah ditujukan ke `0603:0356`. Identitas itu sampai kini belum pernah
+muncul pada hardware ini. Receiver fisik 2,4 GHz terdeteksi sebagai `0603:0352`,
+dan report descriptor-nya tidak mengiklankan feature report sama sekali, sehingga
+konfigurasi lewat receiver bukan sekadar ditolak, melainkan tidak mungkin.

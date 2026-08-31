@@ -65,8 +65,9 @@ Spade65 uses both device-backed configuration and host-side features:
 | Profile library, selected visual layout, application associations, AP/custom timeline playback, and audio-reactive streaming | Local application data | Requires Spade65 or its optional background service on that host |
 
 The four physical layout variants cannot be read from the keyboard descriptor.
-When a device is connected, the application restores the layout last selected
-locally for that model; when no device is detected, it displays the
+When a configurable interface is connected, the application restores the layout
+last selected locally for that model; when none is detected — including when
+only the read-only `0603:0352` receiver is present — it displays the
 `Spade65-04 · ANSI standard` fallback preview.
 
 ## Safety boundary
@@ -129,15 +130,26 @@ hardware workflows are in [`docs/cli.md`](docs/cli.md).
 ## Verification status
 
 The current physical validation uses a wired Linux device identified as
-`0603:0351`. Descriptor discovery, the fixed built-in RGB effect and its
-brightness/speed controls, debounce, per-key RGB, real-time streaming, a
+`0603:0351`, together with that keyboard's physical 2.4 GHz receiver, which
+enumerates as `0603:0352` and was inspected read-only with the cable removed
+and the keyboard live over 2.4 GHz. Every configuration check below was
+exercised over the wired device. Descriptor discovery, all 20 built-in RGB
+effects with their brightness and speed controls, debounce, per-key RGB,
+real-time streaming, the AP wave and a custom timeline, an authenticated GUI RGB
+action, a three-layer keymap and macro, a configuration reset, a
 background-service timeline frame, and read-only USB revision reporting have
 been exercised successfully.
 
-Keymap and macro writes, reset, and dongle timers are covered by offline packet
-and integration tests but have not been sent during the latest physical test.
-Keymap/reset lack a guaranteed readback-and-restore path, and dongle PID
-`0603:0356` was not connected. See
+Keymap, macro, and reset writes have now been sent to the wired device: the
+temporary keymap and macro were verified through physical input and then
+restored, and the keyboard still enumerated correctly after the reset. Keep a
+saved profile before repeating them, because the keyboard still offers no
+guaranteed readback-and-restore path.
+
+Only the dongle light-off/hibernate timers remain unsent. The logical dongle
+identity `0603:0356` has never enumerated here, and the physical receiver that
+does enumerate, `0603:0352`, advertises no feature reports at all, so it cannot
+carry the frame. See
 [`docs/hardware-verification.md`](docs/hardware-verification.md) for the precise
 test record. Automated or offline coverage is never presented as physical
 device verification.

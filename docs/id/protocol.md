@@ -12,9 +12,15 @@ pendek `0x08` sepanjang 8 byte. Pengiriman RGB `fixed` (brightness 2, speed 3)
 mengembalikan hasil ioctl 620, dan debounce 5 ms mengembalikan hasil ioctl 8.
 Per-key RGB opcode `0x07` dan satu frame streaming (aktivasi ditambah lima output
 report 64 byte) juga berhasil dikirim, lalu efek `fixed` berhasil dipulihkan.
-Mode dongle, keymap write, macro, dan reset belum diuji. Firmware update tidak
-diimplementasikan karena dapat menyebabkan brick dan tidak ada recovery procedure
-yang terverifikasi.
+Seluruh 20 report efek bawaan, per-key RGB, streaming RGB, AP wave, custom
+timeline, keymap tiga layer sementara beserta macro (diterapkan, dikonfirmasi
+melalui input fisik, lalu dipulihkan), dan reset konfigurasi sejak itu berhasil
+dijalankan pada unit kabel yang sama. Timer dongle tetap belum diuji karena
+`0603:0356` belum pernah muncul pada hardware ini; receiver fisik 2,4 GHz
+terdeteksi sebagai `0603:0352` dan descriptor-nya tidak mengiklankan satu pun
+feature report, sehingga sama sekali tidak dapat dikonfigurasi. Firmware
+update tidak diimplementasikan karena dapat menyebabkan brick dan tidak ada
+recovery procedure yang terverifikasi.
 
 ## Sumber analisis
 
@@ -29,10 +35,19 @@ Installer dan hasil ekstraksi tidak dimasukkan ke Git. File tersebut masuk `.git
 
 ## Identitas perangkat
 
-| Transport | VID | PID |
-|---|---:|---:|
-| Kabel USB | `0603` | `0351` |
-| Dongle 2.4 GHz | `0603` | `0356` |
+| Transport | VID | PID | Konfigurasi |
+|---|---:|---:|---|
+| Kabel USB | `0603` | `0351` | descriptor-gated |
+| Receiver 2,4 GHz | `0603` | `0352` | unsupported-read-only |
+| State "Dongle" vendor | `0603` | `0356` | descriptor-gated |
+
+`0352` adalah identitas yang dienumerasi receiver fisik. Satu-satunya vendor
+usage page yang diekspos adalah `ff55`, dan descriptor-nya mengiklankan nol
+feature report — `ff02:0001` dan `ff03:0001` tidak ada — sehingga identitas ini
+dapat ditemukan untuk diagnostik, tetapi tidak pernah menjadi target write.
+`0352` tidak muncul pada satu pun tabel perangkat software original. `0356`
+adalah state dongle logis milik vendor dan belum pernah teramati pada hardware
+ini.
 
 Database vendor mendefinisikan:
 
@@ -48,7 +63,7 @@ Kode `InitialDevice` juga mencari:
 | Feature report pendek | `ff03` | `0001` |
 | Streaming output RGB | `ff55` | `0202` |
 
-Inferensi tersebut berasal dari parameter `FindDevice()` dan nama handle internal `DeviceId_Set8Bytes` serta `DeviceId_Output`. Descriptor hardware tetap harus mengonfirmasi pasangan ini.
+Inferensi tersebut berasal dari parameter `FindDevice()` dan nama handle internal `DeviceId_Set8Bytes` serta `DeviceId_Output`. Descriptor kabel `0603:0351` mengonfirmasi keempat pasangan tersebut, bersama feature report `0x07` sepanjang 620 byte, feature report `0x08` sepanjang 8 byte, dan output report `0x06` sepanjang 64 byte.
 
 ## Transport lintas platform
 
@@ -57,10 +72,13 @@ byte pertama buffer sebagai report ID. Implementasi proyek memakai `hidraw` dan
 ioctl `HIDIOCSFEATURE(length)` di Linux, serta `hidapi` di Windows/macOS. Kedua
 backend mempertahankan report ID sebagai byte pertama.
 
-CLI memilih interface berdasarkan seluruh kondisi berikut:
+CLI menemukan setiap interface dengan VID `0603` dan PID `0351`, `0352`, atau
+`0356`, serta melaporkan `configuration_status` masing-masing. CLI hanya menulis
+ke interface bila seluruh kondisi berikut cocok:
 
 1. VID `0603`.
-2. PID `0351` atau `0356`.
+2. PID `0351` atau `0356`; `0352` bersifat hanya-baca dan tidak pernah menjadi
+   target write.
 3. Pasangan usage page/usage yang sesuai.
 4. Feature report ID dan panjang report yang cocok dengan descriptor.
 
@@ -125,7 +143,7 @@ Struktur awal yang ditemukan:
 
 Kode vendor membangun data untuk layer normal dan dua layer Fn. Matrix kabel `0603:0351` memiliki 102 slot internal (`0x66`), sementara profil UI memiliki 70 tombol logis. Slot kosong penting untuk menjaga urutan matrix.
 
-Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...f9` dan dikirim terpisah. Mapping 102 slot, builder tiga layer, profil JSON, dan write dengan konfirmasi tambahan sudah diimplementasikan. Hardware validation untuk remap tetap memerlukan perbandingan satu perubahan dengan capture aplikasi Windows.
+Dua byte per slot digunakan sebagai modifier/status dan HID usage. Assignment sederhana menambahkan `0x80` pada byte pertama. Macro memakai keycode khusus pada rentang `f0...f9` dan dikirim terpisah. Mapping 102 slot, builder tiga layer, profil JSON, dan write dengan konfirmasi tambahan sudah diimplementasikan, dan keymap tiga layer sementara beserta macro terikat telah ditulis ke unit kabel `0603:0351`, dikonfirmasi melalui input fisik, lalu dipulihkan.
 
 ### Macro — opcode 0x05
 
@@ -190,11 +208,13 @@ dan descriptor output report `0x06` sepanjang 64 byte.
 
 ## Data yang masih diperlukan
 
-Saat hardware tersedia, simpan:
+Simpan dari setiap sesi hardware:
 
-1. `probe-wired.json`.
-2. `probe-dongle.json`.
+1. `probe-wired.json` untuk `0603:0351`.
+2. `probe-receiver.json` untuk `0603:0352`. Tidak ada probe dongle yang dapat
+   diambil, karena `0603:0356` belum pernah muncul pada hardware ini.
 3. Hasil sukses/gagal setiap command beserta mode kabel/dongle.
-4. Jika key remapping dilanjutkan, capture USBPcap untuk perubahan satu tombol saja, misalnya `A` menjadi `B`, lalu kembalikan segera.
+4. Jika keymap ditulis kembali, profil yang diterapkan dan profil yang dipakai
+   untuk memulihkannya, agar perubahan dapat dibalik tanpa readback.
 
 Tidak perlu memulai dari firmware dump. HID descriptor dan satu-delta capture jauh lebih aman dan cukup untuk memvalidasi protokol konfigurasi.

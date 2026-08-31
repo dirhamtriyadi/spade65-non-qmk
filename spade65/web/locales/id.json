@@ -314,7 +314,7 @@
   "diagnostics.streamingVerification": "10 mode, lapisan, rentang, palet, dan parameter lanjutan",
   "diagnostics.perKeyArea": "Warna kustom per tombol",
   "diagnostics.settingsArea": "Debounce / timer dongle / reset",
-  "diagnostics.settingsVerification": "Debounce USB tervalidasi; dongle/reset belum diuji",
+  "diagnostics.settingsVerification": "Debounce dan reset USB tervalidasi; timer dongle belum dikirim",
   "diagnostics.firmwareArea": "Updater / firmware / bootloader / raw flash",
   "diagnostics.brickBoundary": "Batas risiko brick",
   "diagnostics.parityHint": "Kode generik dorman dalam bundel vendor (asosiasi program, tekan lama/instan, dan UI polling rate) bukan halaman perangkat Spade65 aktif atau tidak diserialisasi oleh backend Jupeng. Lihat docs/parity.md.",

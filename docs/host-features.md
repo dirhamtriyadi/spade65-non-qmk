@@ -112,8 +112,14 @@ spade65ctl service integration ~/.config/spade65/default.json launcher-output
 ```
 
 Use `--platform linux`, `windows`, or `macos` to generate a launcher for another
-platform. Linux produces a systemd unit, Windows produces a `.cmd` launcher for
-the Startup folder, and macOS produces a LaunchAgent `.plist`.
+platform. A platform other than the host also requires `--target-config`,
+`--target-executable`, and `--target-runtime packaged` or
+`--target-runtime python`; the command refuses to guess the target's
+configuration path, executable, or runtime from this host and reports the
+missing options instead. When `--target-config` is supplied, the positional
+configuration path can be omitted. Linux produces a systemd unit, Windows
+produces a `.cmd` launcher for the Startup folder, and macOS produces a
+LaunchAgent `.plist`.
 
 This service and its launcher are background components that continue without
 the GUI. The service itself has no tray icon and requires no additional desktop

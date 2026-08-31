@@ -11,11 +11,14 @@ Spade65 mendukung identitas USB berkabel `0603:0351` dan identitas dongle 2,4 GH
 `0603:0356` milik Noir Spade65 non-QMK. Identitas receiver fisik `0603:0352`
 hanya dicantumkan untuk diagnostik hanya-baca: descriptor-nya tidak
 mengiklankan satu pun koleksi konfigurasi terverifikasi, sehingga tidak pernah
-menjadi target konfigurasi. Validasi hardware dilakukan secara
-bertahap: deteksi berkabel, parsing descriptor, RGB bawaan, brightness, speed,
-debounce, RGB per tombol, dan streaming telah diuji pada keyboard fisik. Builder
-report keymap, macro, reset, dan timer dongle tercakup tes otomatis, tetapi belum
-dikirim ke hardware yang tersedia. Lihat [catatan verifikasi hardware
+menjadi target konfigurasi. Validasi hardware kini mencakup seluruh permukaan
+penulisan berkabel: deteksi, parsing descriptor, seluruh 20 efek RGB bawaan
+beserta brightness dan speed, RGB per tombol, streaming RGB, AP wave, timeline
+kustom, debounce, keymap tiga layer dan macro sementara yang diterapkan,
+diverifikasi melalui input fisik, lalu dipulihkan, serta reset konfigurasi
+semuanya telah dikirim ke keyboard fisik. Hanya frame light-off/hibernate
+dongle yang belum dikirim, karena identitas dongle logis `0603:0356` tidak
+pernah muncul pada hardware ini. Lihat [catatan verifikasi hardware
 terkini](hardware-verification.md) untuk batas pengujian yang tepat.
 
 > **Batas keselamatan:** proyek ini tidak mengimplementasikan flashing firmware,
@@ -325,8 +328,11 @@ spade65ctl profile apply spade65-profile.json \
 ```
 
 Simpan profil yang tervalidasi dan backup library GUI sebelum menerapkannya.
-Keyboard fisik yang tersedia belum dipakai untuk menguji penulisan keymap atau
-macro karena konfigurasi yang ada tidak dapat dibaca dahulu lalu dipulihkan.
+Keymap tiga layer dan macro sementara telah diterapkan pada keyboard berkabel
+yang tersedia, diverifikasi melalui input fisik, lalu dipulihkan dengan
+menerapkan kembali keymap default dan macro kosong. Keyboard tetap tidak
+menyediakan readback terverifikasi, sehingga profil tersimpan tetap menjadi
+satu-satunya jalur pemulihan.
 
 ### RGB per tombol dan streaming satu frame
 
@@ -363,7 +369,12 @@ spade65ctl sleep --light-off 10 --hibernate 30 --confirm
 
 Nilai light-off yang valid adalah 1, 2, 5, 10, 15, 20, 25, atau 30 menit. Nilai
 hibernation yang valid adalah 3, 5, 10, 15, 20, 25, 30, atau 60 menit. Report ini
-belum diuji secara fisik karena dongle yang cocok tidak tersedia.
+belum diuji secara fisik. Identitas konfigurasi dongle logis `0603:0356` tidak
+pernah muncul pada hardware ini, dan receiver fisik `0603:0352` sama sekali tidak
+mengiklankan feature report, sehingga tidak dapat membawa frame tersebut.
+Pembatasan khusus dongle ini mereproduksi software original, yang menggerbangi
+paket lewat `BaseInfo.StateID` dan langsung kembali sebelum membentuknya untuk
+identitas berkabel.
 
 ### Reset
 
@@ -376,9 +387,12 @@ spade65ctl reset --dry-run --i-understand-reset
 spade65ctl reset --confirm --i-understand-reset
 ```
 
-GUI memakai konfirmasi tambahan tertulis yang setara. Reset belum dikirim ke
-keyboard yang tersedia karena tidak ada jalur readback/pemulihan keymap yang
-terjamin.
+GUI memakai konfirmasi tambahan tertulis yang setara. Dengan otorisasi
+eksplisit, reset telah dikirim satu kali ke keyboard berkabel yang tersedia
+sebagai write 8 byte, dan probe hanya-baca tepat setelahnya tetap menemukan
+descriptor berkabel yang sesuai. Tetap tidak ada readback keymap yang terjamin,
+jadi simpan profil yang tervalidasi dan backup library GUI sebelum melakukan
+reset.
 
 ## Mengimpor profil dari software original
 
@@ -441,6 +455,29 @@ Perintah ini membuat systemd user unit pada Linux, launcher Startup `.cmd` pada
 Windows, atau LaunchAgent `.plist` pada macOS. Tinjau file hasilnya sebelum
 memasang. Perilaku asosiasi lengkap dan batasan OS tersedia di [panduan fitur
 host](host-features.md).
+
+Untuk membuat launcher bagi sistem operasi lain, tambahkan `--platform` beserta
+tiga opsi target berikut:
+
+```bash
+spade65ctl service integration launcher-output \
+  --platform windows \
+  --target-config 'C:/Users/You/AppData/Roaming/Spade65/background.json' \
+  --target-executable 'C:/Program Files/Spade65/Spade65.exe' \
+  --target-runtime packaged
+```
+
+| Opsi | Kegunaan |
+| --- | --- |
+| `--target-config` | Path konfigurasi absolut pada sistem target. Bila diberikan, argumen posisi `CONFIG` menjadi opsional. |
+| `--target-executable` | Path Spade65 atau Python absolut pada sistem target. |
+| `--target-runtime` | `packaged` untuk build rilis, `python` untuk source checkout. |
+
+Perintah ini menolak menebak nilai-nilai tersebut dari mesin ini, sehingga
+launcher untuk platform lain tidak akan pernah membawa path yang hanya ada di
+sini. Bila opsinya tidak diberikan, perintah melaporkan opsi yang kurang alih-
+alih menulis file. Pembuatan untuk platform host tetap hanya memerlukan `CONFIG`
+dan path output.
 
 ## Data yang tersimpan pada keyboard dan yang digerakkan host
 

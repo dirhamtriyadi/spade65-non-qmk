@@ -314,7 +314,7 @@
   "diagnostics.streamingVerification": "10 modes, layers, ranges, palette and advanced parameters",
   "diagnostics.perKeyArea": "Per-key custom color",
   "diagnostics.settingsArea": "Debounce / dongle timers / reset",
-  "diagnostics.settingsVerification": "Debounce USB validated; dongle/reset untested",
+  "diagnostics.settingsVerification": "Debounce and reset USB validated; dongle timers unsent",
   "diagnostics.firmwareArea": "Updater / firmware / bootloader / raw flash",
   "diagnostics.brickBoundary": "Brick-risk boundary",
   "diagnostics.parityHint": "Dormant generic code in the vendor bundle (program association, long/instant press and polling-rate UI) is not an active Spade65 device page or is not serialized by its Jupeng backend. See docs/parity.md.",

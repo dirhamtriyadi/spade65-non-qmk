@@ -14,9 +14,15 @@ report `0x08`. Sending `fixed` RGB (brightness 2, speed 3) returned an ioctl
 result of 620, and setting debounce to 5 ms returned an ioctl result of 8. The
 per-key RGB opcode `0x07` and one streaming frame (activation followed by five
 64-byte output reports) were also sent successfully, after which the `fixed`
-effect was restored successfully. Dongle mode, keymap writes, macros, and reset
-have not been tested. Firmware update is not implemented because it can brick
-the device and no verified recovery procedure exists.
+effect was restored successfully. All 20 built-in effect reports, per-key RGB,
+streaming RGB, AP wave, the custom timeline, a temporary three-layer keymap with
+a macro (applied, confirmed by physical key input, then restored), and a
+configuration reset have since been executed successfully on the same wired
+unit. The dongle timers remain untested because `0603:0356` has never enumerated
+on this hardware; the physical 2.4 GHz receiver enumerates as `0603:0352` and
+its descriptor advertises no feature reports, so it cannot be configured at all.
+Firmware update is not implemented because it can brick the device and no
+verified recovery procedure exists.
 
 ## Analysis sources
 
@@ -32,10 +38,18 @@ The installer and extracted files are not committed to Git. They are listed in
 
 ## Device identity
 
-| Transport | VID | PID |
-|---|---:|---:|
-| Wired USB | `0603` | `0351` |
-| 2.4 GHz dongle | `0603` | `0356` |
+| Transport | VID | PID | Configuration |
+|---|---:|---:|---|
+| Wired USB | `0603` | `0351` | descriptor-gated |
+| 2.4 GHz receiver | `0603` | `0352` | unsupported-read-only |
+| Vendor "Dongle" state | `0603` | `0356` | descriptor-gated |
+
+`0352` is the identity the physical receiver enumerates as. The only vendor
+usage page it exposes is `ff55`, and its descriptor advertises zero feature
+reports — `ff02:0001` and `ff03:0001` are absent — so it is discoverable for
+diagnostics but is never a write target. `0352` appears in none of the original
+software's device tables. `0356` is the vendor's logical dongle state and has
+never been observed on this hardware.
 
 The vendor database defines:
 
@@ -52,8 +66,10 @@ The `InitialDevice` code also searches for:
 | RGB streaming output | `ff55` | `0202` |
 
 These inferences come from the `FindDevice()` parameters and the internal handle
-names `DeviceId_Set8Bytes` and `DeviceId_Output`. The hardware descriptor must
-still confirm these pairs.
+names `DeviceId_Set8Bytes` and `DeviceId_Output`. The wired
+`0603:0351` descriptor confirms all four pairs, together with feature report
+`0x07` at 620 bytes, feature report `0x08` at 8 bytes, and output report `0x06`
+at 64 bytes.
 
 ## Cross-platform transport
 
@@ -62,10 +78,12 @@ passes the buffer's first byte as the report ID. This project uses `hidraw` with
 the `HIDIOCSFEATURE(length)` ioctl on Linux and `hidapi` on Windows/macOS. Both
 backends preserve the report ID as the first byte.
 
-The CLI selects an interface only when all of the following conditions match:
+The CLI discovers any interface with VID `0603` and PID `0351`, `0352`, or
+`0356`, and reports each one's `configuration_status`. It writes to an interface
+only when all of the following conditions match:
 
 1. VID `0603`.
-2. PID `0351` or `0356`.
+2. PID `0351` or `0356`; `0352` is read-only and is never a write target.
 3. The appropriate usage-page/usage pair.
 4. A feature-report ID and report length that match the descriptor.
 
@@ -135,9 +153,9 @@ logical keys. Empty slots are essential to preserving matrix order.
 Each slot uses two bytes for modifier/status and HID usage. A simple assignment
 adds `0x80` to the first byte. Macros use special keycodes in the `f0...f9`
 range and are sent separately. The 102-slot mapping, three-layer builder, JSON
-profile, and write path with additional confirmation are implemented. Hardware
-validation of remapping still requires comparing a single change against a
-capture from the Windows application.
+profile, and write path with additional confirmation are implemented, and a
+temporary three-layer keymap with a bound macro was written to the wired
+`0603:0351` unit, confirmed by physical key input, and then restored.
 
 ### Macro — opcode 0x05
 
@@ -208,13 +226,14 @@ by the descriptor.
 
 ## Data still required
 
-When hardware is available, retain:
+Retain from each hardware session:
 
-1. `probe-wired.json`.
-2. `probe-dongle.json`.
+1. `probe-wired.json` for `0603:0351`.
+2. `probe-receiver.json` for `0603:0352`. No dongle probe exists to capture,
+   because `0603:0356` has never enumerated on this hardware.
 3. The success or failure of each command together with the wired/dongle mode.
-4. If key remapping continues, a USBPcap capture of exactly one changed key—for
-   example, `A` to `B`—followed by an immediate restore.
+4. If the keymap is written again, the profile that was applied and the profile
+   used to restore it, so the change can be reversed without a readback.
 
 There is no need to begin with a firmware dump. The HID descriptor and a
 single-delta capture are far safer and sufficient to validate the configuration

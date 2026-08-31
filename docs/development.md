@@ -217,7 +217,9 @@ Implementation progress:
    colors.
 6. Complete: enable writes with dry-run, descriptor validation, and an additional
    confirmation.
-7. Next: compare one remap against a USB capture and validate macros on hardware.
+7. Complete: apply a temporary three-layer keymap and macro, verify both through
+   physical input, and restore the default keymap and an empty macro.
+8. Next: compare one remap against a USB capture.
 
 Do not build the keymap from only the 70-key physical order. The firmware uses
 empty slots in its 102-element matrix, so removing the empty slots can shift

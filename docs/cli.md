@@ -10,11 +10,14 @@ automation, and explicit configuration writes.
 Spade65 supports the non-QMK Noir Spade65 wired USB identity `0603:0351` and
 2.4 GHz dongle identity `0603:0356`. The physical receiver identity `0603:0352`
 is listed for read-only diagnostics only: its descriptor advertises neither
-verified configuration collection, so it is never a configuration target. Hardware validation is intentionally
-incremental: wired discovery, descriptor parsing, built-in RGB, brightness,
-speed, debounce, per-key RGB, and streaming have been tested on a physical
-keyboard. Keymap, macro, reset, and dongle-timer report builders are covered by
-automated tests but have not yet been sent to the available hardware. See the
+verified configuration collection, so it is never a configuration target. Hardware validation now covers the
+whole wired write surface: discovery, descriptor parsing, all 20 built-in RGB
+effects with brightness and speed, per-key RGB, streaming RGB, the AP wave, a
+custom timeline, debounce, a temporary three-layer keymap and macro that were
+applied, verified through physical input, and restored, and a configuration
+reset have all been sent to a physical keyboard. Only the dongle
+light-off/hibernate frame is still unsent, because the logical dongle identity
+`0603:0356` has never appeared on this hardware. See the
 [current hardware verification record](hardware-verification.md) for the exact
 test boundary.
 
@@ -317,9 +320,11 @@ spade65ctl profile apply spade65-profile.json \
   --confirm --i-understand-profile-overwrite
 ```
 
-Keep the validated profile and a GUI library backup before applying it. The
-available physical keyboard has not been used to test keymap or macro writes
-because its existing configuration cannot first be read back and restored.
+Keep the validated profile and a GUI library backup before applying it. A
+temporary three-layer keymap and macro have been applied to the available wired
+keyboard, verified through physical input, and then restored by re-applying the
+default keymap and an empty macro. The keyboard still offers no verified
+readback, so the saved profile remains the only restore path.
 
 ### Per-key and one-frame streaming RGB
 
@@ -356,7 +361,12 @@ spade65ctl sleep --light-off 10 --hibernate 30 --confirm
 
 Valid light-off values are 1, 2, 5, 10, 15, 20, 25, or 30 minutes. Valid
 hibernation values are 3, 5, 10, 15, 20, 25, 30, or 60 minutes. This report has
-not been physically tested because the matching dongle was not available.
+not been physically tested. The logical dongle configuration identity
+`0603:0356` has never appeared on this hardware, and the physical `0603:0352`
+receiver advertises no feature reports at all, so it cannot carry the frame.
+The dongle-only restriction reproduces the original software, which gates the
+packet on `BaseInfo.StateID` and returns before building it for the wired
+identity.
 
 ### Reset
 
@@ -368,9 +378,11 @@ spade65ctl reset --dry-run --i-understand-reset
 spade65ctl reset --confirm --i-understand-reset
 ```
 
-The GUI uses an equivalent additional typed confirmation. Reset has not been
-sent to the available keyboard because no guaranteed keymap readback/restore
-path exists.
+The GUI uses an equivalent additional typed confirmation. With explicit
+authorization, reset has been sent once to the available wired keyboard as an
+8-byte write, and a read-only probe immediately afterward still found the
+expected wired descriptor. There is still no guaranteed keymap readback, so keep
+a validated profile and a GUI library backup before resetting.
 
 ## Import profiles from the original software
 
@@ -432,6 +444,28 @@ It produces a systemd user unit on Linux, a Startup `.cmd` launcher on Windows,
 or a LaunchAgent `.plist` on macOS. Review the generated file before installing
 it. Full association behavior and OS limitations are in the
 [host-features guide](host-features.md).
+
+To build a launcher for a different operating system, add `--platform` together
+with the three target options:
+
+```bash
+spade65ctl service integration launcher-output \
+  --platform windows \
+  --target-config 'C:/Users/You/AppData/Roaming/Spade65/background.json' \
+  --target-executable 'C:/Program Files/Spade65/Spade65.exe' \
+  --target-runtime packaged
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--target-config` | Absolute configuration path on the target system. Supplying it makes the positional `CONFIG` argument optional. |
+| `--target-executable` | Absolute Spade65 or Python path on the target system. |
+| `--target-runtime` | `packaged` for a released build, `python` for a source checkout. |
+
+The command refuses to guess any of these from this machine, so a launcher for
+another platform can never carry a path that only exists here. Omitting them
+reports which options are missing rather than writing a file. Generating for the
+host platform still needs nothing beyond `CONFIG` and the output path.
 
 ## What is stored on the keyboard and what is host-driven
 
