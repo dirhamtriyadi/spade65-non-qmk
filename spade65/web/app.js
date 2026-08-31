@@ -25,6 +25,7 @@ let meta = null,
   deviceSnapshot = '',
   devicePollBusy = false,
   recordingMacro = false,
+  recordingMacroTarget = null,
   recordLast = 0,
   recordPressed = new Set(),
   desktopIntegration = null;
@@ -1148,8 +1149,8 @@ function renderMacros() {
     const b = document.createElement('button');
     b.className = i === activeMacro ? 'active' : '';
     b.textContent = `M${macro.index} · ${macroDisplayName(macro)} (${macro.events.length})`;
+    b.disabled = recordingMacro;
     b.onclick = () => {
-      if (recordingMacro) stopMacroRecording();
       activeMacro = i;
       renderMacros()
     };
@@ -1161,10 +1162,15 @@ function renderMacros() {
   $('macroRepeat').value = macro?.repeat ?? 1;
   $('eventList').innerHTML = '';
   if (macro) macro.events.forEach((event, i) => renderEvent(event, i));
-  $('deleteMacroBtn').disabled = !macro;
-  $('addEventBtn').disabled = !macro;
+  $('addMacroBtn').disabled = recordingMacro;
+  $('deleteMacroBtn').disabled = !macro || recordingMacro;
+  $('addEventBtn').disabled = !macro || recordingMacro;
+  $('macroName').disabled = !macro || recordingMacro;
+  $('macroRepeat').disabled = !macro || recordingMacro;
   $('recordMacroBtn').disabled = !macro;
-  $('recordMacroBtn').textContent = t(recordingMacro ? 'action.stopRecording' : 'action.record');
+  $('recordMacroBtn').hidden = recordingMacro;
+  $('stopMacroBtn').hidden = !recordingMacro;
+  $('stopMacroBtn').disabled = !recordingMacro;
   renderMacroAssign()
 }
 
@@ -1187,9 +1193,11 @@ function renderEvent(event, index) {
   delay.min = 0;
   delay.max = 32767;
   delay.value = event.delay_ms;
+  delay.disabled = recordingMacro;
   delay.onchange = () => event.delay_ms = Number(delay.value);
   const usage = document.createElement('input');
   usage.value = event.usage;
+  usage.disabled = recordingMacro;
   usage.setAttribute('list', 'usageList');
   usage.onchange = () => event.usage = usage.value;
   const state = document.createElement('select');
@@ -1203,10 +1211,12 @@ function renderEvent(event, index) {
     state.append(option)
   }
   state.value = String(event.pressed);
+  state.disabled = recordingMacro;
   state.onchange = () => event.pressed = state.value === 'true';
   const del = document.createElement('button');
   del.textContent = '×';
   del.className = 'danger';
+  del.disabled = recordingMacro;
   del.onclick = () => {
     profile.macros[activeMacro].events.splice(index, 1);
     renderMacros()
@@ -1309,9 +1319,15 @@ function recordMacroEvent(event) {
   const isDown = event.type === 'keydown';
   if (isDown && recordPressed.has(event.code) || !isDown && !recordPressed.has(event.code)) return;
   isDown ? recordPressed.add(event.code) : recordPressed.delete(event.code);
-  const macro = profile.macros[activeMacro];
-  if (macro.events.length >= 84) {
+  const macro = recordingMacroTarget;
+  if (!macro) {
     stopMacroRecording();
+    return
+  }
+  if (macro.events.length >= 84) {
+    stopMacroRecording({
+      notify: false
+    });
     return toast(t('macro.maximumReached'), true)
   }
   const now = performance.now();
@@ -1332,6 +1348,8 @@ function startMacroRecording() {
   macro.events = [];
   recordPressed.clear();
   recordLast = performance.now();
+  $('recordMacroBtn').blur();
+  recordingMacroTarget = macro;
   recordingMacro = true;
   document.addEventListener('keydown', recordMacroEvent, true);
   document.addEventListener('keyup', recordMacroEvent, true);
@@ -1339,17 +1357,19 @@ function startMacroRecording() {
   toast(t('macro.recording'))
 }
 
-function stopMacroRecording() {
+function stopMacroRecording({
+  notify = true,
+  render = true
+} = {}) {
+  if (!recordingMacro) return false;
   recordingMacro = false;
+  recordingMacroTarget = null;
   recordPressed.clear();
   document.removeEventListener('keydown', recordMacroEvent, true);
   document.removeEventListener('keyup', recordMacroEvent, true);
-  renderMacros();
-  toast(t('macro.stopped'))
-}
-
-function toggleMacroRecording() {
-  recordingMacro ? stopMacroRecording() : startMacroRecording()
+  if (render) renderMacros();
+  if (notify) toast(t('macro.stopped'));
+  return true
 }
 
 async function doAction(action, payload, success) {
@@ -1415,6 +1435,10 @@ async function exportProfile() {
 }
 
 function renderAllEditors() {
+  stopMacroRecording({
+    notify: false,
+    render: false
+  });
   selectedKey = null;
   activeMacro = 0;
   activeAppLayer = 0;
@@ -1903,6 +1927,7 @@ async function copyServiceCommands(field, successKey) {
 }
 
 document.querySelectorAll('#nav button').forEach(button => button.onclick = () => {
+  if (recordingMacro && button.dataset.page !== 'macros') stopMacroRecording();
   document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('active', x === button));
   document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
   $(`page-${button.dataset.page}`).classList.add('active');
@@ -1917,6 +1942,7 @@ $('testerResetBtn').onclick = resetTester;
 document.addEventListener('keydown', testerKeyEvent, true);
 document.addEventListener('keyup', testerKeyEvent, true);
 window.addEventListener('blur', () => {
+  if (recordingMacro) stopMacroRecording();
   if (!testerPressed.size) return;
   testerPressed.clear();
   renderTester()
@@ -2007,7 +2033,8 @@ $('timelineLoop').onchange = e => timeline().loop = e.target.checked;
 $('addMacroBtn').onclick = addMacro;
 $('deleteMacroBtn').onclick = deleteMacro;
 $('addEventBtn').onclick = addEvent;
-$('recordMacroBtn').onclick = toggleMacroRecording;
+$('recordMacroBtn').onclick = startMacroRecording;
+$('stopMacroBtn').onclick = () => stopMacroRecording();
 $('macroName').onchange = e => {
   if (profile.macros[activeMacro]) {
     profile.macros[activeMacro].name = e.target.value.trim() || t('macro.defaultName', {
@@ -2050,6 +2077,7 @@ async function initialize() {
   if (initialPage && subtitles[initialPage]) document.querySelector(`#nav button[data-page="${initialPage}"]`).click();
   setInterval(pollDeviceChanges, 2000);
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden && recordingMacro) stopMacroRecording();
     if (!document.hidden) pollDeviceChanges()
   })
 }

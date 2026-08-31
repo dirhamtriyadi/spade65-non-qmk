@@ -143,6 +143,19 @@ class GuiTests(unittest.TestCase):
             server.server_close()
             worker.join(timeout=5)
 
+    def test_macro_recording_uses_separate_start_and_stop_controls(self) -> None:
+        from importlib.resources import files
+
+        web = files("spade65.web")
+        page = web.joinpath("index.html").read_text(encoding="utf-8")
+        javascript = web.joinpath("app.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="recordMacroBtn"', page)
+        self.assertIn('id="stopMacroBtn"', page)
+        self.assertIn("$('recordMacroBtn').onclick = startMacroRecording", javascript)
+        self.assertIn("$('stopMacroBtn').onclick = () => stopMacroRecording()", javascript)
+        self.assertNotIn("toggleMacroRecording", javascript)
+
     def test_authenticated_quit_stops_only_the_local_server(self) -> None:
         handler = GuiHandler.__new__(GuiHandler)
         handler.headers = {
