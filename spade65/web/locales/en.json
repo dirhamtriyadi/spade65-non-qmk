@@ -318,5 +318,12 @@
   "diagnostics.firmwareArea": "Updater / firmware / bootloader / raw flash",
   "diagnostics.brickBoundary": "Brick-risk boundary",
   "diagnostics.parityHint": "Dormant generic code in the vendor bundle (program association, long/instant press and polling-rate UI) is not an active Spade65 device page or is not serialized by its Jupeng backend. See docs/parity.md.",
-  "diagnostics.profileValid": "Profile is valid"
+  "diagnostics.profileValid": "Profile is valid",
+  "profile.scopeLabel": "Apply covers",
+  "profile.scopeKeymap": "Keymap",
+  "profile.scopeMacros": "Macros",
+  "profile.scopeColors": "Per-key colors",
+  "profile.scopeHint": "Unticked parts are left exactly as they are on the keyboard. Sending colors switches it to the custom effect and darkens every key the profile does not name.",
+  "profile.scopeEmpty": "Tick at least one part to apply",
+  "keymap.originalOptionsHint": "Both switches edit the profile only. Press Apply profile to write them to the keyboard."
 }

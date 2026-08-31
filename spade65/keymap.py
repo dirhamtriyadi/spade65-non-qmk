@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from .protocol import (
     custom_rgb_report,
     keymap_report,
     macro_report,
+    rgb_effect_report,
 )
 
 
@@ -330,7 +332,58 @@ def compile_profile(data: dict[str, Any]) -> dict[str, object]:
         "macros": tuple(macro_reports),
         "colors": custom_rgb_report(colors),
         "matrix_colors": tuple(colors),
+        "referenced_macros": frozenset(referenced_macros),
     }
+
+
+PROFILE_SCOPES = ("keymap", "macros", "colors")
+
+
+def profile_reports(
+    data: dict[str, Any],
+    compiled: dict[str, object],
+    scopes: Sequence[str] | None = None,
+) -> tuple[bytes, ...]:
+    """Return the reports an apply should send for the requested scopes.
+
+    ``None`` means the whole profile. Scoping exists because the keyboard has
+    no configuration readback: writing more than the operator asked for cannot
+    be inspected afterwards, and sending the colour table repaints every key
+    that the profile does not name.
+    """
+
+    if scopes is None:
+        selected = set(PROFILE_SCOPES)
+    else:
+        selected = set(scopes)
+        unknown = sorted(selected - set(PROFILE_SCOPES))
+        if unknown:
+            raise ValueError(
+                f"unknown profile scope: {', '.join(unknown)}; "
+                f"choose from {', '.join(PROFILE_SCOPES)}"
+            )
+        if not selected:
+            raise ValueError("select at least one profile scope to apply")
+
+    bound = compiled.get("referenced_macros") or frozenset()
+    if "keymap" in selected and bound and "macros" not in selected:
+        raise ValueError(
+            "the keymap binds "
+            + ", ".join(f"macro {index}" for index in sorted(bound))
+            + ", so the macros scope has to be applied with it; the keyboard "
+            "offers no readback, so the bound keys would otherwise run "
+            "whichever macros the device still holds"
+        )
+
+    reports: list[bytes] = []
+    if "keymap" in selected:
+        reports.append(compiled["keymap"])  # type: ignore[arg-type]
+    if "macros" in selected:
+        reports.extend(compiled["macros"])  # type: ignore[arg-type]
+    if "colors" in selected and data.get("colors"):
+        reports.append(rgb_effect_report("custom"))
+        reports.append(compiled["colors"])  # type: ignore[arg-type]
+    return tuple(reports)
 
 
 def default_keymap_report(*, fn_mode_index: int = 0) -> bytes:

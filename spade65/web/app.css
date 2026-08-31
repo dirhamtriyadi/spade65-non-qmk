@@ -467,6 +467,28 @@ button.danger {
   margin-top: 14px !important
 }
 
+.apply-scopes {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 8px
+}
+
+.apply-scopes label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px
+}
+
+.apply-scopes .hint {
+  flex-basis: 100%;
+  margin-top: 4px !important;
+  text-align: right
+}
+
 .macro-list {
   display: grid;
   gap: 7px

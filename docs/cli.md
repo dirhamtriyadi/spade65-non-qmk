@@ -312,13 +312,35 @@ A macro contains key-down/key-up events and their delays:
 }
 ```
 
-Applying a profile overwrites all three keymap layers and writes each macro
-included in that profile. It therefore requires two explicit acknowledgements:
+Applying a profile overwrites all three keymap layers, writes each macro
+included in that profile, and — when the profile defines any colors — switches
+the keyboard to the custom effect and writes the per-key color table. It
+therefore requires two explicit acknowledgements:
 
 ```bash
 spade65ctl profile apply spade65-profile.json \
   --confirm --i-understand-profile-overwrite
 ```
+
+Every key the profile does not name is stored as black, so a full apply
+replaces whatever built-in effect the keyboard was running. Use `--only` to
+write just the part that changed:
+
+```bash
+spade65ctl profile apply spade65-profile.json --only keymap \
+  --confirm --i-understand-profile-overwrite
+```
+
+| Scope | Reports sent |
+| --- | --- |
+| `keymap` | opcode `0x03`, all three layers |
+| `macros` | opcode `0x05`, one per macro |
+| `colors` | opcode `0x02` custom effect, then opcode `0x07` per-key colors |
+
+`--only` is repeatable, and omitting it keeps the whole-profile behaviour. A
+keymap that binds a key to a macro cannot be applied without the `macros`
+scope: the keyboard offers no readback, so those keys would otherwise run
+whichever macros the device still holds.
 
 Keep the validated profile and a GUI library backup before applying it. A
 temporary three-layer keymap and macro have been applied to the available wired

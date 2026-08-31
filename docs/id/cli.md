@@ -319,14 +319,35 @@ Macro berisi event key-down/key-up beserta delay-nya:
 }
 ```
 
-Apply profil menimpa ketiga layer keymap dan menulis setiap macro yang disertakan
-dalam profil tersebut. Karena itu, perintah ini membutuhkan dua acknowledgement
-eksplisit:
+Apply profil menimpa ketiga layer keymap, menulis setiap macro yang disertakan
+dalam profil tersebut, dan — bila profil memuat warna — memindahkan keyboard ke
+efek custom lalu menulis tabel warna per tombol. Karena itu, perintah ini
+membutuhkan dua acknowledgement eksplisit:
 
 ```bash
 spade65ctl profile apply spade65-profile.json \
   --confirm --i-understand-profile-overwrite
 ```
+
+Setiap tombol yang tidak disebut profil disimpan sebagai hitam, sehingga apply
+penuh menggantikan efek bawaan apa pun yang sedang berjalan. Gunakan `--only`
+untuk menulis bagian yang berubah saja:
+
+```bash
+spade65ctl profile apply spade65-profile.json --only keymap \
+  --confirm --i-understand-profile-overwrite
+```
+
+| Cakupan | Report yang dikirim |
+| --- | --- |
+| `keymap` | opcode `0x03`, ketiga layer |
+| `macros` | opcode `0x05`, satu per macro |
+| `colors` | opcode `0x02` efek custom, lalu opcode `0x07` warna per tombol |
+
+`--only` bisa diulang, dan tanpa opsi itu perilakunya tetap menerapkan seluruh
+profil. Keymap yang mengikat tombol ke macro tidak bisa diterapkan tanpa
+cakupan `macros`: keyboard tidak menyediakan readback, sehingga tombol tersebut
+akan menjalankan macro lama yang masih tersimpan di perangkat.
 
 Simpan profil yang tervalidasi dan backup library GUI sebelum menerapkannya.
 Keymap tiga layer dan macro sementara telah diterapkan pada keyboard berkabel

@@ -1298,12 +1298,24 @@ async function doAction(action, payload, success) {
     toast(error.message, true)
   }
 }
+
+function selectedScopes() {
+  return [
+    ['keymap', 'scopeKeymap'],
+    ['macros', 'scopeMacros'],
+    ['colors', 'scopeColors']
+  ].filter(([, id]) => $(id).checked).map(([scope]) => scope)
+}
+
 async function applyProfile() {
+  const scopes = selectedScopes();
+  if (!scopes.length) return toast(t('profile.scopeEmpty'), true);
   if (!confirm(t('profile.confirmApply'))) return;
   if (prompt(t('profile.typeApply')) !== 'APPLY PROFILE') return toast(t('profile.cancelled'), true);
   await doAction('profile', {
     profile,
-    confirmation: 'APPLY PROFILE'
+    confirmation: 'APPLY PROFILE',
+    scopes
   }, t('profile.applied'))
 }
 async function downloadJson(data, name) {

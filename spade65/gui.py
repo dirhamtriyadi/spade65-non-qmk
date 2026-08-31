@@ -30,8 +30,10 @@ from .transport import (
 from .keymap import (
     BUTTON_TO_SLOT,
     HID_USAGES,
+    PROFILE_SCOPES,
     USAGE_GROUPS,
     compile_profile,
+    profile_reports,
     profile_template,
 )
 from .protocol import (
@@ -105,6 +107,7 @@ def gui_metadata() -> dict[str, object]:
         "usages": HID_USAGES,
         "usage_groups": USAGE_GROUPS,
         "profile": profile_template(),
+        "profile_scopes": list(PROFILE_SCOPES),
         "firmware_update": False,
         "safe_actions": sorted(SAFE_ACTIONS),
         "service_setup": release_service_setup(),
@@ -205,11 +208,20 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         if payload.get("confirmation") != "APPLY PROFILE":
             raise RuntimeError("type APPLY PROFILE to confirm profile overwrite")
         compiled = compile_profile(payload["profile"])
-        reports = [compiled["keymap"], *compiled["macros"]]
-        if payload["profile"].get("colors"):
-            reports.extend((rgb_effect_report("custom"), compiled["colors"]))
+        scopes = payload.get("scopes")
+        if scopes is not None and not isinstance(scopes, list):
+            raise RuntimeError("profile scopes must be a list")
+        reports = list(
+            profile_reports(payload["profile"], compiled, scopes=scopes)
+        )
+        if not reports:
+            raise RuntimeError("the selected scopes have nothing to send")
         device = _choose(MAIN_USAGE, explicit_path=path)
-        return {"device": str(device.path), "results": _send_features(device, reports)}
+        return {
+            "device": str(device.path),
+            "scopes": sorted(scopes) if scopes is not None else list(PROFILE_SCOPES),
+            "results": _send_features(device, reports),
+        }
     if action == "stream":
         compiled = compile_profile(payload["profile"])
         activation = streaming_activation_report()

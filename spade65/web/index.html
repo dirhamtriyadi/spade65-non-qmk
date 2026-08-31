@@ -29,7 +29,7 @@
   <main>
     <header>
       <div><h1 id="pageTitle" data-i18n="nav.device">Device</h1><p id="pageSubtitle" data-i18n="subtitle.device">Hardware overview and profile management</p></div>
-      <div class="header-actions"><select id="deviceSelect" aria-label="Select device interface" data-i18n-aria-label="device.select"></select><button id="refreshBtn" class="secondary" data-i18n="action.refresh">Refresh</button><button id="applyProfileBtn" class="primary" data-i18n="action.applyProfile">Apply profile</button></div>
+      <div class="header-actions"><select id="deviceSelect" aria-label="Select device interface" data-i18n-aria-label="device.select"></select><button id="refreshBtn" class="secondary" data-i18n="action.refresh">Refresh</button><button id="applyProfileBtn" class="primary" data-i18n="action.applyProfile">Apply profile</button></div><div class="apply-scopes"><span data-i18n="profile.scopeLabel">Apply covers</span><label><input id="scopeKeymap" type="checkbox" checked> <span data-i18n="profile.scopeKeymap">Keymap</span></label><label><input id="scopeMacros" type="checkbox" checked> <span data-i18n="profile.scopeMacros">Macros</span></label><label><input id="scopeColors" type="checkbox" checked> <span data-i18n="profile.scopeColors">Per-key colors</span></label><p class="hint" data-i18n="profile.scopeHint">Unticked parts are left exactly as they are on the keyboard. Sending colors switches it to the custom effect and darkens every key the profile does not name.</p></div>
     </header>
     <div id="toast" role="status"></div>
 
@@ -69,7 +69,7 @@
           <button id="assignBtn" class="primary" data-i18n="action.saveAssignment">Save assignment</button>
         </div>
         <div class="card">
-          <h3 data-i18n="keymap.originalOptions">Original keyboard options</h3><label class="switch-line"><input id="winLock" type="checkbox"> <span>Win Lock</span></label><label class="switch-line"><input id="wasdArrows" type="checkbox"> <span data-i18n="keymap.swapWasd">Swap WASD ↔ arrow keys</span></label>
+          <h3 data-i18n="keymap.originalOptions">Original keyboard options</h3><label class="switch-line"><input id="winLock" type="checkbox"> <span>Win Lock</span></label><label class="switch-line"><input id="wasdArrows" type="checkbox"> <span data-i18n="keymap.swapWasd">Swap WASD ↔ arrow keys</span></label><p class="hint" data-i18n="keymap.originalOptionsHint">Both switches edit the profile only. Press Apply profile to write them to the keyboard.</p>
           <h3 data-i18n="keymap.bulkDisable">Bulk disable</h3><div class="button-row"><button class="disable-group" data-group="numbers" data-i18n="group.numbers">Numbers</button><button class="disable-group" data-group="letters" data-i18n="group.letters">Letters</button><button class="disable-group" data-group="symbols" data-i18n="group.symbols">Symbols</button><button class="disable-group" data-group="controls" data-i18n="group.controls">Controls</button><button class="disable-group" data-group="all" data-i18n="group.allKeys">All keys</button><button id="undoDisableBtn" data-i18n="action.undoDisabled">Undo disabled</button></div>
           <h3 data-i18n="keymap.layerSummary">Layer summary</h3><div id="layerSummary" class="summary"></div><p class="hint" data-i18n="keymap.writeHint">These options update the visible profile. Hardware is written only after the two-step Apply profile confirmation.</p>
         </div>

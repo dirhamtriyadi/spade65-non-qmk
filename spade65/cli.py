@@ -18,10 +18,12 @@ from .transport import (
     send_output_report,
 )
 from .keymap import (
+    PROFILE_SCOPES,
     compile_profile,
     default_keymap_report,
     export_default,
     load_profile,
+    profile_reports,
     profile_template,
 )
 from .protocol import (
@@ -263,14 +265,9 @@ def _send_main_reports(device: Device, reports: list[bytes] | tuple[bytes, ...])
 def command_profile_apply(args: argparse.Namespace) -> int:
     data = load_profile(args.profile)
     compiled = compile_profile(data)
-    reports = [compiled["keymap"], *compiled["macros"]]
-    if data.get("colors"):
-        reports.extend(
-            (
-                rgb_effect_report("custom", brightness=4, speed=5),
-                compiled["colors"],
-            )
-        )
+    reports = list(profile_reports(data, compiled, scopes=args.only))
+    if not reports:
+        raise RuntimeError("the selected scopes have nothing to send")
     if args.dry_run:
         for index, report in enumerate(reports, 1):
             print(f"report {index}/{len(reports)}")
@@ -576,6 +573,17 @@ def build_parser() -> argparse.ArgumentParser:
         "apply", help="write keymap, macros, and optional colors"
     )
     apply.add_argument("profile", type=Path)
+    apply.add_argument(
+        "--only",
+        action="append",
+        choices=PROFILE_SCOPES,
+        metavar="{" + ",".join(PROFILE_SCOPES) + "}",
+        help=(
+            "apply only this part of the profile; repeatable. Without it the "
+            "whole profile is written, which repaints every key the profile "
+            "does not name"
+        ),
+    )
     apply.add_argument("--i-understand-profile-overwrite", action="store_true")
     _add_write_options(apply)
     apply.set_defaults(handler=command_profile_apply)
