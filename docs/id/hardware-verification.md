@@ -84,11 +84,18 @@ Jadi baris bawah papan ini adalah `Ctrl Win Alt Space Fn RAlt` ditambah kluster
 panah, dan tidak memiliki tombol Right Ctrl. Ini susunan kelima: data
 `KeyBoardStyle` milik vendor memuat lima baris bawah dan semuanya menempatkan
 `AltRight` sebelum `Custom_Fnkey`, sedangkan hardware ini justru sebaliknya.
-Layout standard kini menggambar `ralt` pada posisi yang benar-benar dipakai
-hardware dan tidak lagi menggambar `rctrl`, yang sebelumnya diletakkan di atas
-tombol Right Alt fisik. Layout split tidak diubah, karena spacebar terbelah
-adalah papan yang berbeda dan tidak ada hardware di sini yang membantah data
-vendor untuknya.
+
+Keempat layout kini menggambar `ralt` di sebelah kanan `fn` dan tidak ada yang
+menggambar `rctrl`. Matrix itu milik PCB, dan slot 89 terukur berada di kanan
+Fn, sehingga memasang spacebar terbelah tidak memindahkannya: yang berubah
+hanya keycap mana yang menutupi slot-slot space. Sebelumnya layout split
+memakai `ralt` sebagai tombol di antara segmen spacebar — berarti satu slot
+menempati dua posisi — dan menaruh `rctrl` di kanan Fn. Celah antar segmen kini
+diisi `mspace`, slot 91, yang default usage-nya `0x2c`.
+
+Hanya susunan standard yang terkonfirmasi terhadap hardware. Geometri split
+diturunkan dari matrix yang tetap, bukan dari papan split yang memang tidak
+tersedia.
 
 Satu anomali matrix masih terbuka: `rspace` menamai slot 92 sekaligus slot 94,
 dan default usage-nya bertentangan — slot 92 `0x00`, slot 94 `0x2c`.

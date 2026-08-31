@@ -359,19 +359,18 @@ const ansiPositions = [
   [652, 177, 35, 35]
 ];
 const splitPositions = {
+  // A split spacebar only changes which caps cover the three space slots. The
+  // matrix belongs to the PCB, so ralt keeps the position right of Fn that the
+  // hardware reported, and mspace fills the gap between the space segments.
   iso: {
     61: [216, 177, 82, 35],
-    62: [303, 177, 45, 35],
-    63: [216, 177, 0, 0],
-    64: [352, 177, 102, 35],
-    66: [507, 177, 45, 35]
+    63: [303, 177, 45, 35],
+    64: [352, 177, 102, 35]
   },
   ansi: {
     61: [216, 177, 82, 35],
-    62: [303, 177, 45, 35],
-    63: [216, 177, 0, 0],
-    64: [353, 177, 103, 35],
-    66: [507, 177, 45, 35]
+    63: [303, 177, 45, 35],
+    64: [353, 177, 103, 35]
   }
 };
 

@@ -77,14 +77,27 @@ class BottomRowTests(unittest.TestCase):
             with self.subTest(variant=variant):
                 self.assertNotIn("rctrl", visible_bottom_row(variant))
 
-    def test_split_layouts_keep_both_right_hand_modifiers(self) -> None:
-        # A split spacebar is a different board; the vendor styles give it both
-        # AltRight and ControlRight, and no hardware here contradicts that.
+    SPLIT = [
+        "lctrl", "win", "lalt", "lspace", "mspace", "rspace", "fn", "ralt",
+        "left", "down", "right",
+    ]
+
+    def test_split_layouts_put_the_same_slot_to_the_right_of_fn(self) -> None:
+        # The matrix belongs to the PCB, and slot 89 was verified to sit right
+        # of Fn. Splitting the spacebar changes which caps cover the space
+        # slots, so it cannot move ralt into the gap between them.
         for variant in ("ansi-split", "iso-split"):
             with self.subTest(variant=variant):
-                drawn = visible_bottom_row(variant)
-                self.assertIn("ralt", drawn)
-                self.assertIn("rctrl", drawn)
+                self.assertEqual(visible_bottom_row(variant), self.SPLIT)
+
+    def test_no_layout_draws_the_absent_right_ctrl(self) -> None:
+        for variant in ("ansi-standard", "iso-standard", "ansi-split", "iso-split"):
+            with self.subTest(variant=variant):
+                self.assertNotIn("rctrl", visible_bottom_row(variant))
+
+    def test_each_split_space_segment_addresses_a_distinct_slot(self) -> None:
+        segments = [BUTTON_TO_SLOT[name] for name in ("lspace", "mspace", "rspace")]
+        self.assertEqual(len(set(segments)), 3)
 
     def test_the_drawn_right_modifier_addresses_the_slot_that_sends_0xe6(self) -> None:
         self.assertEqual(DEFAULT_USAGES[BUTTON_TO_SLOT["ralt"]], 0xE6)

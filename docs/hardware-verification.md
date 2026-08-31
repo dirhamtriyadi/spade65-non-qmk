@@ -84,11 +84,19 @@ So this board's bottom row is `Ctrl Win Alt Space Fn RAlt` plus the arrow
 cluster, and it carries no Right Ctrl key. That is a fifth arrangement: the
 vendor's own `KeyBoardStyle` data contains five bottom rows and every one of
 them places `AltRight` before `Custom_Fnkey`, while this hardware has them the
-other way round. The standard layouts now draw `ralt` in the position the
-hardware actually uses and no longer draw `rctrl`, which had been placed over
-the physical Right Alt. The split layouts are unchanged, because a split
-spacebar is a different board and no hardware here contradicts the vendor data
-for it.
+other way round.
+
+All four layouts now draw `ralt` to the right of `fn` and none draws `rctrl`.
+The matrix belongs to the PCB, and slot 89 was measured sitting right of Fn, so
+fitting a split spacebar cannot move it: a split only changes which caps cover
+the space slots. The split layouts previously used `ralt` as the key between
+the space segments, which would have made one slot occupy two positions, and
+they placed `rctrl` right of Fn. The gap between the segments is now `mspace`,
+slot 91, whose default usage is `0x2c`.
+
+Only the standard arrangement is confirmed against hardware. The split
+geometry follows from the fixed matrix rather than from a split board, which
+was not available.
 
 One matrix anomaly remains unresolved: `rspace` names both slot 92 and slot 94,
 and their default usages disagree — slot 92 is `0x00` and slot 94 is `0x2c`.
