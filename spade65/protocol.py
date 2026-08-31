@@ -11,6 +11,48 @@ PRODUCT_IDS = {
     0x0351: "USB",
     0x0356: "Dongle",
 }
+# PID 0352 is the USB identity observed for the physical 2.4 GHz receiver. Its
+# descriptor does not expose either verified configuration collection, so it is
+# discoverable for diagnostics only and deliberately absent from PRODUCT_IDS.
+# Keep PRODUCT_IDS as the allowlist used by every configuration write path.
+READ_ONLY_PRODUCT_IDS = {
+    0x0352: "2.4 GHz receiver",
+}
+OBSERVED_PRODUCT_IDS = {**PRODUCT_IDS, **READ_ONLY_PRODUCT_IDS}
+
+
+# Streaming RGB is only verified on the wired interface, so it narrows the
+# write allowlist rather than repeating a literal at each call site.
+STREAMING_PRODUCT_IDS = {0x0351}
+# The original backend gates the light-off/hibernate frame on BaseInfo.StateID
+# and returns before building it when StateID is 0, the wired identity, so the
+# timer is only ever addressed to the dongle. This reproduces that gate.
+WIRELESS_TIMER_PRODUCT_IDS = {0x0356}
+
+assert WIRELESS_TIMER_PRODUCT_IDS <= PRODUCT_IDS.keys(), (
+    "a wireless timer target must also be a configuration target"
+)
+
+assert STREAMING_PRODUCT_IDS <= PRODUCT_IDS.keys(), (
+    "a streaming target must also be a configuration target"
+)
+assert not (PRODUCT_IDS.keys() & READ_ONLY_PRODUCT_IDS.keys()), (
+    "a product ID cannot be both a write target and read-only"
+)
+
+
+def configuration_status(product_id: int) -> str:
+    """Report whether a product ID may be configured by this application.
+
+    Derived from the write allowlist rather than the read-only table, so an
+    identity in neither table fails closed instead of inheriting the label
+    that permits writes.
+    """
+
+    if product_id in PRODUCT_IDS:
+        return "descriptor-gated"
+    return "unsupported-read-only"
+
 
 MAIN_USAGE = (0xFF02, 0x0001)
 SHORT_USAGE = (0xFF03, 0x0001)

@@ -8,7 +8,9 @@ desktop window and in a browser, plus a command-line interface for inspection,
 automation, and explicit configuration writes.
 
 Spade65 supports the non-QMK Noir Spade65 wired USB identity `0603:0351` and
-2.4 GHz dongle identity `0603:0356`. Hardware validation is intentionally
+2.4 GHz dongle identity `0603:0356`. The physical receiver identity `0603:0352`
+is listed for read-only diagnostics only: its descriptor advertises neither
+verified configuration collection, so it is never a configuration target. Hardware validation is intentionally
 incremental: wired discovery, descriptor parsing, built-in RGB, brightness,
 speed, debounce, per-key RGB, and streaming have been tested on a physical
 keyboard. Keymap, macro, reset, and dongle-timer report builders are covered by
@@ -205,6 +207,14 @@ spade65ctl probe --json
 
 `probe` reads enumeration and descriptor information; it does not send a
 configuration report.
+
+Each interface reports a `configuration_status`, in the text output as a
+`configuration:` line and in `--json` and `info` as a top-level field:
+
+| Value | Meaning |
+| --- | --- |
+| `descriptor-gated` | A supported configuration identity. Writes are still checked against the advertised report shape before anything is sent. |
+| `unsupported-read-only` | Discovered for diagnostics only. No command will write to it. |
 
 ### Display available device information
 
@@ -445,6 +455,7 @@ On Linux, inspect the known USB identities:
 
 ```bash
 lsusb -d 0603:0351
+lsusb -d 0603:0352
 lsusb -d 0603:0356
 ```
 

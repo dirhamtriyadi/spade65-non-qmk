@@ -39,10 +39,14 @@ from .protocol import (
     MAIN_REPORT_ID,
     MAIN_REPORT_LENGTH,
     MAIN_USAGE,
+    OBSERVED_PRODUCT_IDS,
     OUTPUT_USAGE,
     PRODUCT_IDS,
+    configuration_status,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
+    STREAMING_PRODUCT_IDS,
+    WIRELESS_TIMER_PRODUCT_IDS,
     SHORT_USAGE,
     VENDOR_ID,
     debounce_report,
@@ -72,7 +76,8 @@ def _device_summary(device: Device) -> dict[str, object]:
         "backend": device.backend,
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
-        "transport": PRODUCT_IDS.get(device.product_id, "unknown"),
+        "transport": OBSERVED_PRODUCT_IDS.get(device.product_id, "unknown"),
+        "configuration_status": configuration_status(device.product_id),
         "name": device.name,
         "usages": [f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)],
         "reports": [
@@ -87,7 +92,10 @@ def gui_metadata() -> dict[str, object]:
     devices = [
         device
         for device in discover_devices()
-        if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
+        if (
+            device.vendor_id == VENDOR_ID
+            and device.product_id in OBSERVED_PRODUCT_IDS
+        )
     ]
     return {
         "version": __version__,
@@ -142,7 +150,11 @@ def _send_features(device: Device, reports: list[bytes]) -> list[int]:
         for index, report in enumerate(reports):
             result = send_feature_report(device, report)
             if result != len(report):
-                raise RuntimeError(f"short feature write: {result}/{len(report)}")
+                raise RuntimeError(
+                    f"short feature write on report {index + 1}/{len(reports)} "
+                    f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                    f"{result}/{len(report)}"
+                )
             results.append(result)
             if index + 1 < len(reports):
                 time.sleep(0.1)
@@ -202,7 +214,11 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         compiled = compile_profile(payload["profile"])
         activation = streaming_activation_report()
         chunks = streaming_rgb_reports(compiled["matrix_colors"])
-        device = _choose(OUTPUT_USAGE, product_ids={0x0351}, explicit_path=path)
+        device = _choose(
+            OUTPUT_USAGE,
+            product_ids=set(STREAMING_PRODUCT_IDS),
+            explicit_path=path,
+        )
         if device.report_length("feature", SHORT_REPORT_ID) != SHORT_REPORT_LENGTH:
             raise RuntimeError("missing streaming activation report")
         if device.report_length("output", 0x06) != 64:
@@ -214,10 +230,13 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
                     f"short streaming activation: {feature_result}/{SHORT_REPORT_LENGTH}"
                 )
             output_results = []
-            for chunk in chunks:
+            for index, chunk in enumerate(chunks):
                 result = send_output_report(device, chunk)
                 if result != 64:
-                    raise RuntimeError(f"short streaming output: {result}/64")
+                    raise RuntimeError(
+                        f"short streaming output chunk {index + 1}/{len(chunks)}: "
+                        f"{result}/64"
+                    )
                 output_results.append(result)
         return {
             "device": str(device.path),
@@ -232,7 +251,11 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
             light_off_minutes=int(payload["light_off"]),
             hibernate_minutes=int(payload["hibernate"]),
         )
-        device = _choose(SHORT_USAGE, product_ids={0x0356}, explicit_path=path)
+        device = _choose(
+            SHORT_USAGE,
+            product_ids=set(WIRELESS_TIMER_PRODUCT_IDS),
+            explicit_path=path,
+        )
         return {"device": str(device.path), "results": _send_features(device, [report])}
     if action == "reset":
         if payload.get("confirmation") != "RESET SPADE65":

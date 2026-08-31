@@ -31,10 +31,14 @@ from .protocol import (
     MAIN_REPORT_ID,
     MAIN_REPORT_LENGTH,
     MAIN_USAGE,
+    OBSERVED_PRODUCT_IDS,
     OUTPUT_USAGE,
     PRODUCT_IDS,
+    configuration_status,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
+    STREAMING_PRODUCT_IDS,
+    WIRELESS_TIMER_PRODUCT_IDS,
     SHORT_USAGE,
     VENDOR_ID,
     debounce_report,
@@ -64,7 +68,8 @@ def _device_dict(device: Device, *, include_unique: bool = False) -> dict[str, o
         "backend": device.backend,
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
-        "transport": PRODUCT_IDS.get(device.product_id, "unknown"),
+        "transport": OBSERVED_PRODUCT_IDS.get(device.product_id, "unknown"),
+        "configuration_status": configuration_status(device.product_id),
         "name": device.name,
         "usages": [f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)],
         "reports": [
@@ -86,7 +91,10 @@ def command_probe(args: argparse.Namespace) -> int:
     devices = [
         device
         for device in discover_devices()
-        if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
+        if (
+            device.vendor_id == VENDOR_ID
+            and device.product_id in OBSERVED_PRODUCT_IDS
+        )
     ]
     if args.json:
         print(
@@ -99,12 +107,15 @@ def command_probe(args: argparse.Namespace) -> int:
             )
         )
     elif not devices:
-        print("Spade65 tidak ditemukan (VID 0603, PID 0351/0356).")
+        print("Spade65 not found (VID 0603, PID 0351/0352/0356).")
     else:
         for device in devices:
             print(
                 f"{device.path}: {device.vendor_id:04x}:{device.product_id:04x} "
-                f"{PRODUCT_IDS[device.product_id]} {device.name}".rstrip()
+                f"{OBSERVED_PRODUCT_IDS[device.product_id]} {device.name}".rstrip()
+            )
+            print(
+                "  configuration: " + configuration_status(device.product_id)
             )
             usages = ", ".join(
                 f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)
@@ -154,7 +165,9 @@ def _write_report(
             f"report length mismatch: descriptor says {expected}, tool expects {len(report)}"
         )
     result = send_feature_report(device, report)
-    print(f"Terkirim ke {device.path}; transport result={result}.")
+    if result != len(report):
+        raise RuntimeError(f"short feature write: {result}/{len(report)}")
+    print(f"Sent to {device.path}; transport result={result}.")
     return 0
 
 
@@ -178,7 +191,9 @@ def command_sleep(args: argparse.Namespace) -> int:
         light_off_minutes=args.light_off,
         hibernate_minutes=args.hibernate,
     )
-    return _write_report(args, report, SHORT_USAGE, product_ids={0x0356})
+    return _write_report(
+        args, report, SHORT_USAGE, product_ids=set(WIRELESS_TIMER_PRODUCT_IDS)
+    )
 
 
 def command_reset(args: argparse.Namespace) -> int:
@@ -201,7 +216,7 @@ def command_profile_create(args: argparse.Namespace) -> int:
     args.output.write_text(
         json.dumps(profile_template(), indent=2) + "\n", encoding="utf-8"
     )
-    print(f"Profile template ditulis ke {args.output}.")
+    print(f"Profile template written to {args.output}.")
     return 0
 
 
@@ -236,7 +251,11 @@ def _send_main_reports(device: Device, reports: list[bytes] | tuple[bytes, ...])
     for index, report in enumerate(reports):
         result = send_feature_report(device, report)
         if result != len(report):
-            raise RuntimeError(f"short feature write: {result}/{len(report)}")
+            raise RuntimeError(
+                f"short feature write on report {index + 1}/{len(reports)} "
+                f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                f"{result}/{len(report)}"
+            )
         if index + 1 < len(reports):
             time.sleep(0.1)
 
@@ -263,7 +282,7 @@ def command_profile_apply(args: argparse.Namespace) -> int:
         )
     device = _main_device(args)
     _send_main_reports(device, reports)
-    print(f"{len(reports)} report profil terkirim ke {device.path}.")
+    print(f"{len(reports)} profile reports sent to {device.path}.")
     return 0
 
 
@@ -284,7 +303,7 @@ def command_rgb_per_key(args: argparse.Namespace) -> int:
         raise RuntimeError("refusing to write without --confirm (use --dry-run first)")
     device = _main_device(args)
     _send_main_reports(device, reports)
-    print(f"Per-key RGB terkirim ke {device.path}.")
+    print(f"Per-key RGB sent to {device.path}.")
     return 0
 
 
@@ -303,7 +322,7 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
     device = choose_device(
         discover_devices(),
         vendor_id=VENDOR_ID,
-        product_ids={0x0351},
+        product_ids=set(STREAMING_PRODUCT_IDS),
         usage=OUTPUT_USAGE,
         explicit_path=args.device,
     )
@@ -313,12 +332,17 @@ def command_rgb_stream(args: argparse.Namespace) -> int:
         raise RuntimeError("stream interface has no 64-byte output report 0x06")
     feature_result = send_feature_report(device, activation)
     if feature_result != len(activation):
-        raise RuntimeError("short streaming activation write")
-    for report in chunks:
+        raise RuntimeError(
+            f"short streaming activation: {feature_result}/{len(activation)}"
+        )
+    for index, report in enumerate(chunks):
         result = send_output_report(device, report)
         if result != len(report):
-            raise RuntimeError(f"short output write: {result}/{len(report)}")
-    print(f"1 frame streaming RGB terkirim ke {device.path}.")
+            raise RuntimeError(
+                f"short streaming output chunk {index + 1}/{len(chunks)}: "
+                f"{result}/{len(report)}"
+            )
+    print(f"1 streaming RGB frame sent to {device.path}.")
     return 0
 
 
@@ -338,7 +362,10 @@ def command_gui(args: argparse.Namespace) -> int:
 def command_info(args: argparse.Namespace) -> int:
     devices = [
         device for device in discover_devices()
-        if device.vendor_id == VENDOR_ID and device.product_id in PRODUCT_IDS
+        if (
+            device.vendor_id == VENDOR_ID
+            and device.product_id in OBSERVED_PRODUCT_IDS
+        )
     ]
     summaries = []
     seen: set[tuple[int, int, str]] = set()
@@ -372,7 +399,7 @@ def command_service_example(args: argparse.Namespace) -> int:
     args.output.write_text(
         json.dumps(service_template(), indent=2) + "\n", encoding="utf-8"
     )
-    print(f"Service config template ditulis ke {args.output}.")
+    print(f"Service config template written to {args.output}.")
     return 0
 
 
@@ -389,15 +416,46 @@ def command_service_run(args: argparse.Namespace) -> int:
 
 
 def command_service_integration(args: argparse.Namespace) -> int:
-    from .startup import render_startup
+    from .startup import platform_family, render_startup
 
     if args.output.exists() and not args.force:
         raise RuntimeError(f"refusing to overwrite {args.output}; use --force")
-    platform = None if args.platform == "auto" else args.platform
-    args.output.write_text(
-        render_startup(args.config, platform=platform), encoding="utf-8"
+    host_platform = platform_family()
+    platform = host_platform if args.platform == "auto" else args.platform
+    if platform != host_platform:
+        required = {
+            "--target-config": args.target_config,
+            "--target-executable": args.target_executable,
+            "--target-runtime": args.target_runtime,
+        }
+        missing = [option for option, value in required.items() if value is None]
+        if missing:
+            raise ValueError(
+                f"cross-platform launcher generation for {platform} requires "
+                + ", ".join(missing)
+            )
+    if (args.target_executable is None) != (args.target_runtime is None):
+        raise ValueError(
+            "--target-executable and --target-runtime must be provided together"
+        )
+    config = args.target_config or args.config
+    if config is None:
+        raise ValueError(
+            "service integration requires CONFIG or an explicit --target-config"
+        )
+    frozen = (
+        None if args.target_runtime is None else args.target_runtime == "packaged"
     )
-    print(f"Background launcher ditulis ke {args.output}.")
+    args.output.write_text(
+        render_startup(
+            config,
+            platform=platform,
+            python_executable=args.target_executable,
+            frozen=frozen,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Background launcher written to {args.output}.")
     return 0
 
 
@@ -551,11 +609,29 @@ def build_parser() -> argparse.ArgumentParser:
     service_integration = service_subparsers.add_parser(
         "integration", help="generate an OS startup launcher without installing it"
     )
-    service_integration.add_argument("config", type=Path)
+    service_integration.add_argument(
+        "config",
+        type=Path,
+        nargs="?",
+        help="service config path on the current system",
+    )
     service_integration.add_argument("output", type=Path)
     service_integration.add_argument(
         "--platform", choices=("auto", "linux", "windows", "macos"),
         default="auto",
+    )
+    service_integration.add_argument(
+        "--target-config",
+        help="absolute service config path on the target operating system",
+    )
+    service_integration.add_argument(
+        "--target-executable",
+        help="absolute Spade65 or Python executable path on the target system",
+    )
+    service_integration.add_argument(
+        "--target-runtime",
+        choices=("packaged", "python"),
+        help="whether the target executable is a packaged app or Python",
     )
     service_integration.add_argument("--force", action="store_true")
     service_integration.set_defaults(handler=command_service_integration)

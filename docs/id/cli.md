@@ -8,7 +8,10 @@ mandiri maupun browser, ditambah CLI untuk inspeksi, otomasi, dan penulisan
 konfigurasi secara eksplisit.
 
 Spade65 mendukung identitas USB berkabel `0603:0351` dan identitas dongle 2,4 GHz
-`0603:0356` milik Noir Spade65 non-QMK. Validasi hardware dilakukan secara
+`0603:0356` milik Noir Spade65 non-QMK. Identitas receiver fisik `0603:0352`
+hanya dicantumkan untuk diagnostik hanya-baca: descriptor-nya tidak
+mengiklankan satu pun koleksi konfigurasi terverifikasi, sehingga tidak pernah
+menjadi target konfigurasi. Validasi hardware dilakukan secara
 bertahap: deteksi berkabel, parsing descriptor, RGB bawaan, brightness, speed,
 debounce, RGB per tombol, dan streaming telah diuji pada keyboard fisik. Builder
 report keymap, macro, reset, dan timer dongle tercakup tes otomatis, tetapi belum
@@ -208,6 +211,15 @@ spade65ctl probe --json
 
 `probe` membaca informasi enumerasi dan descriptor; perintah ini tidak mengirim
 report konfigurasi.
+
+Setiap interface melaporkan `configuration_status`, tampil sebagai baris
+`configuration:` pada output teks dan sebagai field tingkat atas pada `--json`
+serta `info`:
+
+| Nilai | Arti |
+| --- | --- |
+| `descriptor-gated` | Identitas konfigurasi yang didukung. Setiap write tetap diperiksa terhadap bentuk report yang diiklankan sebelum dikirim. |
+| `unsupported-read-only` | Hanya ditemukan untuk diagnostik. Tidak ada perintah yang akan menulis ke sana. |
 
 ### Menampilkan informasi perangkat yang tersedia
 
@@ -452,6 +464,7 @@ Pada Linux, periksa identitas USB yang dikenal:
 
 ```bash
 lsusb -d 0603:0351
+lsusb -d 0603:0352
 lsusb -d 0603:0356
 ```
 

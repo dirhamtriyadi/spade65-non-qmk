@@ -26,8 +26,10 @@ from .protocol import (
     MAIN_REPORT_LENGTH,
     MAIN_USAGE,
     OUTPUT_USAGE,
+    PRODUCT_IDS,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
+    STREAMING_PRODUCT_IDS,
     VENDOR_ID,
     rgb_effect_report,
     streaming_activation_report,
@@ -243,7 +245,7 @@ def matching_rule(config: dict[str, Any]) -> dict[str, str] | None:
 
 def _choose_main(path: Path | None) -> Device:
     device = choose_device(
-        discover_devices(), vendor_id=VENDOR_ID, product_ids={0x0351, 0x0356},
+        discover_devices(), vendor_id=VENDOR_ID, product_ids=set(PRODUCT_IDS),
         usage=MAIN_USAGE, explicit_path=path,
     )
     if device.report_length("feature", MAIN_REPORT_ID) != MAIN_REPORT_LENGTH:
@@ -260,7 +262,12 @@ def apply_profile(profile: dict[str, Any], *, path: Path | None = None) -> None:
     for index, report in enumerate(reports):
         result = send_feature_report(device, report)
         if result != len(report):
-            raise RuntimeError(f"short background profile write: {result}/{len(report)}")
+            raise RuntimeError(
+                f"short background profile write on report "
+                f"{index + 1}/{len(reports)} "
+                f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                f"{result}/{len(report)}"
+            )
         if index + 1 < len(reports):
             time.sleep(0.1)
 
@@ -272,7 +279,8 @@ def stream_colors(colors: dict[str, object], *, path: Path | None = None) -> Non
     }
     compiled = compile_profile(profile)
     device = choose_device(
-        discover_devices(), vendor_id=VENDOR_ID, product_ids={0x0351},
+        discover_devices(), vendor_id=VENDOR_ID,
+        product_ids=set(STREAMING_PRODUCT_IDS),
         usage=OUTPUT_USAGE, explicit_path=path,
     )
     if device.report_length("feature", SHORT_REPORT_ID) != SHORT_REPORT_LENGTH:
@@ -280,11 +288,20 @@ def stream_colors(colors: dict[str, object], *, path: Path | None = None) -> Non
     if device.report_length("output", 0x06) != 64:
         raise RuntimeError("stream output descriptor does not match")
     activation = streaming_activation_report()
-    if send_feature_report(device, activation) != len(activation):
-        raise RuntimeError("short background streaming activation")
-    for report in streaming_rgb_reports(compiled["matrix_colors"]):
-        if send_output_report(device, report) != len(report):
-            raise RuntimeError("short background streaming write")
+    activation_result = send_feature_report(device, activation)
+    if activation_result != len(activation):
+        raise RuntimeError(
+            f"short background streaming activation: "
+            f"{activation_result}/{len(activation)}"
+        )
+    chunks = streaming_rgb_reports(compiled["matrix_colors"])
+    for index, report in enumerate(chunks):
+        result = send_output_report(device, report)
+        if result != len(report):
+            raise RuntimeError(
+                f"short background streaming output chunk "
+                f"{index + 1}/{len(chunks)}: {result}/{len(report)}"
+            )
 
 
 class BackgroundService:

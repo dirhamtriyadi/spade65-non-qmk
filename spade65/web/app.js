@@ -640,20 +640,22 @@ async function pollDeviceChanges() {
 
 function renderConnectionStatus() {
   if (!meta) return;
-  const connected = meta.devices.length > 0;
+  const connected = meta.devices.length > 0,
+    readOnlyReceiver = connected && meta.devices.every(d => d.configuration_status === 'unsupported-read-only'),
+    primary = layoutState.primaryDevice(meta.devices);
   $('connectionDot').classList.toggle('online', connected);
-  $('connectionText').textContent = connected ? t('status.connected', {
-    name: meta.devices[0].name
+  $('connectionText').textContent = connected ? t(readOnlyReceiver ? 'status.detectedReadOnly' : 'status.connected', {
+    name: primary.name
   }) : t('status.noDevice');
-  $('transportBadge').textContent = connected ? `${meta.devices[0].transport} ${meta.devices[0].vid}:${meta.devices[0].pid}` : t('status.notConnected');
-  $('descriptorBadge').textContent = meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable')
+  $('transportBadge').textContent = connected ? `${primary.transport} ${primary.vid}:${primary.pid}` : t('status.notConnected');
+  $('descriptorBadge').textContent = readOnlyReceiver ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable')
 }
 
 function renderDevices() {
   const select = $('deviceSelect'),
     old = select.value;
   select.innerHTML = '';
-  for (const item of meta.devices.filter(d => d.usages.includes('ff02:0001'))) {
+  for (const item of meta.devices.filter(d => d.configuration_status === 'descriptor-gated' && d.usages.includes('ff02:0001'))) {
     const o = document.createElement('option');
     o.value = item.path;
     o.textContent = `${item.name} · ${item.transport} · ${item.path}`;

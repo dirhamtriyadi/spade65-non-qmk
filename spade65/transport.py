@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType
 
 from .device import Device, choose_device, parse_report_descriptor
-from .protocol import PRODUCT_IDS, VENDOR_ID
+from .protocol import OBSERVED_PRODUCT_IDS, VENDOR_ID
 
 
 def backend_name(platform: str | None = None) -> str:
@@ -68,7 +68,7 @@ def discover_hidapi(hid: ModuleType | None = None) -> list[Device]:
             product_id = int(item.get("product_id", 0))
         except (TypeError, ValueError):
             continue
-        if vendor_id != VENDOR_ID or product_id not in PRODUCT_IDS:
+        if vendor_id != VENDOR_ID or product_id not in OBSERVED_PRODUCT_IDS:
             continue
         raw_path = item.get("path")
         if not raw_path:

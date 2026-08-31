@@ -2,34 +2,78 @@
 
 # Hardware verification
 
-The latest tests were performed on August 29, 2026, using the USB Spade65
-`0603:0351` available on the development machine.
+The wired tests were performed on August 29–31, 2026, using the USB Spade65
+`0603:0351`. On August 31, the same keyboard's physical 2.4 GHz receiver was
+also inspected and enumerated as `0603:0352`.
 
 ## Successful tests
 
-- Three interfaces were discovered: `/dev/hidraw3`, `/dev/hidraw4`, and
-  `/dev/hidraw5`.
-- The configuration interface advertises a 620-byte feature report `0x07`, an
-  8-byte feature report `0x08`, and a 64-byte output report `0x06`.
-- One custom-timeline frame was sent successfully to `/dev/hidraw4` through a
-  background-service command. This path only activates streaming and sends five
-  RGB output reports; it does not write flash, the keymap, macros, or the
-  bootloader.
+- Wired mode enumerated as `0603:0351`. Its configuration interface advertises
+  a 620-byte feature report `0x07`, an 8-byte feature report `0x08`, and a
+  64-byte output report `0x06`.
+- All 20 built-in RGB effect reports completed as 620-byte writes, and their
+  visual effects were confirmed on the keyboard. Per-key RGB, streaming RGB,
+  the AP wave, and a custom timeline were also confirmed visually.
+- Debounce was set to 5 ms. An authenticated GUI RGB action also completed as a
+  620-byte write.
+- A temporary three-layer keymap and macro were applied and verified through
+  physical input (`BXcD`). The default keymap and an empty test macro were then
+  restored and verified through physical input (`asd`).
+- With explicit user authorization, reset completed as an 8-byte write. A
+  read-only probe immediately after reset still found the expected wired
+  descriptor, so the keyboard remained operational.
+- Application association and the background AP/timeline service completed on
+  the wired streaming interface. These host effects do not write firmware,
+  flash, or the bootloader.
 - A sysfs read returned USB revision `01.00`. This value is not labeled as a
   firmware version.
 
+## Observed 2.4 GHz receiver
+
+PID `0603:0352` is recognized for read-only diagnostics, but it is not a
+configuration target. It is also unknown to the original software: `0352`
+appears in none of the vendor's support-device tables, in neither its protocol
+layer nor its frontend, so no vendor behaviour exists to reproduce for it. Its three observed HID collections provide an ordinary
+keyboard report, report-ID `0x06` input/output collections, and an `008c:0006`
+input/output collection. They do **not** provide either configuration shape
+required by this project:
+
+- no `ff02:0001` feature report `0x07` with 620 bytes; and
+- no `ff03:0001` feature report `0x08` with 8 bytes.
+
+The timer packet is an 8-byte feature report `0x08` sent through the verified
+`ff03:0001` collection for the original backend's logical dongle identity
+`0603:0356`. Sending it to `0352` would therefore bypass both the verified
+identity and descriptor shape. The application rejects that operation instead
+of guessing that the receiver protocols are compatible. Merely seeing a
+64-byte report `0x06` on `0352` is not sufficient evidence: the wired streaming
+protocol also requires a verified short feature activation report, which this
+receiver does not advertise.
+
 ## Tests not performed
 
-- The keymap and macros were not written because the device does not provide
-  configuration readback from which to back up its current state. Testing these
-  operations would overwrite the user's three layers and macros without a
-  guaranteed restore path.
-- Reset was not sent because it erases configuration.
-- Dongle timers were not sent because dongle PID `0603:0356` was not detected.
+- Dongle timers were not sent because the observed physical receiver is PID
+  `0603:0352` and lacks the verified `ff03:0001` feature-report shape. The
+  logical dongle configuration identity `0603:0356` was not detected.
+
+  The timer is dongle-only in the original software as well, so this is not a
+  gap in coverage. The vendor backend gates the packet on `BaseInfo.StateID`,
+  an index into a two-entry `StateList` whose only records are
+  `[0] = 0603:0351 "USB"` and `[1] = 0603:0356 "Dongle"`. Its
+  `SetLightOffToDevice` begins with `if (0 == BaseInfo.StateID) return
+  callback();`, so the wired identity is skipped before the frame is built; the
+  vendor UI additionally renders the light-off and sleep controls only under
+  `*ngIf="DeviceService.getCurrentDevice().StateID === 1"`, and the write
+  handle itself is resolved as `hid.FindDevice(0xff03, 0x1,
+  StateList[StateID].vid, StateList[StateID].pid)`. Three independent gates
+  therefore keep opcode `0x0B` off `0603:0351`. Restricting `spade65ctl sleep`
+  to `0603:0356` reproduces that behaviour rather than adding a restriction.
+  Debounce (`0x09`) and reset (`0x08`) carry no such gate in the original
+  backend, which is why they remain available on the wired connection.
 - Firmware, bootloader, raw-flash, and arbitrary-HID operations are not
   available in the application.
 
-The keymap, macro, reset, and timer frames are still covered by unit tests
-against the report formats recovered from the original backend. Physical tests
-will only be safe once a known backup profile or the appropriate dongle is
-available.
+The timer frame remains covered by unit tests against the report format
+recovered from the original backend. A physical timer test requires a dongle
+that exposes the verified `0603:0356` configuration interface; it is not safe to
+substitute the descriptor-incompatible `0352` receiver.

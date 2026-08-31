@@ -40,6 +40,24 @@
     return result;
   }
 
+  function primaryDevice(devices) {
+    // Discovery returns interfaces in hidraw/hidapi enumeration order, so the
+    // first entry can be the read-only receiver even while the configurable
+    // keyboard is attached. The header must name the interface writes target.
+    if (!Array.isArray(devices) || devices.length === 0) return null;
+    const configurable = devices.filter(
+      device => device && device.configuration_status === "descriptor-gated"
+    );
+    return (
+      configurable.find(
+        device =>
+          Array.isArray(device.usages) && device.usages.includes(CONFIG_USAGE)
+      ) ||
+      configurable[0] ||
+      devices[0]
+    );
+  }
+
   function deviceKey(device) {
     if (
       !device ||
@@ -48,6 +66,10 @@
     ) return null;
     const vid = String(device.vid || "").toLowerCase();
     const pid = String(device.pid || "").toLowerCase();
+    // The observed 0352 receiver has only ordinary input/output collections.
+    // Never let it select a configurable layout, even if malformed metadata
+    // were to claim that a configuration usage exists.
+    if (vid === "0603" && pid === "0352") return null;
     if (vid === "0603" && ["0351", "0356"].includes(pid)) {
       // Wired USB and the 2.4 GHz dongle are two transports for one keyboard.
       return "0603:spade65";
@@ -100,6 +122,7 @@
     deviceKey,
     isValidLayout,
     parseDeviceLayouts,
+    primaryDevice,
     resolveLayout,
   });
 });
