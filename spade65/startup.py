@@ -323,7 +323,9 @@ def render_startup(
         and is_frozen
         and family == host_family == "linux"
     ):
-        selected_executable = Path(os.environ.get("APPIMAGE", sys.executable))
+        # Keep the raw string: wrapping it in the host Path class renders a
+        # POSIX value with backslashes when generating on Windows.
+        selected_executable = os.environ.get("APPIMAGE", sys.executable)
     if selected_executable is None and family != host_family:
         raise ValueError(
             "target executable is required when generating a launcher for "

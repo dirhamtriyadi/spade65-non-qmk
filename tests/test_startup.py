@@ -330,6 +330,21 @@ class StartupTests(unittest.TestCase):
         )
         self.assertNotIn("\\", unit)
 
+        # The $APPIMAGE branch takes the same route and must not be wrapped in
+        # the host Path class on the way through either.
+        with (
+            patch("spade65.startup.sys.platform", "linux"),
+            patch("spade65.startup.Path", PureWindowsPath),
+            patch.dict(environ, {"APPIMAGE": "/home/user/Spade65.AppImage"}),
+        ):
+            appimage = render_startup(
+                PurePosixPath("/etc/spade65/background.json"),
+                platform="linux",
+                frozen=True,
+            )
+        self.assertIn('ExecStart="/home/user/Spade65.AppImage"', appimage)
+        self.assertNotIn("\\", appimage)
+
     def test_bare_program_names_are_not_anchored_to_the_working_directory(self):
         # A bare name is resolved from PATH at launch; anchoring it to whatever
         # directory generated the file produces a plausible but wrong path. Only
