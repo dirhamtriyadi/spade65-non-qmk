@@ -94,8 +94,10 @@ failures are also shown through an available native dialog or notification:
 The Keyboard and Lighting pages share one layout state. When a configuration
 interface is detected, the application restores the last host-side selection
 for the Spade65; USB `0351` and dongle `0356` are treated as two transports for
-the same model. When no interface is present, both previews use the default Noir
-Spade65-04 ANSI standard layout and their selectors are temporarily disabled.
+the same model. When no configuration interface is detected — including when
+only the read-only `0603:0352` receiver is present — both previews use the
+default Noir Spade65-04 ANSI standard layout and their selectors are temporarily
+disabled.
 The firmware and descriptor do not expose the geometry variant, so the
 application does not claim to read the physical layout from the keyboard. The
 frontend checks for connection changes every two seconds and synchronizes both
@@ -247,8 +249,11 @@ do not require a background service after they are applied. Named profiles,
 application associations, AP/streaming animations, and custom timelines are host
 data; their effects require the GUI or service to remain running.
 
-Keymap and macro persistence has not been tested through a power cycle because
-the device provides no readback from which to back up the user's existing state.
+A temporary three-layer keymap and macro were applied to the wired `0603:0351`
+unit and verified through physical input, then the default keymap and an empty
+macro were re-applied to restore it. Persistence across a power cycle has still
+not been measured. The device provides no readback, so a saved profile remains
+the only restore path.
 Firmware flashing, bootloader access, raw flashing, and arbitrary HID are not
 implemented on any operating system. Neither desktop packages nor local builds
 contain a hidden path to those operations.

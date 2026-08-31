@@ -93,10 +93,12 @@ ditampilkan melalui dialog/notifikasi native yang tersedia:
 
 Layout Keyboard dan Lighting memakai satu state. Bila interface konfigurasi
 terdeteksi, aplikasi memulihkan pilihan host terakhir untuk Spade65; USB `0351`
-dan dongle `0356` dianggap dua transport untuk model yang sama. Bila interface
-tidak ada, kedua preview memakai default Noir Spade65-04 ANSI standard dan
-selector dinonaktifkan sementara. Firmware/descriptor tidak menyediakan varian
-geometri, sehingga aplikasi tidak mengklaim membaca layout fisik dari keyboard.
+dan dongle `0356` dianggap dua transport untuk model yang sama. Bila tidak ada
+interface konfigurasi yang terdeteksi — termasuk saat hanya receiver hanya-baca
+`0603:0352` yang terpasang — kedua preview memakai default Noir Spade65-04 ANSI
+standard dan selector dinonaktifkan sementara. Firmware/descriptor tidak
+menyediakan varian geometri, sehingga aplikasi tidak mengklaim membaca layout
+fisik dari keyboard.
 Frontend memeriksa perubahan koneksi setiap dua detik dan menyinkronkan kedua
 preview otomatis tanpa mengubah isi editor profil yang sedang dikerjakan.
 
@@ -242,8 +244,11 @@ memerlukan background service setelah diterapkan. Profil bernama, asosiasi
 aplikasi, AP/streaming animation, dan custom timeline adalah data host; efeknya
 memerlukan GUI atau service tetap berjalan.
 
-Persistensi keymap/macro belum diuji melalui power-cycle karena perangkat tidak
-menyediakan readback untuk membuat backup kondisi pengguna. Firmware flashing,
+Keymap tiga layer dan macro sementara telah diterapkan pada unit berkabel
+`0603:0351` dan diverifikasi melalui input fisik, lalu keymap default dan macro
+kosong diterapkan ulang untuk memulihkannya. Persistensi melalui power-cycle
+tetap belum diukur. Perangkat tidak menyediakan readback, sehingga profil
+tersimpan tetap menjadi satu-satunya jalur restore. Firmware flashing,
 bootloader, raw flash, dan arbitrary HID tidak diimplementasikan pada OS mana pun.
 Paket desktop maupun build lokal tidak memiliki jalur tersembunyi untuk operasi
 tersebut.

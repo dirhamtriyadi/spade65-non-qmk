@@ -143,7 +143,8 @@ Contoh CLI dari paket:
 /Applications/Spade65.app/Contents/MacOS/Spade65 probe
 ```
 
-Bagian selanjutnya memakai perintah instalasi `spade65ctl` agar mudah dibaca.
+Bagian selanjutnya memakai perintah `spade65ctl` yang sudah diinstal agar mudah
+dibaca.
 
 ## Izin perangkat Linux
 

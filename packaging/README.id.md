@@ -192,11 +192,13 @@ yang dipilih dan memeriksa resource HTTP paket tanpa membuat jendela interaktif.
 Windows/macOS tetap memuat ekstensi HID native agar library tertaut yang hilang
 menggagalkan build tanpa menyentuh keyboard.
 
-Script Windows memvalidasi kedua executable, membuat ZIP, mengekstraknya ke
-direktori sementara, lalu menjalankan `Spade65CLI.exe --smoke-test` dari archive
-yang sudah diekstrak. Script macOS memverifikasi DMG, me-mount-nya secara
-read-only, memeriksa aplikasi, lalu menjalankan kembali smoke test dari image
-yang sudah di-mount.
+Script Windows memvalidasi kedua executable, membuat ZIP, lalu mengekstraknya
+ke direktori sementara. Script memeriksa bahwa LICENSE, `THIRD-PARTY-NOTICES.md`,
+dan teks `licenses/` ikut terarsip, kemudian menjalankan `--smoke-test` dari
+archive yang sudah diekstrak melalui `Spade65.exe` maupun `Spade65CLI.exe`; exit
+non-zero dari salah satunya menggagalkan build. Script macOS memverifikasi DMG,
+me-mount-nya secara read-only, memeriksa aplikasi, lalu menjalankan kembali
+smoke test dari image yang sudah di-mount.
 
 Pada macOS, pasang ekstensi HID native sebagai universal2. Dalam virtual
 environment bersih, verifikasi lebih dahulu bahwa Python yang dipilih memuat
@@ -222,8 +224,8 @@ CI memiliki dua lapisan paket native. Setiap push ke `main` menjalankan job
 preflight paket Windows, Linux, dan macOS yang tidak memublikasikan hasilnya. Tag
 rilis membangun ulang ketiga artifact dari commit tag immutable, dan baru
 setelahnya mengizinkan publikasi; artifact preflight tidak digunakan kembali
-sebagai asset rilis. Kedua lapisan memakai kontrak dependency yang sama dengan
-build manual: Windows memasang `.[cross-platform,desktop]`, Linux memasang
+sebagai asset rilis. Kedua lapisan memakai kontrak dependency CI: Windows
+memasang `.[cross-platform,desktop]`, Linux memasang
 `.[desktop]` untuk AppImage hidraw-only, dan macOS memasang extra `desktop` lalu
 membangun HIDAPI universal2 secara terpisah. Masing-masing juga memasang
 `requirements-build.txt`. Ketiganya menjalankan `pip check`, smoke test paket,

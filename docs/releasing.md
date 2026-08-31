@@ -154,8 +154,10 @@ bash packaging/build_macos.sh
 The scripts write their output to `artifacts/`. A universal macOS build requires
 Python and every native dependency in universal2 format; the script deliberately
 fails if it finds a single-architecture Mach-O file. A thin `hidapi` wheel is
-not sufficient. Use the `ARCHFLAGS` and `--no-binary=hidapi` command documented
-in the packaging guide. macOS uses Cocoa/WebKit through PyObjC, and the bundle
+not sufficient. Use `bash packaging/build_macos_hidapi.sh`, the pinned
+universal2 helper documented in the packaging guide; it exports `ARCHFLAGS`,
+forces a source build with `--no-binary=:all:`, hash-checks the pinned `hidapi`
+sdist, and rejects a thin result. macOS uses Cocoa/WebKit through PyObjC, and the bundle
 metadata permits localhost traffic and explains the microphone prompt for
 audio-reactive features.
 

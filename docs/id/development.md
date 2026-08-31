@@ -93,7 +93,7 @@ File di dalam `spade65/web/` adalah source frontend utama. File tersebut langsun
 dilayani development server dan disalin ke paket release; repository tidak
 menyimpan salinan hasil generate atau minify. Pertahankan HTML, JavaScript, CSS,
 dan katalog JSON dalam bentuk terbaca agar GUI dapat dikembangkan tanpa harus
-merekonstruksi production bundle atau bergantung pada AI.
+merekonstruksi production bundle.
 
 Pasang formatter Python yang kecil dan versinya dikunci, lalu format seluruh
 JavaScript dan CSS:

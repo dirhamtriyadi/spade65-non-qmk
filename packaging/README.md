@@ -179,10 +179,12 @@ the packaged HTTP resources without creating an interactive window.
 Windows/macOS still load the native HID extension so missing linked libraries
 fail the build without touching a keyboard.
 
-The Windows script validates both executables, creates the ZIP, extracts it to
-a temporary directory, and runs `Spade65CLI.exe --smoke-test` from the extracted
-archive. The macOS script verifies the DMG, mounts it read-only, inspects the app,
-and reruns the smoke test from the mounted image.
+The Windows script validates both executables, creates the ZIP, and extracts it
+to a temporary directory. It checks that LICENSE, `THIRD-PARTY-NOTICES.md`, and
+the `licenses/` texts survived archiving, then runs `--smoke-test` from the
+extracted archive through both `Spade65.exe` and `Spade65CLI.exe`; either
+non-zero exit fails the build. The macOS script verifies the DMG, mounts it
+read-only, inspects the app, and reruns the smoke test from the mounted image.
 
 On macOS, install the native HID extension as universal2. In a clean virtual
 environment, first verify that the selected Python itself contains both slices,
@@ -206,8 +208,8 @@ the helper fails closed if the interpreter or resulting HID extension is thin.
 CI has two native-package layers. Every push to `main` runs non-publishing
 Windows, Linux, and macOS package preflight jobs. A release tag rebuilds all
 three artifacts from the immutable tag commit and only then permits publishing;
-preflight artifacts are not reused as release assets. Both layers use the same
-dependency contract as manual builds: Windows installs
+preflight artifacts are not reused as release assets. Both layers use the CI
+dependency contract: Windows installs
 `.[cross-platform,desktop]`, Linux installs `.[desktop]` for its hidraw-only
 AppImage, and macOS installs the `desktop` extra then builds HIDAPI universal2
 separately. Each also installs `requirements-build.txt`. All three run `pip

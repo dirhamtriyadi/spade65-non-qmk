@@ -155,9 +155,12 @@ bash packaging/build_macos.sh
 Script menulis hasil ke `artifacts/`. Build macOS universal membutuhkan Python
 dan semua native dependency dalam format universal2; script sengaja gagal bila
 menemukan Mach-O satu arsitektur. Wheel `hidapi` tipis tidak cukup; gunakan
-perintah `ARCHFLAGS` dan `--no-binary=hidapi` yang dicantumkan di panduan
-packaging. macOS memakai Cocoa/WebKit melalui PyObjC dan metadata bundle
-mengizinkan localhost serta menjelaskan prompt mikrofon audio-reactive.
+`bash packaging/build_macos_hidapi.sh`, helper universal2 terpatok yang
+dicantumkan di panduan packaging. Helper itu menetapkan `ARCHFLAGS`, memaksa
+build dari source dengan `--no-binary=:all:`, memeriksa hash sdist `hidapi`
+terpatok, dan menolak hasil thin. macOS memakai Cocoa/WebKit melalui PyObjC dan
+metadata bundle mengizinkan localhost serta menjelaskan prompt mikrofon
+audio-reactive.
 
 Build Windows serta smoke test-nya memerlukan Edge WebView2 Runtime pada host.
 Build Linux membutuhkan loader EGL, `curl`, dan `sha256sum`; pada Debian/Ubuntu

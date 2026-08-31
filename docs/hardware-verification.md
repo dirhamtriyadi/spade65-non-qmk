@@ -46,14 +46,16 @@ comparison, the wired interface advertises `ff01`, `ff02`, `ff03` and both
 feature reports `0x07` and `0x08`.
 
 So configuration over this receiver is not merely gated, it is impossible:
-there is no feature report for a configuration packet to target. Every write
-command was tried against the connected receiver and each refused before
+there is no feature report for a configuration packet to target. Six write
+commands were tried against the connected receiver and each refused before
 sending anything — `rgb`, `debounce`, `sleep`, `reset` (all `no matching HID
-interface for usage ff02:0001` / `ff03:0001`), `stream-rgb` and
-`profile apply`. `probe` and `info` continued to work and reported
-`unsupported-read-only`. `0603:0356` has still never appeared on this
-hardware. Its three observed HID collections provide an ordinary
-keyboard report, report-ID `0x06` input/output collections, and an `008c:0006`
+interface for usage ff02:0001` / `ff03:0001`), `stream-rgb` and `profile
+apply`. `per-key-rgb` and the background streaming service were not tried.
+`probe` and `info` continued to work and reported `unsupported-read-only`.
+`0603:0356` has still never appeared on this hardware.
+
+The receiver's three observed HID collections provide an ordinary keyboard
+report, report-ID `0x06` input/output collections, and an `008c:0006`
 input/output collection. They do **not** provide either configuration shape
 required by this project:
 
@@ -94,5 +96,6 @@ receiver does not advertise.
 
 The timer frame remains covered by unit tests against the report format
 recovered from the original backend. A physical timer test requires a dongle
-that exposes the verified `0603:0356` configuration interface; it is not safe to
-substitute the descriptor-incompatible `0352` receiver.
+that enumerates as `0603:0356` and exposes the `ff03:0001` configuration
+interface; it is not safe to substitute the descriptor-incompatible `0352`
+receiver.

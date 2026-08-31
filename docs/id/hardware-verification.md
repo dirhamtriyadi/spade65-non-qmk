@@ -46,13 +46,15 @@ tidak ada. Sebagai pembanding, interface kabel mengiklankan `ff01`, `ff02`,
 `ff03` serta kedua feature report `0x07` dan `0x08`.
 
 Jadi konfigurasi lewat receiver ini bukan sekadar digerbangi, melainkan tidak
-mungkin: tidak ada feature report yang bisa dituju paket konfigurasi. Seluruh
+mungkin: tidak ada feature report yang bisa dituju paket konfigurasi. Enam
 perintah write dicoba terhadap receiver yang terhubung dan semuanya menolak
 sebelum mengirim apa pun — `rgb`, `debounce`, `sleep`, `reset` (semuanya `no
 matching HID interface for usage ff02:0001` / `ff03:0001`), `stream-rgb`, dan
-`profile apply`. `probe` dan `info` tetap berfungsi dan melaporkan
-`unsupported-read-only`. `0603:0356` sampai kini belum pernah muncul pada
-hardware ini. Tiga koleksi HID yang diamati menyediakan report keyboard biasa,
+`profile apply`. `per-key-rgb` dan background streaming service tidak dicoba.
+`probe` dan `info` tetap berfungsi dan melaporkan `unsupported-read-only`.
+`0603:0356` sampai kini belum pernah muncul pada hardware ini.
+
+Ketiga koleksi HID receiver yang diamati menyediakan report keyboard biasa,
 koleksi input/output report-ID `0x06`, serta koleksi input/output `008c:0006`.
 Ketiganya **tidak** menyediakan dua bentuk konfigurasi yang diwajibkan proyek
 ini:
@@ -94,5 +96,6 @@ yang terverifikasi, sedangkan receiver ini tidak mengiklankannya.
 
 Frame timer tetap diuji melalui unit test terhadap format report hasil analisis
 backend original. Pengujian timer secara fisik membutuhkan dongle yang
-menyediakan interface konfigurasi `0603:0356` terverifikasi; receiver `0352`
-yang descriptor-nya tidak kompatibel tidak aman digunakan sebagai pengganti.
+terdeteksi sebagai `0603:0356` dan menyediakan interface konfigurasi
+`ff03:0001`; receiver `0352` yang descriptor-nya tidak kompatibel tidak aman
+digunakan sebagai pengganti.
