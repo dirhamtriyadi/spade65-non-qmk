@@ -99,7 +99,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(main(["debounce", "5", "--confirm"]), 0)
         self.assertEqual(
             output.getvalue(),
-            "Sent to /dev/hidraw-test; transport result=8.\n",
+            f"Sent to {self._short_report_device().path}; transport result=8.\n",
         )
 
     def test_probe_not_found_message_defaults_to_english(self) -> None:

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import html
+import ntpath
 import os
 import plistlib
+import posixpath
 import re
 import shlex
 import sys
@@ -189,8 +191,10 @@ def release_service_setup(
         return result
 
     selected_value: PurePath | str | None = executable
+    if selected_value is None and family == "linux":
+        selected_value = environment.get("APPIMAGE")
     if selected_value is None and family == host_family == "linux":
-        selected_value = environment.get("APPIMAGE") or sys.executable
+        selected_value = sys.executable
     if selected_value is None and family != host_family:
         raise ValueError(
             "target executable is required when describing setup for another "
@@ -271,7 +275,11 @@ def _startup_target_path(
     text = str(value)
     if any(character in text for character in "\n\r\t\x00"):
         raise ValueError(f"{description} must not contain control characters")
-    path_type = PureWindowsPath if family == "windows" else PurePosixPath
+    windows = family == "windows"
+    path_type = PureWindowsPath if windows else PurePosixPath
+    # Normalize with the TARGET's rules; os.path follows the host's, which
+    # rewrites a POSIX target path into backslashes when generating on Windows.
+    normalize = ntpath.normpath if windows else posixpath.normpath
     selected = path_type(text)
     if family == _host_family():
         # A bare program name is a legitimate launcher value on every platform
@@ -282,13 +290,13 @@ def _startup_target_path(
         local = Path(text).expanduser()
         if not local.is_absolute():
             local = local.resolve()
-        return path_type(os.path.normpath(str(local)))
+        return path_type(normalize(str(local)))
     if not selected.is_absolute():
         raise ValueError(
             f"{description} must be an absolute {family} path when generating "
             "a launcher for another platform"
         )
-    return path_type(os.path.normpath(text))
+    return path_type(normalize(text))
 
 
 def render_startup(
@@ -397,8 +405,10 @@ def _gui_startup_command(
         )
     is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
     selected_value: PurePath | str | None = executable
-    if selected_value is None and is_frozen and family == host_family == "linux":
-        selected_value = environment.get("APPIMAGE") or sys.executable
+    if selected_value is None and is_frozen and family == "linux":
+        selected_value = environment.get("APPIMAGE")
+    if selected_value is None and family == host_family == "linux" and is_frozen:
+        selected_value = sys.executable
     if selected_value is None and family != host_family:
         raise ValueError(
             "target executable is required when generating a launcher for "

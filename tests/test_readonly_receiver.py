@@ -139,7 +139,10 @@ class ReadonlyReceiverTests(unittest.TestCase):
                 {0x0399: "test receiver"},
             ),
         ):
-            with patch("spade65.gui.discover_devices", return_value=[unlisted]):
+            with (
+                patch("spade65.gui.readonly_device_info", return_value={}),
+                patch("spade65.gui.discover_devices", return_value=[unlisted]),
+            ):
                 gui_summary = gui_metadata()["devices"][0]
             probe_output = io.StringIO()
             with (
@@ -158,7 +161,10 @@ class ReadonlyReceiverTests(unittest.TestCase):
         # And a writable identity is still labelled writable on both surfaces.
         wired = _receiver()
         wired.product_id = 0x0351
-        with patch("spade65.gui.discover_devices", return_value=[wired]):
+        with (
+            patch("spade65.gui.readonly_device_info", return_value={}),
+            patch("spade65.gui.discover_devices", return_value=[wired]),
+        ):
             self.assertEqual(
                 gui_metadata()["devices"][0]["configuration_status"],
                 "descriptor-gated",
@@ -183,7 +189,10 @@ class ReadonlyReceiverTests(unittest.TestCase):
         self.assertTrue(hid.handles[0].closed)
 
     def test_gui_reports_receiver_as_unsupported_read_only(self) -> None:
-        with patch("spade65.gui.discover_devices", return_value=[_receiver()]):
+        with (
+            patch("spade65.gui.readonly_device_info", return_value={}),
+            patch("spade65.gui.discover_devices", return_value=[_receiver()]),
+        ):
             metadata = gui_metadata()
         self.assertEqual(len(metadata["devices"]), 1)
         summary = metadata["devices"][0]
@@ -240,7 +249,8 @@ class ReadonlyReceiverTests(unittest.TestCase):
         for action, payload in actions:
             with (
                 self.subTest(action=action),
-                patch("spade65.gui.discover_devices", return_value=[_receiver()]),
+                patch("spade65.gui.readonly_device_info", return_value={}),
+            patch("spade65.gui.discover_devices", return_value=[_receiver()]),
                 patch("spade65.gui.send_feature_report") as feature_write,
                 patch("spade65.gui.send_output_report") as output_write,
             ):
@@ -320,7 +330,8 @@ class ReadonlyReceiverTests(unittest.TestCase):
         for action, payload in actions:
             with (
                 self.subTest(action=action),
-                patch("spade65.gui.discover_devices", return_value=[receiver]),
+                patch("spade65.gui.readonly_device_info", return_value={}),
+            patch("spade65.gui.discover_devices", return_value=[receiver]),
                 patch("spade65.gui.send_feature_report") as feature,
                 patch("spade65.gui.send_output_report") as output,
             ):

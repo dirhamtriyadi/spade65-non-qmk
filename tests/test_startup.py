@@ -309,12 +309,21 @@ class StartupTests(unittest.TestCase):
 
     def test_bare_program_names_are_not_anchored_to_the_working_directory(self):
         # A bare name is resolved from PATH at launch; anchoring it to whatever
-        # directory generated the file produces a plausible but wrong path.
-        entry = render_gui_startup(
-            platform="linux", executable="spade65", frozen=True
+        # directory generated the file produces a plausible but wrong path. Only
+        # the host's own platform accepts a relative value, so test that one.
+        host = platform_family()
+        name = "spade65.exe" if host == "windows" else "spade65"
+        launcher = render_gui_startup(
+            platform=host, executable=name, frozen=True
         )
-        self.assertIn('Exec="spade65" "gui" "--start-hidden"', entry)
-        self.assertNotIn(str(Path.cwd()), entry)
+        if host == "macos":
+            payload = plistlib.loads(launcher.encode("utf-8"))
+            self.assertEqual(payload["ProgramArguments"][0], name)
+        elif host == "linux":
+            self.assertIn(f'Exec="{name}"', launcher)
+        else:
+            self.assertIn(f'/b "{name}"', launcher)
+        self.assertNotIn(str(Path.cwd()), launcher)
 
     def test_login_items_for_another_platform_report_unsupported(self):
         # This host cannot install or compare another OS's login item, and
@@ -334,11 +343,15 @@ class StartupTests(unittest.TestCase):
         host = platform_family()
         self.assertTrue(gui_auto_start_status(platform=host)["supported"])
 
-        # An explicit target executable makes rendering meaningful again.
+        # An explicit target executable makes rendering meaningful again. It
+        # has to be absolute in the target's own flavour, not the host's.
         explicit = gui_auto_start_status(
             platform=foreign,
             frozen=True,
-            executable=PureWindowsPath("C:/Spade65/Spade65.exe"),
+            executable=(
+                PureWindowsPath("C:/Spade65/Spade65.exe") if foreign == "windows"
+                else PurePosixPath("/opt/Spade65/Spade65")
+            ),
         )
         self.assertTrue(explicit["supported"])
 
@@ -352,6 +365,7 @@ class StartupTests(unittest.TestCase):
             PurePosixPath("/home/test/service & profile.json"),
             platform="linux",
             python_executable=PurePosixPath("/usr/bin/python3"),
+            frozen=False,
         )
         windows = render_startup(
             PureWindowsPath("C:/Users/test/service & profile.json"),

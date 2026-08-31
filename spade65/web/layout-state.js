@@ -51,7 +51,7 @@
     return (
       configurable.find(
         device =>
-          Array.isArray(device.usages) && device.usages.includes(CONFIG_USAGE)
+        Array.isArray(device.usages) && device.usages.includes(CONFIG_USAGE)
       ) ||
       configurable[0] ||
       devices[0]
