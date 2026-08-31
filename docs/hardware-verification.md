@@ -33,7 +33,26 @@ also inspected and enumerated as `0603:0352`.
 PID `0603:0352` is recognized for read-only diagnostics, but it is not a
 configuration target. It is also unknown to the original software: `0352`
 appears in none of the vendor's support-device tables, in neither its protocol
-layer nor its frontend, so no vendor behaviour exists to reproduce for it. Its three observed HID collections provide an ordinary
+layer nor its frontend, so no vendor behaviour exists to reproduce for it.
+
+On August 31 the receiver was re-attached with the cable removed and the
+keyboard operating over 2.4 GHz, confirmed by live input devices (`JP Spade65
+Keyboard`). Even in that state the receiver still enumerates as `0603:0352`,
+and its three HID report descriptors, parsed item by item from
+`/sys/class/hidraw/*/device/report_descriptor` rather than through this
+project's own parser, advertise **no feature reports at all**. The only vendor
+usage page present is `0xff55`; `ff02:0001` and `ff03:0001` are absent. For
+comparison, the wired interface advertises `ff01`, `ff02`, `ff03` and both
+feature reports `0x07` and `0x08`.
+
+So configuration over this receiver is not merely gated, it is impossible:
+there is no feature report for a configuration packet to target. Every write
+command was tried against the connected receiver and each refused before
+sending anything — `rgb`, `debounce`, `sleep`, `reset` (all `no matching HID
+interface for usage ff02:0001` / `ff03:0001`), `stream-rgb` and
+`profile apply`. `probe` and `info` continued to work and reported
+`unsupported-read-only`. `0603:0356` has still never appeared on this
+hardware. Its three observed HID collections provide an ordinary
 keyboard report, report-ID `0x06` input/output collections, and an `008c:0006`
 input/output collection. They do **not** provide either configuration shape
 required by this project:

@@ -33,7 +33,26 @@ PID `0603:0352` dikenali untuk diagnostik hanya-baca, tetapi bukan target
 konfigurasi. Identitas ini juga tidak dikenal software original: `0352` tidak
 muncul pada tabel support-device vendor, tidak pada lapisan protokolnya, dan
 tidak pada frontend-nya, sehingga tidak ada perilaku vendor yang bisa
-direproduksi untuknya. Tiga koleksi HID yang diamati menyediakan report keyboard biasa,
+direproduksi untuknya.
+
+Pada 31 Agustus receiver dipasang kembali dengan kabel dilepas dan keyboard
+beroperasi lewat 2,4 GHz, dikonfirmasi oleh perangkat input yang aktif (`JP
+Spade65 Keyboard`). Bahkan dalam kondisi itu receiver tetap terdeteksi sebagai
+`0603:0352`, dan ketiga report descriptor HID-nya — diurai item demi item
+langsung dari `/sys/class/hidraw/*/device/report_descriptor`, bukan lewat
+parser proyek ini — **tidak mengiklankan feature report sama sekali**. Satu-
+satunya vendor usage page yang ada adalah `0xff55`; `ff02:0001` dan `ff03:0001`
+tidak ada. Sebagai pembanding, interface kabel mengiklankan `ff01`, `ff02`,
+`ff03` serta kedua feature report `0x07` dan `0x08`.
+
+Jadi konfigurasi lewat receiver ini bukan sekadar digerbangi, melainkan tidak
+mungkin: tidak ada feature report yang bisa dituju paket konfigurasi. Seluruh
+perintah write dicoba terhadap receiver yang terhubung dan semuanya menolak
+sebelum mengirim apa pun — `rgb`, `debounce`, `sleep`, `reset` (semuanya `no
+matching HID interface for usage ff02:0001` / `ff03:0001`), `stream-rgb`, dan
+`profile apply`. `probe` dan `info` tetap berfungsi dan melaporkan
+`unsupported-read-only`. `0603:0356` sampai kini belum pernah muncul pada
+hardware ini. Tiga koleksi HID yang diamati menyediakan report keyboard biasa,
 koleksi input/output report-ID `0x06`, serta koleksi input/output `008c:0006`.
 Ketiganya **tidak** menyediakan dua bentuk konfigurasi yang diwajibkan proyek
 ini:
