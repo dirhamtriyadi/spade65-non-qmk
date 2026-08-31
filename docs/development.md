@@ -119,8 +119,10 @@ python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
 python tools/format_web.py --check
 node --check spade65/web/layout-state.js
+node --check spade65/web/usage-picker.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
+node tests/usage_picker.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```

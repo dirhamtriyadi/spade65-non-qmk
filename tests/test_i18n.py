@@ -205,8 +205,14 @@ class I18nTests(unittest.TestCase):
         compact = without_source_whitespace(javascript)
         self.assertIn('id="layoutVariant"', html)
         self.assertIn('id="lightingLayoutVariant"', html)
+        self.assertIn('id="usageSearch"', html)
+        self.assertIn('role="listbox"', html)
         self.assertLess(
             html.index('<script src="/layout-state.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+        self.assertLess(
+            html.index('<script src="/usage-picker.js"></script>'),
             html.index('<script src="/app.js"></script>'),
         )
         self.assertIn("spade65-device-layouts-v1", compact)

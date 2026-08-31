@@ -181,9 +181,11 @@ command -v "$python_bin"
 .jenkins-venv/bin/python tools/format_web.py --check
 node --check spade65/web/layout-state.js
 node --check spade65/web/key-events.js
+node --check spade65/web/usage-picker.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
+node tests/usage_picker.test.js
 '''
                                 } else {
                                     bat '''@echo off
@@ -210,11 +212,13 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 node --check spade65\web\layout-state.js
 node --check spade65\web\key-events.js
+node --check spade65\web\usage-picker.js
 if errorlevel 1 exit /b 1
 node --check spade65\web\app.js
 if errorlevel 1 exit /b 1
 node tests\layout_state.test.js
 node tests\key_events.test.js
+node tests\usage_picker.test.js
 if errorlevel 1 exit /b 1
 '''
                                 }

@@ -2,6 +2,7 @@ const token = document.querySelector('meta[name="spade65-token"]').content;
 const $ = id => document.getElementById(id);
 const layoutState = window.Spade65LayoutState;
 const keyEvents = window.Spade65KeyEvents;
+const usagePicker = window.Spade65UsagePicker;
 let meta = null,
   profile = null,
   currentLayer = 'normal',
@@ -28,6 +29,8 @@ let meta = null,
   recordingMacroTarget = null,
   recordLast = 0,
   recordPressed = new Set(),
+  usagePickerItems = [],
+  usagePickerActive = -1,
   desktopIntegration = null;
 const I18N_STORAGE_KEY = 'spade65-language',
   DEFAULT_LANGUAGE = 'en';
@@ -688,32 +691,165 @@ function renderEffects() {
 }
 
 function renderUsageList() {
-  const list = $('usageList'),
-    preset = $('usagePreset'),
-    selected = preset.value;
+  const list = $('usageList');
   list.innerHTML = '';
-  preset.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = t('keymap.chooseFunction');
-  preset.append(placeholder);
   for (const name of Object.keys(meta.usages).sort()) {
     const o = document.createElement('option');
     o.value = name;
     list.append(o)
   }
-  for (const [group, names] of Object.entries(meta.usage_groups)) {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = t(`usageGroup.${group}`);
-    for (const name of names) {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = `${name} · 0x${meta.usages[name].toString(16).padStart(2,'0')}`;
-      optgroup.append(option)
-    }
-    preset.append(optgroup)
+  closeUsagePicker();
+  syncUsageSelection()
+}
+
+function usageGroupLabel(group) {
+  const key = `usageGroup.${group}`,
+    translated = t(key);
+  return translated === key ? group : translated
+}
+
+function selectedUsage() {
+  if (!meta) return null;
+  const raw = $('usageInput').value.trim(),
+    name = raw.toLocaleLowerCase();
+  if (!name || !hasOwn(meta.usages, name)) return null;
+  const usage = Number(meta.usages[name]);
+  return {
+    name,
+    usage,
+    hex: usagePicker.usageHex(usage)
   }
-  if ([...preset.options].some(option => option.value === selected)) preset.value = selected
+}
+
+function syncUsageSelection() {
+  if (!meta) return;
+  const raw = $('usageInput').value.trim(),
+    selected = selectedUsage(),
+    label = selected ? usagePicker.optionLabel(selected) : raw;
+  $('usageSearch').value = label;
+  $('usageCurrent').textContent = raw ? t('keymap.selectedFunction', {
+    value: label
+  }) : t('keymap.noFunctionSelected');
+  $('customUsageDetails').open = Boolean(raw && !selected)
+}
+
+function renderUsageOptions(query = '') {
+  const options = $('usageOptions'),
+    selected = selectedUsage(),
+    groups = usagePicker.filterGroups(
+      meta?.usage_groups,
+      meta?.usages,
+      query,
+      usageGroupLabel
+    );
+  options.innerHTML = '';
+  usagePickerItems = [];
+  usagePickerActive = -1;
+  $('usageSearch').removeAttribute('aria-activedescendant');
+  if (!groups.length) {
+    const empty = document.createElement('div');
+    empty.className = 'search-select-empty';
+    empty.setAttribute('role', 'status');
+    empty.textContent = t('keymap.noFunctionResults');
+    options.append(empty);
+    return
+  }
+  for (const group of groups) {
+    const section = document.createElement('div'),
+      heading = document.createElement('div');
+    section.className = 'search-select-group';
+    heading.className = 'search-select-group-title';
+    heading.textContent = group.label;
+    section.append(heading);
+    for (const item of group.items) {
+      const index = usagePickerItems.length,
+        button = document.createElement('button'),
+        name = document.createElement('span'),
+        code = document.createElement('code');
+      usagePickerItems.push(item);
+      button.type = 'button';
+      button.id = `usage-option-${index}`;
+      button.className = 'search-select-option';
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', String(item.name === selected?.name));
+      name.textContent = item.name;
+      code.textContent = item.hex;
+      button.append(name, code);
+      button.onmouseenter = () => setUsagePickerActive(index, false);
+      button.onclick = () => chooseUsage(index);
+      section.append(button)
+    }
+    options.append(section)
+  }
+}
+
+function setUsagePickerActive(index, scroll = true) {
+  const options = [...$('usageOptions').querySelectorAll('[role="option"]')];
+  if (!options.length) return;
+  usagePickerActive = (index + options.length) % options.length;
+  options.forEach((option, itemIndex) => option.classList.toggle('active', itemIndex === usagePickerActive));
+  const active = options[usagePickerActive];
+  $('usageSearch').setAttribute('aria-activedescendant', active.id);
+  if (scroll) active.scrollIntoView({
+    block: 'nearest'
+  })
+}
+
+function openUsagePicker(query = '') {
+  renderUsageOptions(query);
+  $('usageOptions').hidden = false;
+  $('usagePicker').classList.add('open');
+  $('usageSearch').setAttribute('aria-expanded', 'true');
+  if (!usagePickerItems.length) return;
+  const selected = selectedUsage(),
+    selectedIndex = usagePickerItems.findIndex(item => item.name === selected?.name);
+  setUsagePickerActive(selectedIndex >= 0 ? selectedIndex : 0, false)
+}
+
+function closeUsagePicker() {
+  $('usageOptions').hidden = true;
+  $('usagePicker').classList.remove('open');
+  $('usageSearch').setAttribute('aria-expanded', 'false');
+  $('usageSearch').removeAttribute('aria-activedescendant');
+  usagePickerActive = -1
+}
+
+function chooseUsage(index) {
+  const item = usagePickerItems[index];
+  if (!item) return;
+  $('usageInput').value = item.name;
+  syncUsageSelection();
+  closeUsagePicker()
+}
+
+function usageSearchKeydown(event) {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    if ($('usageOptions').hidden) openUsagePicker('');
+    else setUsagePickerActive(usagePickerActive + (event.key === 'ArrowDown' ? 1 : -1));
+    return
+  }
+  if (event.key === 'Home' || event.key === 'End') {
+    if ($('usageOptions').hidden || !usagePickerItems.length) return;
+    event.preventDefault();
+    setUsagePickerActive(event.key === 'Home' ? 0 : usagePickerItems.length - 1);
+    return
+  }
+  if (event.key === 'Enter' && !$('usageOptions').hidden && usagePickerActive >= 0) {
+    event.preventDefault();
+    chooseUsage(usagePickerActive);
+    return
+  }
+  if (event.key === 'Escape' && !$('usageOptions').hidden) {
+    event.preventDefault();
+    syncUsageSelection();
+    closeUsagePicker();
+    return
+  }
+  if (event.key === 'Tab') {
+    syncUsageSelection();
+    closeUsagePicker()
+  }
 }
 
 function keyLabel(key) {
@@ -841,14 +977,16 @@ function loadAssignment() {
     $('usageInput').value = ''
   } else if (typeof value === 'object' && 'macro' in value) {
     $('assignmentType').value = 'macro';
-    $('macroAssign').value = value.macro
+    $('macroAssign').value = value.macro;
+    $('usageInput').value = ''
   } else {
     $('assignmentType').value = 'usage';
     $('usageInput').value = typeof value === 'object' ? value.usage : value;
     const mods = typeof value === 'object' ? (value.modifiers || 0) : 0;
     document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = !!(mods & Number(x.value)))
   }
-  assignmentTypeChanged()
+  assignmentTypeChanged();
+  syncUsageSelection()
 }
 
 function assignmentTypeChanged() {
@@ -1962,9 +2100,28 @@ for (const id of ['layoutVariant', 'lightingLayoutVariant']) $(id).onchange = e 
 $('deviceSelect').onchange = () => syncLayoutFromSelectedDevice();
 $('refreshBtn').onclick = refresh;
 $('assignmentType').onchange = assignmentTypeChanged;
-$('usagePreset').onchange = e => {
-  if (e.target.value) $('usageInput').value = e.target.value
+$('usageSearch').onfocus = event => {
+  event.target.select();
+  if ($('usageOptions').hidden) openUsagePicker('')
 };
+$('usageSearch').oninput = event => openUsagePicker(event.target.value);
+$('usageSearch').onkeydown = usageSearchKeydown;
+$('usageToggle').onclick = () => {
+  if (!$('usageOptions').hidden) {
+    syncUsageSelection();
+    closeUsagePicker();
+    return
+  }
+  $('usageSearch').focus();
+  $('usageSearch').select();
+  if ($('usageOptions').hidden) openUsagePicker('')
+};
+$('usageInput').oninput = syncUsageSelection;
+document.addEventListener('pointerdown', event => {
+  if ($('usagePicker').contains(event.target) || $('usageOptions').hidden) return;
+  syncUsageSelection();
+  closeUsagePicker()
+});
 $('assignBtn').onclick = saveAssignment;
 $('winLock').onchange = e => toggleWinLock(e.target.checked);
 $('wasdArrows').onchange = e => toggleWasdArrows(e.target.checked);

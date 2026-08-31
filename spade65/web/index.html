@@ -64,7 +64,24 @@
         <div class="card">
           <h3 data-i18n="keymap.selectedKey">Selected key</h3><div id="selectedKey" class="selected-key" data-i18n="common.none">None</div>
           <label><span data-i18n="keymap.assignment">Assignment</span><select id="assignmentType"><option value="usage" data-i18n="keymap.keyboardUsage">Keyboard usage</option><option value="macro" data-i18n="common.macro">Macro</option><option value="default" data-i18n="keymap.restoreDefault">Restore default</option></select></label>
-          <label id="usageWrap"><span data-i18n="keymap.preset">Preset</span><select id="usagePreset"><option value="" data-i18n="keymap.chooseFunction">Choose keyboard/media/mouse function…</option></select><span data-i18n="keymap.usage">Usage</span><input id="usageInput" list="usageList" placeholder="a, play-pause, mouse-left, or 0x04" data-i18n-placeholder="keymap.usagePlaceholder"><datalist id="usageList"></datalist></label>
+          <div id="usageWrap" class="field-stack">
+            <label for="usageSearch"><span data-i18n="keymap.function">Function</span></label>
+            <div id="usagePicker" class="search-select">
+              <div class="search-select-field">
+                <input id="usageSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="usageOptions" autocomplete="off" spellcheck="false" placeholder="Search by name, group, or HID code…" data-i18n-placeholder="keymap.searchFunction">
+                <button id="usageToggle" type="button" aria-label="Choose keyboard/media/mouse function" data-i18n-aria-label="keymap.chooseFunction"><span aria-hidden="true"></span></button>
+              </div>
+              <div id="usageOptions" class="search-select-options" role="listbox" aria-label="Choose keyboard/media/mouse function" data-i18n-aria-label="keymap.chooseFunction" hidden></div>
+            </div>
+            <small class="field-help" data-i18n="keymap.searchFunctionHint">Filter by a function name, category, or code such as play, media, mouse, or 0xa1.</small>
+            <small id="usageCurrent" class="selection-status" aria-live="polite" data-i18n="keymap.noFunctionSelected">No function selected</small>
+            <details id="customUsageDetails" class="advanced-field">
+              <summary data-i18n="keymap.customUsage">Advanced: custom HID usage</summary>
+              <label for="usageInput"><span data-i18n="keymap.usage">Usage</span><input id="usageInput" list="usageList" placeholder="a, play-pause, mouse-left, or 0x04" data-i18n-placeholder="keymap.usagePlaceholder"></label>
+              <small class="field-help" data-i18n="keymap.customUsageHint">Use this only for a known usage name or a raw byte value.</small>
+            </details>
+            <datalist id="usageList"></datalist>
+          </div>
           <label id="macroWrap" hidden><span data-i18n="common.macro">Macro</span><select id="macroAssign"></select></label>
           <div id="modifierWrap" class="checks"><label><input type="checkbox" value="1">Ctrl</label><label><input type="checkbox" value="2">Shift</label><label><input type="checkbox" value="4">Alt</label><label><input type="checkbox" value="8">GUI</label></div>
           <button id="assignBtn" class="primary" data-i18n="action.saveAssignment">Save assignment</button>
@@ -153,6 +170,7 @@
   </main>
   <script src="/layout-state.js"></script>
   <script src="/key-events.js"></script>
+  <script src="/usage-picker.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

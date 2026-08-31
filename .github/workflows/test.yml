@@ -25,9 +25,11 @@ jobs:
       - run: python tools/format_web.py --check
       - run: node --check spade65/web/layout-state.js
       - run: node --check spade65/web/key-events.js
+      - run: node --check spade65/web/usage-picker.js
       - run: node --check spade65/web/app.js
       - run: node tests/layout_state.test.js
       - run: node tests/key_events.test.js
+      - run: node tests/usage_picker.test.js
 
   windows-package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

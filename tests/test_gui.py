@@ -114,6 +114,7 @@ class GuiTests(unittest.TestCase):
             | set(_re.findall(r'href="/([A-Za-z0-9_.-]+\.css)"', page))
         )
         self.assertIn("key-events.js", referenced)
+        self.assertIn("usage-picker.js", referenced)
 
         try:
             server, url = create_gui_server(host="127.0.0.1", port=0)
