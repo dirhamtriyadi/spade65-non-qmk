@@ -98,6 +98,18 @@ Only the standard arrangement is confirmed against hardware. The split
 geometry follows from the fixed matrix rather than from a split board, which
 was not available.
 
+The original software would draw this board's bottom row incorrectly too, so
+its layout data is not a reference for geometry. `SupportDevice.db` assigns
+SPADE65 `layoutIndex: 0`, and layout 0 is a split spacebar with `AltRight`
+before `Custom_Fnkey` and a `ControlRight` — three differences from the
+hardware. The same record sets `img` to `image/GMMK`, artwork for an unrelated
+brand; the layout class is named `KB61Prohibit` while its arrays hold 70 keys;
+and `KeyBoardStyle` carries twelve styles over five distinct bottom rows,
+including ones with a numeric keypad. It is a generic ODM shell covering many
+models. Only measured hardware settles geometry here; the vendor bundle remains
+authoritative for the wire protocol, which is a separate question and was
+confirmed independently.
+
 One matrix anomaly remains unresolved: `rspace` names both slot 92 and slot 94,
 and their default usages disagree — slot 92 is `0x00` and slot 94 is `0x2c`.
 `BUTTON_TO_SLOT` resolves the name to slot 92 by first match. A board with a

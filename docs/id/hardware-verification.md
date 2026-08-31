@@ -97,6 +97,18 @@ Hanya susunan standard yang terkonfirmasi terhadap hardware. Geometri split
 diturunkan dari matrix yang tetap, bukan dari papan split yang memang tidak
 tersedia.
 
+Software original pun akan menggambar baris bawah papan ini secara keliru,
+sehingga data layout-nya bukan rujukan untuk geometri. `SupportDevice.db`
+menetapkan SPADE65 ke `layoutIndex: 0`, dan layout 0 adalah spacebar terbelah
+dengan `AltRight` sebelum `Custom_Fnkey` serta ada `ControlRight` — tiga
+perbedaan dari hardware. Record yang sama mengisi `img` dengan `image/GMMK`,
+gambar milik merek lain; kelas layout-nya bernama `KB61Prohibit` padahal
+arraynya memuat 70 tombol; dan `KeyBoardStyle` memuat dua belas style dengan
+lima baris-bawah berbeda, termasuk yang bernumpad. Itu cangkang ODM generik
+untuk banyak model. Di sini hanya hardware terukur yang menentukan geometri;
+bundel vendor tetap otoritatif untuk protokol wire, yang merupakan persoalan
+terpisah dan sudah dikonfirmasi secara independen.
+
 Satu anomali matrix masih terbuka: `rspace` menamai slot 92 sekaligus slot 94,
 dan default usage-nya bertentangan — slot 92 `0x00`, slot 94 `0x2c`.
 `BUTTON_TO_SLOT` memilih slot 92 karena kecocokan pertama. Dibutuhkan papan
