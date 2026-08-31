@@ -127,6 +127,28 @@ toolkit; the tray belongs only to the native GUI described above. Audio-reactive
 effects remain in the GUI because the service does not request microphone access
 silently.
 
+## Key tester
+
+The **Key tester** page lights up each key as it is pressed and keeps it marked
+afterwards, so anything still plain has not been tried. It also reports the
+`KeyboardEvent.code` the host received, which is what makes it useful after
+writing a keymap: press the physical key and confirm the box that lights is the
+one the profile assigned.
+
+It reads key events from the operating system rather than HID feature reports,
+so it is the only page that works over every connection this keyboard offers —
+the cable, the 2.4 GHz receiver, and Bluetooth. Configuration itself still
+requires the wired interface.
+
+Two keys cannot be relied on there. Fn is resolved inside the keyboard firmware
+and emits no usage at all, confirmed with `evtest`, so it can never light up on
+any tester. The desktop commonly claims the Super key before the page sees it,
+so a dark Super key is not evidence that the key is broken. Both are drawn with
+a dashed outline and excluded from the tested count.
+
+A single spacebar event cannot say which segment of a split spacebar was
+struck, so every space segment lights together.
+
 ## Read-only information
 
 ```bash

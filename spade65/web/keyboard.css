@@ -92,6 +92,47 @@
   filter: brightness(1.2);
 }
 
+.keyboard .key {
+  transition: transform 90ms ease-out, box-shadow 90ms ease-out,
+    background 120ms ease-out, border-color 120ms ease-out;
+}
+
+/* Clicking a key should feel like pressing a keycap, not like nothing. */
+.keyboard .key:not(:disabled):active {
+  transform: translateY(2px);
+  box-shadow: inset 0 -1px rgb(46 43 39 / 45%), 0 1px 1px #070807;
+}
+
+.keyboard .key.pressed {
+  z-index: 4;
+  transform: translateY(2px);
+  border-color: var(--accent);
+  background: linear-gradient(145deg, #7fd4c1, #3f9d8a);
+  box-shadow: 0 0 0 2px var(--accent), inset 0 -1px rgb(46 43 39 / 45%);
+}
+
+.keyboard .key.tested:not(.pressed) {
+  background: linear-gradient(145deg, #9bb7ae, #5f7d75);
+  border-color: #8fbdb1;
+}
+
+.keyboard .key.unobservable,
+.keyboard .key.host-reserved {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keyboard .key {
+    transition: none;
+  }
+
+  .keyboard .key:not(:disabled):active,
+  .keyboard .key.pressed {
+    transform: none;
+  }
+}
+
 .keyboard .key.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent), inset 0 -3px rgb(46 43 39 / 38%);

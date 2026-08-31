@@ -325,5 +325,15 @@
   "profile.scopeColors": "Warna per tombol",
   "profile.scopeHint": "Bagian yang tidak dicentang dibiarkan persis seperti di keyboard. Mengirim warna akan memindahkannya ke efek custom dan menggelapkan setiap tombol yang tidak disebut profil.",
   "profile.scopeEmpty": "Centang minimal satu bagian untuk diterapkan",
-  "keymap.originalOptionsHint": "Kedua saklar ini hanya menyunting profil. Tekan Apply profile untuk menuliskannya ke keyboard."
+  "keymap.originalOptionsHint": "Kedua saklar ini hanya menyunting profil. Tekan Apply profile untuk menuliskannya ke keyboard.",
+  "nav.tester": "Penguji tombol",
+  "tester.title": "Penguji tombol",
+  "tester.description": "Tekan tombol pada keyboard dan lihat tombolnya menyala di sini. Halaman ini membaca event keyboard dari sistem operasi, sehingga berfungsi lewat kabel, receiver 2,4 GHz, maupun Bluetooth.",
+  "tester.reset": "Reset riwayat",
+  "tester.lastKey": "Tombol terakhir",
+  "tester.lastCode": "Kode yang dilaporkan",
+  "tester.untested": "Belum pernah ditekan",
+  "tester.allPressed": "semua tombol sudah ditekan",
+  "tester.cleared": "Riwayat penguji dibersihkan",
+  "tester.hint": "Tombol tetap bertanda setelah ditekan, jadi yang masih polos berarti belum diuji. Fn diproses di dalam firmware keyboard dan tidak pernah sampai ke host, sehingga tidak akan pernah menyala. Desktop juga bisa mengambil tombol Super sebelum halaman ini melihatnya."
 }

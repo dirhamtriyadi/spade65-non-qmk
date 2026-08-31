@@ -325,5 +325,15 @@
   "profile.scopeColors": "Per-key colors",
   "profile.scopeHint": "Unticked parts are left exactly as they are on the keyboard. Sending colors switches it to the custom effect and darkens every key the profile does not name.",
   "profile.scopeEmpty": "Tick at least one part to apply",
-  "keymap.originalOptionsHint": "Both switches edit the profile only. Press Apply profile to write them to the keyboard."
+  "keymap.originalOptionsHint": "Both switches edit the profile only. Press Apply profile to write them to the keyboard.",
+  "nav.tester": "Key tester",
+  "tester.title": "Key tester",
+  "tester.description": "Press keys on the keyboard and watch them light up here. This reads key events from the operating system, so it works over the cable, the 2.4 GHz receiver, and Bluetooth alike.",
+  "tester.reset": "Reset history",
+  "tester.lastKey": "Last key",
+  "tester.lastCode": "Reported code",
+  "tester.untested": "Not yet pressed",
+  "tester.allPressed": "every key has been pressed",
+  "tester.cleared": "Tester history cleared",
+  "tester.hint": "A key stays marked once it has been pressed, so anything still plain has not been tested. Fn is resolved inside the keyboard firmware and never reaches the host, so it can never light up. The desktop may also claim the Super key before this page sees it."
 }

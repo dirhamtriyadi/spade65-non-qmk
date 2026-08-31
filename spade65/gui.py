@@ -383,6 +383,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "keyboard.css",
             "effects.css",
             "layout-state.js",
+            "key-events.js",
             "app.js",
         } and not re.fullmatch(r"locales/[A-Za-z0-9_-]+\.json", asset):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -400,6 +401,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "keyboard.css": "text/css; charset=utf-8",
             "effects.css": "text/css; charset=utf-8",
             "layout-state.js": "text/javascript; charset=utf-8",
+            "key-events.js": "text/javascript; charset=utf-8",
             "app.js": "text/javascript; charset=utf-8",
         }.get(asset, "application/json; charset=utf-8")
         self.send_response(HTTPStatus.OK)

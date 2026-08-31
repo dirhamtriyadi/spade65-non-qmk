@@ -102,6 +102,47 @@ class GuiTests(unittest.TestCase):
                 _send_features(device, [bytes([8]) + bytes(7)])
         send.assert_not_called()
 
+    def test_every_asset_the_page_loads_is_actually_served(self) -> None:
+        # index.html referencing a file the handler will not serve is a 404 that
+        # only appears at runtime, so fetch each one through the real server.
+        import re as _re
+        from importlib.resources import files
+
+        page = files("spade65.web").joinpath("index.html").read_text(encoding="utf-8")
+        referenced = sorted(
+            set(_re.findall(r'src="/([A-Za-z0-9_.-]+\.js)"', page))
+            | set(_re.findall(r'href="/([A-Za-z0-9_.-]+\.css)"', page))
+        )
+        self.assertIn("key-events.js", referenced)
+
+        try:
+            server, url = create_gui_server(host="127.0.0.1", port=0)
+        except PermissionError as error:
+            if error.errno == errno.EPERM:
+                self.skipTest("test sandbox does not permit loopback sockets")
+            raise
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            expected = {".js": "text/javascript", ".css": "text/css"}
+            for asset in referenced:
+                with self.subTest(asset=asset):
+                    with opener.open(url + asset, timeout=5) as response:
+                        self.assertEqual(response.status, HTTPStatus.OK)
+                        self.assertTrue(response.read())
+                        # The handler falls back to application/json, which a
+                        # browser refuses to execute as a script.
+                        suffix = asset[asset.rindex("."):]
+                        self.assertIn(
+                            expected[suffix],
+                            response.headers.get("Content-Type", ""),
+                        )
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
+
     def test_authenticated_quit_stops_only_the_local_server(self) -> None:
         handler = GuiHandler.__new__(GuiHandler)
         handler.headers = {

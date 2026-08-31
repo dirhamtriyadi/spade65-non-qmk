@@ -180,8 +180,10 @@ command -v "$python_bin"
   spade65 spade65ctl.py packaging tests tools
 .jenkins-venv/bin/python tools/format_web.py --check
 node --check spade65/web/layout-state.js
+node --check spade65/web/key-events.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
+node tests/key_events.test.js
 '''
                                 } else {
                                     bat '''@echo off
@@ -207,10 +209,12 @@ if errorlevel 1 exit /b 1
 .jenkins-venv\Scripts\python.exe tools\format_web.py --check
 if errorlevel 1 exit /b 1
 node --check spade65\web\layout-state.js
+node --check spade65\web\key-events.js
 if errorlevel 1 exit /b 1
 node --check spade65\web\app.js
 if errorlevel 1 exit /b 1
 node tests\layout_state.test.js
+node tests\key_events.test.js
 if errorlevel 1 exit /b 1
 '''
                                 }

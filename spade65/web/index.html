@@ -15,6 +15,7 @@
     <nav id="nav">
       <button class="active" data-page="device" data-i18n="nav.device">Device</button>
       <button data-page="keymap" data-i18n="nav.keyboard">Keyboard</button>
+      <button data-page="tester" data-i18n="nav.tester">Key tester</button>
       <button data-page="lighting" data-i18n="nav.lighting">Lighting</button>
       <button data-page="macros" data-i18n="nav.macros">Macros</button>
       <button data-page="settings" data-i18n="nav.settings">Settings</button>
@@ -76,6 +77,14 @@
       </div>
     </section>
 
+    <section class="page" id="page-tester">
+      <div class="card">
+        <div class="card-heading"><div><h2 data-i18n="tester.title">Key tester</h2><p data-i18n="tester.description">Press keys on the keyboard and watch them light up here. This reads key events from the operating system, so it works over the cable, the 2.4 GHz receiver, and Bluetooth alike.</p></div><div class="button-row flush"><span id="testerCount" class="pill">0 / 0</span><button id="testerResetBtn" class="secondary" data-i18n="tester.reset">Reset history</button></div></div>
+        <div id="testerKeyboard" class="keyboard"></div>
+        <div class="tester-readout"><div><span data-i18n="tester.lastKey">Last key</span><strong id="testerLastKey">—</strong></div><div><span data-i18n="tester.lastCode">Reported code</span><code id="testerLastCode">—</code></div><div><span data-i18n="tester.untested">Not yet pressed</span><strong id="testerRemaining">—</strong></div></div>
+        <p class="hint" data-i18n="tester.hint">A key stays marked once it has been pressed, so anything still plain has not been tested. Fn is resolved inside the keyboard firmware and never reaches the host, so it can never light up. The desktop may also claim the Super key before this page sees it.</p>
+      </div>
+    </section>
     <section class="page" id="page-lighting">
       <div class="toolbar card lighting-layout-toolbar"><div></div><div class="layout-control"><label class="layout-picker"><span data-i18n="keymap.physicalLayout">Physical layout</span><select id="lightingLayoutVariant"><option value="ansi-standard" data-i18n="layout.ansiStandard">Spade65-04 · ANSI standard</option><option value="ansi-split" data-i18n="layout.ansiSplit">Spade65-02 · ANSI split</option><option value="iso-standard" data-i18n="layout.isoStandard">Spade65-03 · ISO standard</option><option value="iso-split" data-i18n="layout.isoSplit">Spade65-01 · ISO split</option></select></label><small id="lightingLayoutSource" class="layout-source" data-i18n="layout.noDevice">No configurable Spade65 detected; showing the default Noir layout.</small></div></div>
       <div class="grid two">
@@ -143,6 +152,7 @@
     </section>
   </main>
   <script src="/layout-state.js"></script>
+  <script src="/key-events.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

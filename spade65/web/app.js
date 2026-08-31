@@ -1,6 +1,7 @@
 const token = document.querySelector('meta[name="spade65-token"]').content;
 const $ = id => document.getElementById(id);
 const layoutState = window.Spade65LayoutState;
+const keyEvents = window.Spade65KeyEvents;
 let meta = null,
   profile = null,
   currentLayer = 'normal',
@@ -17,6 +18,8 @@ let meta = null,
   audioAnalyser = null,
   audioStream = null,
   layoutVariant = layoutState.DEFAULT_LAYOUT,
+  testerPressed = new Set(),
+  testerSeen = new Set(),
   activeLayoutKey = null,
   statusFetchPromise = null,
   deviceSnapshot = '',
@@ -459,6 +462,8 @@ function applyLayoutDisplay(layout, connected, render = true) {
     renderKeyboard();
     renderColorKeyboard()
   }
+  // Which keys exist to test depends on the selected layout.
+  if (render) renderTester()
 }
 
 function syncLayoutFromSelectedDevice(render = true) {
@@ -548,6 +553,7 @@ async function loadSavedProfile(name) {
     activeMacro = 0;
     activeAppLayer = 0;
     renderKeyboard();
+    renderTester();
     renderColorKeyboard();
     renderMacros();
     renderAppLayers();
@@ -723,6 +729,12 @@ function buildKeyboard(container, mode) {
     b.dataset.key = key;
     b.style.cssText = `--x:${x/7.57}%;--y:${y/2.36}%;--w:${w/7.57}%;--h:${h/2.36}%`;
     b.textContent = keyLabel(key);
+    if (mode === 'tester') {
+      if (testerPressed.has(key)) b.classList.add('pressed');
+      if (testerSeen.has(key)) b.classList.add('tested');
+      if (keyEvents.isUnobservable(key)) b.classList.add('unobservable');
+      else if (keyEvents.isHostReserved(key)) b.classList.add('host-reserved')
+    }
     if (mode === 'assign' && profile.layers[currentLayer][key]) b.classList.add('assigned');
     if (mode === 'assign' && selectedKey === key) b.classList.add('selected');
     if (mode === 'color' && colorKeys.has(key)) b.classList.add('selected');
@@ -733,7 +745,8 @@ function buildKeyboard(container, mode) {
       sw.style.background = Array.isArray(c) ? `rgb(${c.join(',')})` : c;
       b.append(sw)
     }
-    b.onclick = () => mode === 'assign' ? selectKey(key) : toggleColorKey(key);
+    if (mode === 'tester') b.disabled = true;
+    else b.onclick = () => mode === 'assign' ? selectKey(key) : toggleColorKey(key);
     container.append(b)
   })
 }
@@ -753,6 +766,54 @@ function renderKeyboard() {
   $('winLock').checked = !!profileSettings().win_lock;
   $('wasdArrows').checked = !!profileSettings().wasd_arrows;
   if (selectedKey) loadAssignment()
+}
+
+function testerButtons() {
+  // Only keys the current layout actually draws can be tested, and Fn never
+  // reaches the host at all, so neither counts towards the total.
+  return rows.flat().filter((key, index) => {
+    const [, , w, h] = keyPosition(index);
+    return w && h && !keyEvents.isUnobservable(key)
+  })
+}
+
+function renderTester() {
+  const container = $('testerKeyboard');
+  if (!container) return;
+  buildKeyboard(container, 'tester');
+  const testable = testerButtons(),
+    seen = testable.filter(key => testerSeen.has(key)),
+    remaining = testable.filter(key => !testerSeen.has(key));
+  $('testerCount').textContent = `${seen.length} / ${testable.length}`;
+  $('testerRemaining').textContent = remaining.length ?
+    remaining.map(keyLabel).join(', ') :
+    t('tester.allPressed')
+}
+
+function testerKeyEvent(event) {
+  if (!$('page-tester').classList.contains('active')) return;
+  const buttons = keyEvents.buttonsForCode(event.code, layoutVariant);
+  if (!buttons.length) return;
+  event.preventDefault();
+  const down = event.type === 'keydown';
+  for (const key of buttons) {
+    down ? testerPressed.add(key) : testerPressed.delete(key);
+    if (down) testerSeen.add(key)
+  }
+  if (down) {
+    $('testerLastKey').textContent = buttons.map(keyLabel).join(' / ');
+    $('testerLastCode').textContent = event.code
+  }
+  renderTester()
+}
+
+function resetTester() {
+  testerPressed.clear();
+  testerSeen.clear();
+  $('testerLastKey').textContent = '—';
+  $('testerLastCode').textContent = '—';
+  renderTester();
+  toast(t('tester.cleared'))
 }
 
 function renderColorKeyboard() {
@@ -1845,7 +1906,20 @@ document.querySelectorAll('#nav button').forEach(button => button.onclick = () =
   document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('active', x === button));
   document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
   $(`page-${button.dataset.page}`).classList.add('active');
-  updatePageHeader(button.dataset.page)
+  updatePageHeader(button.dataset.page);
+  if (button.dataset.page === 'tester') {
+    // Leaving a key held while switching pages would strand it lit.
+    testerPressed.clear();
+    renderTester()
+  }
+});
+$('testerResetBtn').onclick = resetTester;
+document.addEventListener('keydown', testerKeyEvent, true);
+document.addEventListener('keyup', testerKeyEvent, true);
+window.addEventListener('blur', () => {
+  if (!testerPressed.size) return;
+  testerPressed.clear();
+  renderTester()
 });
 $('copyServicePrepareBtn').onclick = () => copyServiceCommands('prepare_commands', 'service.prepareCopied');
 $('copyServiceActivateBtn').onclick = () => copyServiceCommands('activate_commands', 'service.activateCopied');

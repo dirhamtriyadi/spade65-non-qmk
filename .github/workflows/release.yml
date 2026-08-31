@@ -57,8 +57,10 @@ jobs:
           python -m unittest discover -v
           python -m compileall -q spade65 spade65ctl.py packaging tests
           node --check spade65/web/layout-state.js
+          node --check spade65/web/key-events.js
           node --check spade65/web/app.js
           node tests/layout_state.test.js
+          node tests/key_events.test.js
 
   windows:
     needs: validate

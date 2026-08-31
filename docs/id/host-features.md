@@ -128,6 +128,29 @@ desktop tambahan; tray hanya dimiliki GUI native yang dijelaskan di atas.
 Audio-reactive tetap dijalankan dari GUI karena service tidak meminta akses
 mikrofon secara diam-diam.
 
+## Penguji tombol
+
+Halaman **Penguji tombol** menyalakan setiap tombol saat ditekan dan
+mempertahankan tandanya sesudahnya, sehingga yang masih polos berarti belum
+dicoba. Halaman ini juga melaporkan `KeyboardEvent.code` yang diterima host —
+inilah gunanya setelah menulis keymap: tekan tombol fisiknya dan pastikan kotak
+yang menyala adalah kotak yang profil tetapkan.
+
+Halaman ini membaca event keyboard dari sistem operasi, bukan HID feature
+report, sehingga menjadi satu-satunya halaman yang berfungsi lewat semua
+koneksi yang keyboard ini punya — kabel, receiver 2,4 GHz, dan Bluetooth.
+Konfigurasi sendiri tetap membutuhkan interface berkabel.
+
+Dua tombol tidak bisa diandalkan di sana. Fn diproses di dalam firmware
+keyboard dan tidak mengirim usage sama sekali, terkonfirmasi dengan `evtest`,
+sehingga tidak akan pernah menyala di penguji mana pun. Desktop umumnya
+mengambil tombol Super sebelum halaman melihatnya, jadi Super yang gelap bukan
+bukti tombolnya rusak. Keduanya digambar bergaris putus-putus dan dikecualikan
+dari hitungan.
+
+Satu event spacebar tidak bisa menyatakan segmen mana dari spacebar terbelah
+yang ditekan, sehingga semua segmen space menyala bersamaan.
+
 ## Informasi read-only
 
 ```bash
