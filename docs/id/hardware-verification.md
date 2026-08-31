@@ -71,6 +71,32 @@ Keberadaan report `0x06` sepanjang 64 byte pada `0352` saja bukan bukti yang
 cukup: protokol streaming kabel juga membutuhkan feature report aktivasi pendek
 yang terverifikasi, sedangkan receiver ini tidak mengiklankannya.
 
+## Layout baris bawah
+
+Unit berkabel diperiksa dengan `evtest` pada node boot-keyboard-nya, satu-
+satunya node yang melaporkan modifier. Menekan spacebar menghasilkan
+`MSC_SCAN 0x7002c`; tombol berikutnya di sebelah kanannya tidak menghasilkan
+apa pun, karena Fn diproses di dalam firmware dan tidak pernah mengirim usage;
+tombol setelahnya menghasilkan `MSC_SCAN 0x700e6`, usage `0xe6`, Right Alt.
+Left Ctrl menghasilkan `0x700e0` sesuai dugaan.
+
+Jadi baris bawah papan ini adalah `Ctrl Win Alt Space Fn RAlt` ditambah kluster
+panah, dan tidak memiliki tombol Right Ctrl. Ini susunan kelima: data
+`KeyBoardStyle` milik vendor memuat lima baris bawah dan semuanya menempatkan
+`AltRight` sebelum `Custom_Fnkey`, sedangkan hardware ini justru sebaliknya.
+Layout standard kini menggambar `ralt` pada posisi yang benar-benar dipakai
+hardware dan tidak lagi menggambar `rctrl`, yang sebelumnya diletakkan di atas
+tombol Right Alt fisik. Layout split tidak diubah, karena spacebar terbelah
+adalah papan yang berbeda dan tidak ada hardware di sini yang membantah data
+vendor untuknya.
+
+Satu anomali matrix masih terbuka: `rspace` menamai slot 92 sekaligus slot 94,
+dan default usage-nya bertentangan — slot 92 `0x00`, slot 94 `0x2c`.
+`BUTTON_TO_SLOT` memilih slot 92 karena kecocokan pertama. Dibutuhkan papan
+dengan spacebar terbelah untuk memastikan slot mana yang benar-benar space
+kanan, sehingga tabelnya dibiarkan apa adanya alih-alih dikoreksi berdasarkan
+tebakan.
+
 ## Tidak dijalankan
 
 - Timer dongle tidak dikirim karena receiver fisik yang diamati memakai PID

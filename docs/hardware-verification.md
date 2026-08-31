@@ -71,6 +71,31 @@ of guessing that the receiver protocols are compatible. Merely seeing a
 protocol also requires a verified short feature activation report, which this
 receiver does not advertise.
 
+## Bottom-row layout
+
+The wired unit was inspected with `evtest` on its boot-keyboard input node,
+which is the only node that reports modifiers. Pressing the spacebar reported
+`MSC_SCAN 0x7002c`; the next key to its right reported nothing at all, because
+Fn is resolved inside the firmware and never emits a usage; the key after that
+reported `MSC_SCAN 0x700e6`, usage `0xe6`, Right Alt. Left Ctrl reported
+`0x700e0` as expected.
+
+So this board's bottom row is `Ctrl Win Alt Space Fn RAlt` plus the arrow
+cluster, and it carries no Right Ctrl key. That is a fifth arrangement: the
+vendor's own `KeyBoardStyle` data contains five bottom rows and every one of
+them places `AltRight` before `Custom_Fnkey`, while this hardware has them the
+other way round. The standard layouts now draw `ralt` in the position the
+hardware actually uses and no longer draw `rctrl`, which had been placed over
+the physical Right Alt. The split layouts are unchanged, because a split
+spacebar is a different board and no hardware here contradicts the vendor data
+for it.
+
+One matrix anomaly remains unresolved: `rspace` names both slot 92 and slot 94,
+and their default usages disagree — slot 92 is `0x00` and slot 94 is `0x2c`.
+`BUTTON_TO_SLOT` resolves the name to slot 92 by first match. A board with a
+split spacebar would be needed to establish which slot is the real right space,
+so the table is left as transcribed rather than corrected on a guess.
+
 ## Tests not performed
 
 - Dongle timers were not sent because the observed physical receiver is PID
