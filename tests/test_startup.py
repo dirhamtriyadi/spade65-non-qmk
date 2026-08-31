@@ -129,7 +129,9 @@ class StartupTests(unittest.TestCase):
         # so a simulated platform still resolves against the real home.
         foreign = "windows" if sys.platform != "win32" else "linux"
         config, launcher = default_service_paths(foreign)
-        self.assertIn(str(Path.home()).replace("\\", "/"), str(config).replace("\\", "/"))
+        home = Path.home().as_posix()
+        self.assertIn(home, str(config).replace("\\", "/"))
+        self.assertNotIn("//", str(config).replace("\\", "/"))
         self.assertEqual(launcher.name, startup_filename(foreign))
         self.assertEqual(
             default_gui_startup_path(foreign).name, gui_startup_filename(foreign)

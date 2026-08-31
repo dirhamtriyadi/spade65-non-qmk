@@ -71,7 +71,14 @@ def _target_home(family: str, home: PurePath | str | None) -> PurePath:
     """Return the home directory a launcher for ``family`` is written against."""
 
     path_type = PureWindowsPath if family == "windows" else PurePosixPath
-    return path_type(Path.home() if home is None else home)
+    if home is not None:
+        return path_type(home)
+    local = Path.home()
+    if path_type is PurePosixPath:
+        # A Windows home reinterpreted as POSIX would otherwise keep its drive
+        # anchor as a separate part and join as "C:\/Users/...".
+        return path_type(local.as_posix())
+    return path_type(local)
 
 
 def default_gui_startup_path(
