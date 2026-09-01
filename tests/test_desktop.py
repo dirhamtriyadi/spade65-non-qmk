@@ -2,15 +2,23 @@ import tempfile
 import unittest
 import webbrowser
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from spade65.desktop import (
     ActivationBridge,
     DesktopApi,
     DesktopUnavailable,
+    MAX_NATIVE_CLIPBOARD_BYTES,
+    _copy_linux_text,
+    _copy_macos_text,
+    _copy_native_text,
+    _copy_qt_text,
+    _copy_windows_text,
     _linux_external_environment,
     _open_linux_external_url,
+    _trusted_external_opener,
+    _validated_external_url,
     desktop_backend,
     desktop_storage_path,
     run_desktop,
@@ -85,6 +93,389 @@ class DesktopTests(unittest.TestCase):
             popen.call_args_list[1].args[0],
             ["/usr/bin/gio", "open", "https://example.com"],
         )
+
+    def test_linux_clipboard_uses_clean_host_environment_and_exact_text(self) -> None:
+        clean_environment = {
+            "PATH": "/usr/bin",
+            "WAYLAND_DISPLAY": "wayland-1",
+        }
+        copied = SimpleNamespace(returncode=0)
+        contents = "mkdir -p ~/.config/spade65\nspade65ctl service install\n"
+        with (
+            patch(
+                "spade65.desktop._linux_external_environment",
+                return_value=clean_environment,
+            ),
+            patch(
+                "spade65.desktop.shutil.which",
+                return_value="/usr/bin/wl-copy",
+            ) as which,
+            patch(
+                "spade65.desktop.subprocess.run", return_value=copied
+            ) as run,
+        ):
+            self.assertTrue(_copy_linux_text(contents))
+
+        which.assert_called_once_with("wl-copy", path="/usr/bin")
+        run.assert_called_once_with(
+            [
+                "/usr/bin/wl-copy",
+                "--type",
+                "text/plain;charset=utf-8",
+            ],
+            input=contents.encode("utf-8"),
+            env=clean_environment,
+            stdout=-3,
+            stderr=-3,
+            timeout=3,
+            check=False,
+        )
+
+    def test_linux_clipboard_falls_back_between_host_tools(self) -> None:
+        failed = SimpleNamespace(returncode=1)
+        copied = SimpleNamespace(returncode=0)
+        with (
+            patch(
+                "spade65.desktop._linux_external_environment",
+                return_value={"PATH": "/usr/bin"},
+            ),
+            patch(
+                "spade65.desktop.shutil.which",
+                side_effect=lambda name, path=None: f"/usr/bin/{name}",
+            ),
+            patch(
+                "spade65.desktop.subprocess.run",
+                side_effect=[failed, copied],
+            ) as run,
+        ):
+            self.assertTrue(_copy_linux_text("copy me"))
+
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            ["/usr/bin/xclip", "-selection", "clipboard", "-in"],
+        )
+
+    def test_macos_clipboard_uses_appkit_with_unicode(self) -> None:
+        contents = "Spade65 — profile"
+        pasteboard = SimpleNamespace(
+            clearContents=MagicMock(),
+            setString_forType_=MagicMock(return_value=True),
+        )
+        appkit = ModuleType("AppKit")
+        appkit.NSPasteboard = SimpleNamespace(
+            generalPasteboard=MagicMock(return_value=pasteboard)
+        )
+        appkit.NSPasteboardTypeString = "public.utf8-plain-text"
+        foundation = ModuleType("Foundation")
+        foundation.NSOperationQueue = SimpleNamespace()
+        foundation.NSThread = SimpleNamespace(isMainThread=lambda: True)
+        with patch.dict(
+            "sys.modules", {"AppKit": appkit, "Foundation": foundation}
+        ):
+            self.assertTrue(_copy_macos_text(contents))
+
+        pasteboard.clearContents.assert_called_once_with()
+        pasteboard.setString_forType_.assert_called_once_with(
+            contents, "public.utf8-plain-text"
+        )
+
+    def test_macos_clipboard_queues_a_background_call_on_main(self) -> None:
+        pasteboard = SimpleNamespace(
+            clearContents=MagicMock(),
+            setString_forType_=MagicMock(return_value=True),
+        )
+        queue = SimpleNamespace(
+            addOperationWithBlock_=MagicMock(
+                side_effect=lambda callback: callback()
+            )
+        )
+        appkit = ModuleType("AppKit")
+        appkit.NSPasteboard = SimpleNamespace(
+            generalPasteboard=lambda: pasteboard
+        )
+        appkit.NSPasteboardTypeString = "public.utf8-plain-text"
+        foundation = ModuleType("Foundation")
+        foundation.NSOperationQueue = SimpleNamespace(mainQueue=lambda: queue)
+        foundation.NSThread = SimpleNamespace(isMainThread=lambda: False)
+        with patch.dict(
+            "sys.modules", {"AppKit": appkit, "Foundation": foundation}
+        ):
+            self.assertTrue(_copy_macos_text("activation — Spade65"))
+
+        queue.addOperationWithBlock_.assert_called_once()
+        pasteboard.setString_forType_.assert_called_once_with(
+            "activation — Spade65", "public.utf8-plain-text"
+        )
+
+    def test_macos_timed_out_request_cannot_later_clear_clipboard(self) -> None:
+        class TimedOutEvent:
+            def __init__(self):
+                self.ready = False
+
+            def set(self):
+                self.ready = True
+
+            def is_set(self):
+                return self.ready
+
+            def wait(self, _timeout):
+                return False
+
+        callbacks = []
+        pasteboard = SimpleNamespace(
+            clearContents=MagicMock(),
+            setString_forType_=MagicMock(return_value=True),
+        )
+        queue = SimpleNamespace(
+            addOperationWithBlock_=lambda callback: callbacks.append(callback)
+        )
+        appkit = ModuleType("AppKit")
+        appkit.NSPasteboard = SimpleNamespace(
+            generalPasteboard=lambda: pasteboard
+        )
+        appkit.NSPasteboardTypeString = "public.utf8-plain-text"
+        foundation = ModuleType("Foundation")
+        foundation.NSOperationQueue = SimpleNamespace(mainQueue=lambda: queue)
+        foundation.NSThread = SimpleNamespace(isMainThread=lambda: False)
+        with (
+            patch.dict(
+                "sys.modules", {"AppKit": appkit, "Foundation": foundation}
+            ),
+            patch("spade65.desktop.threading.Event", TimedOutEvent),
+        ):
+            self.assertFalse(_copy_macos_text("late commands"))
+
+        self.assertEqual(len(callbacks), 1)
+        callbacks[0]()
+        pasteboard.clearContents.assert_not_called()
+        pasteboard.setString_forType_.assert_not_called()
+
+    def test_windows_clipboard_invokes_the_native_sta_window(self) -> None:
+        writes = []
+
+        class Clipboard:
+            @staticmethod
+            def SetText(value):
+                writes.append(value)
+
+            @staticmethod
+            def GetText():
+                return writes[-1]
+
+        system = ModuleType("System")
+        system.Action = lambda callback: callback
+        windows = ModuleType("System.Windows")
+        forms = ModuleType("System.Windows.Forms")
+        forms.Clipboard = Clipboard
+        form = SimpleNamespace(
+            InvokeRequired=True,
+            Invoke=MagicMock(side_effect=lambda action: action()),
+        )
+        window = SimpleNamespace(native=form)
+        with patch.dict(
+            "sys.modules",
+            {
+                "System": system,
+                "System.Windows": windows,
+                "System.Windows.Forms": forms,
+            },
+        ):
+            self.assertTrue(_copy_windows_text("Spade65 — commands", window))
+
+        self.assertEqual(writes, ["Spade65 — commands"])
+        form.Invoke.assert_called_once()
+
+    def test_native_clipboard_dispatches_by_platform(self) -> None:
+        window = SimpleNamespace(native=object())
+        with (
+            patch("spade65.desktop._copy_qt_text", return_value=True) as qt,
+            patch("spade65.desktop._copy_linux_text") as linux,
+        ):
+            self.assertTrue(_copy_native_text("commands", "linux"))
+        qt.assert_called_once_with("commands")
+        linux.assert_not_called()
+
+        with (
+            patch("spade65.desktop._copy_qt_text", return_value=False),
+            patch(
+                "spade65.desktop._copy_linux_text", return_value=True
+            ) as linux,
+        ):
+            self.assertTrue(_copy_native_text("commands", "linux"))
+        linux.assert_called_once_with("commands")
+
+        with patch(
+            "spade65.desktop._copy_macos_text", return_value=True
+        ) as macos:
+            self.assertTrue(_copy_native_text("commands", "darwin"))
+        macos.assert_called_once_with("commands")
+
+        with patch(
+            "spade65.desktop._copy_windows_text", return_value=True
+        ) as windows:
+            self.assertTrue(
+                _copy_native_text("commands", "win32", window=window)
+            )
+        windows.assert_called_once_with("commands", window)
+
+        self.assertFalse(_copy_native_text("commands", "freebsd"))
+
+    def test_desktop_api_copies_exact_canonical_service_commands(self) -> None:
+        copied = []
+        contents = "command one\ncommand two --flag='nilai'\n"
+        api = DesktopApi(
+            SimpleNamespace(),
+            platform_name="linux",
+            clipboard_writer=lambda text: copied.append(text) or True,
+        )
+        with patch(
+            "spade65.desktop.release_service_setup",
+            return_value={"prepare_commands": contents},
+        ) as setup:
+            self.assertEqual(
+                api.copy_service_commands("prepare_commands"),
+                {"copied": True},
+            )
+        self.assertEqual(copied, [contents])
+        setup.assert_called_once_with(platform="linux")
+
+    def test_desktop_api_rejects_unknown_service_command_fields(self) -> None:
+        writer = MagicMock(return_value=True)
+        api = DesktopApi(SimpleNamespace(), clipboard_writer=writer)
+        for field in (None, b"prepare_commands", "", "firmware_commands"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                api.copy_service_commands(field)
+        writer.assert_not_called()
+
+    def test_desktop_api_rejects_unsafe_generated_command_contents(self) -> None:
+        writer = MagicMock(return_value=True)
+        api = DesktopApi(SimpleNamespace(), clipboard_writer=writer)
+        for contents, message in (
+            ("", "only in a release package"),
+            ("safe\x00unsafe", "NUL"),
+            ("x" * (MAX_NATIVE_CLIPBOARD_BYTES + 1), "too large"),
+        ):
+            with (
+                self.subTest(message=message),
+                patch(
+                    "spade65.desktop.release_service_setup",
+                    return_value={"prepare_commands": contents},
+                ),
+                self.assertRaisesRegex((RuntimeError, ValueError), message),
+            ):
+                api.copy_service_commands("prepare_commands")
+        writer.assert_not_called()
+
+    def test_desktop_api_reports_native_clipboard_failure(self) -> None:
+        api = DesktopApi(
+            SimpleNamespace(), clipboard_writer=lambda _contents: False
+        )
+        with (
+            patch(
+                "spade65.desktop.release_service_setup",
+                return_value={"activate_commands": "activate commands"},
+            ),
+            self.assertRaisesRegex(RuntimeError, "could not be updated"),
+        ):
+            api.copy_service_commands("activate_commands")
+
+    def test_desktop_api_passes_the_bound_window_to_native_clipboard(self) -> None:
+        window = SimpleNamespace(native=object())
+        api = DesktopApi(SimpleNamespace(), platform_name="win32")
+        api._bind_window(window)
+        with (
+            patch(
+                "spade65.desktop.release_service_setup",
+                return_value={"prepare_commands": "prepare commands"},
+            ),
+            patch(
+                "spade65.desktop._copy_native_text", return_value=True
+            ) as copy,
+        ):
+            self.assertEqual(
+                api.copy_service_commands("prepare_commands"),
+                {"copied": True},
+            )
+
+        copy.assert_called_once_with(
+            "prepare commands", "win32", window=window
+        )
+
+    def test_desktop_api_opens_project_links_with_the_host_browser(self) -> None:
+        url = (
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/"
+            "blob/main/docs/host-features.md"
+        )
+        api = DesktopApi(SimpleNamespace(), platform_name="linux")
+        with patch(
+            "spade65.desktop._open_linux_external_url", return_value=True
+        ) as open_url:
+            result = api.open_external_url(url)
+
+        self.assertEqual(result, {"opened": True})
+        open_url.assert_called_once_with(url, new=2, autoraise=True)
+
+    def test_all_shipped_external_destinations_are_approved(self) -> None:
+        for url in (
+            "https://github.com/dirhamtriyadi/spade65-non-qmk",
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/releases",
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/"
+            "blob/main/docs/host-features.md",
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/"
+            "blob/main/docs/id/host-features.md",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(_validated_external_url(url), url)
+
+    def test_desktop_api_uses_the_system_browser_outside_linux(self) -> None:
+        url = "https://github.com/dirhamtriyadi/spade65-non-qmk/releases"
+        for platform in ("win32", "darwin"):
+            with self.subTest(platform=platform):
+                api = DesktopApi(SimpleNamespace(), platform_name=platform)
+                with patch(
+                    "spade65.desktop.webbrowser.open", return_value=True
+                ) as open_url:
+                    self.assertEqual(api.open_external_url(url), {"opened": True})
+                open_url.assert_called_once_with(url, new=2, autoraise=True)
+
+    def test_desktop_api_rejects_untrusted_external_links(self) -> None:
+        for value in (
+            "http://github.com/dirhamtriyadi/spade65-non-qmk",
+            "https://example.com/dirhamtriyadi/spade65-non-qmk",
+            "https://github.com.evil.test/dirhamtriyadi/spade65-non-qmk",
+            "https://user@github.com/dirhamtriyadi/spade65-non-qmk",
+            "https://github.com/another/project",
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/../another/project",
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/"
+            "%2e%2e/%2e%2e/another/project",
+            " https://github.com/dirhamtriyadi/spade65-non-qmk",
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                _validated_external_url(value)
+
+    def test_pywebview_fallback_opener_uses_the_same_allowlist(self) -> None:
+        system_open = MagicMock(return_value=True)
+        linux_open = _trusted_external_opener("linux", system_open)
+        valid = "https://github.com/dirhamtriyadi/spade65-non-qmk/releases"
+        invalid = "https://example.com/"
+        with patch(
+            "spade65.desktop._open_linux_external_url", return_value=True
+        ) as open_url:
+            self.assertTrue(linux_open(valid, 2, True))
+            self.assertFalse(linux_open(invalid, 2, True))
+
+        open_url.assert_called_once_with(valid, 2, True)
+        system_open.assert_not_called()
+
+    def test_desktop_api_reports_external_browser_failure(self) -> None:
+        url = "https://github.com/dirhamtriyadi/spade65-non-qmk/releases"
+        api = DesktopApi(SimpleNamespace(), platform_name="win32")
+        with (
+            patch("spade65.desktop.webbrowser.open", return_value=False),
+            self.assertRaisesRegex(RuntimeError, "could not be opened"),
+        ):
+            api.open_external_url(url)
 
     def test_activation_is_queued_until_the_native_window_is_ready(self) -> None:
         class ShownEvent:
@@ -305,7 +696,9 @@ class DesktopTests(unittest.TestCase):
 
         self.assertTrue(webview.settings["ALLOW_DOWNLOADS"])
         self.assertTrue(webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"])
-        self.assertEqual(browser_open_during_start, [_open_linux_external_url])
+        self.assertEqual(len(browser_open_during_start), 1)
+        self.assertIsNot(browser_open_during_start[0], original_browser_open)
+        self.assertIsNot(browser_open_during_start[0], _open_linux_external_url)
         self.assertIs(webbrowser.open, original_browser_open)
         _, url = webview.create_window.call_args.args[:2]
         self.assertEqual(url, "http://127.0.0.1:49152/")

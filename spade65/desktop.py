@@ -13,7 +13,7 @@ import threading
 import webbrowser
 from pathlib import Path
 from types import ModuleType
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .desktop_preferences import (
     desktop_preferences_path,
@@ -22,7 +22,11 @@ from .desktop_preferences import (
 )
 from .gui import create_gui_server
 from .settings import GUI_HOST, GUI_PORT
-from .startup import gui_auto_start_status, set_gui_auto_start
+from .startup import (
+    gui_auto_start_status,
+    release_service_setup,
+    set_gui_auto_start,
+)
 from .tray import TrayController
 
 
@@ -31,11 +35,28 @@ WINDOW_WIDTH = 1360
 WINDOW_HEIGHT = 860
 WINDOW_MIN_SIZE = (1000, 640)
 MAX_NATIVE_EXPORT_BYTES = 5_000_000
+MAX_NATIVE_CLIPBOARD_BYTES = 100_000
+MAX_EXTERNAL_URL_LENGTH = 2_048
+SERVICE_COMMAND_FIELDS = frozenset({"prepare_commands", "activate_commands"})
+EXTERNAL_REPOSITORY_URL = "https://github.com/dirhamtriyadi/spade65-non-qmk"
+EXTERNAL_LINK_URLS = frozenset(
+    {
+        EXTERNAL_REPOSITORY_URL,
+        f"{EXTERNAL_REPOSITORY_URL}/releases",
+        f"{EXTERNAL_REPOSITORY_URL}/blob/main/docs/host-features.md",
+        f"{EXTERNAL_REPOSITORY_URL}/blob/main/docs/id/host-features.md",
+    }
+)
 LINUX_EXTERNAL_OPENERS = (
     ("xdg-open",),
     ("gio", "open"),
     ("kde-open5",),
     ("kde-open",),
+)
+LINUX_CLIPBOARD_COMMANDS = (
+    ("wl-copy", "--type", "text/plain;charset=utf-8"),
+    ("xclip", "-selection", "clipboard", "-in"),
+    ("xsel", "--clipboard", "--input"),
 )
 QT_EXTERNAL_ENVIRONMENT = (
     "QML2_IMPORT_PATH",
@@ -97,6 +118,175 @@ def _open_linux_external_url(
     return False
 
 
+def _copy_linux_text(text: str) -> bool:
+    """Fallback through a host compositor tool outside bundled AppImage libs."""
+
+    environment = _linux_external_environment()
+    for command in LINUX_CLIPBOARD_COMMANDS:
+        executable = shutil.which(command[0], path=environment.get("PATH"))
+        if executable is None:
+            continue
+        try:
+            result = subprocess.run(
+                [executable, *command[1:]],
+                input=text.encode("utf-8"),
+                env=environment,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return True
+    return False
+
+
+def _copy_qt_text(text: str) -> bool:
+    """Synchronously copy text on the Qt GUI thread used by Linux releases."""
+
+    try:
+        from qtpy import QtCore, QtGui
+    except ImportError:
+        return False
+    application = QtGui.QGuiApplication.instance()
+    if application is None:
+        return False
+
+    outcome = {"copied": False}
+
+    class ClipboardRequest(QtCore.QObject):
+        @QtCore.Slot(str)
+        def copy(self, value: str) -> None:
+            try:
+                if (
+                    "wayland" in application.platformName().casefold()
+                    and application.focusWindow() is None
+                ):
+                    return
+                clipboard = QtGui.QGuiApplication.clipboard()
+                clipboard.setText(value)
+                outcome["copied"] = clipboard.text() == value
+            except Exception:
+                outcome["copied"] = False
+
+    request = ClipboardRequest()
+    gui_thread = application.thread()
+    try:
+        if QtCore.QThread.currentThread() == gui_thread:
+            request.copy(text)
+        else:
+            request.moveToThread(gui_thread)
+            invoked = QtCore.QMetaObject.invokeMethod(
+                request,
+                "copy",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+                QtCore.Q_ARG(str, text),
+            )
+            if not invoked:
+                return False
+        return outcome["copied"]
+    except Exception:
+        return False
+    finally:
+        request.deleteLater()
+
+
+def _copy_macos_text(text: str) -> bool:
+    """Copy text with AppKit on the main Cocoa queue."""
+
+    try:
+        from AppKit import NSPasteboard, NSPasteboardTypeString
+        from Foundation import NSOperationQueue, NSThread
+    except ImportError:
+        return False
+
+    completed = threading.Event()
+    state_lock = threading.Lock()
+    outcome = {"cancelled": False, "copied": False}
+
+    def write() -> None:
+        with state_lock:
+            try:
+                if outcome["cancelled"]:
+                    return
+                pasteboard = NSPasteboard.generalPasteboard()
+                pasteboard.clearContents()
+                outcome["copied"] = bool(
+                    pasteboard.setString_forType_(text, NSPasteboardTypeString)
+                )
+            except Exception:
+                outcome["copied"] = False
+            finally:
+                completed.set()
+
+    try:
+        if NSThread.isMainThread():
+            write()
+        else:
+            NSOperationQueue.mainQueue().addOperationWithBlock_(write)
+            if not completed.wait(3):
+                with state_lock:
+                    if not completed.is_set():
+                        outcome["cancelled"] = True
+                        return False
+        return outcome["copied"]
+    except Exception:
+        with state_lock:
+            outcome["cancelled"] = True
+        return False
+
+
+def _copy_windows_text(text: str, window: object | None) -> bool:
+    """Copy text through the Spade65 WinForms window's STA GUI thread."""
+
+    form = getattr(window, "native", None)
+    if form is None:
+        return False
+    try:
+        from System import Action
+        import System.Windows.Forms as WinForms
+    except ImportError:
+        return False
+
+    outcome = {"copied": False}
+
+    def write() -> None:
+        try:
+            WinForms.Clipboard.SetText(text)
+            outcome["copied"] = WinForms.Clipboard.GetText() == text
+        except Exception:
+            outcome["copied"] = False
+
+    try:
+        if bool(form.InvokeRequired):
+            form.Invoke(Action(write))
+        else:
+            write()
+        return outcome["copied"]
+    except Exception:
+        return False
+
+
+def _copy_native_text(
+    text: str,
+    platform_name: str | None = None,
+    *,
+    window: object | None = None,
+) -> bool:
+    """Dispatch clipboard writes to the current host platform."""
+
+    current = platform_name or sys.platform
+    if current.startswith("linux"):
+        return _copy_qt_text(text) or _copy_linux_text(text)
+    if current == "darwin":
+        return _copy_macos_text(text)
+    if current in {"win32", "windows"}:
+        return _copy_windows_text(text, window)
+    return False
+
+
 def _safe_export_filename(value: object) -> str:
     leaf = str(value or "").replace("\\", "/").rsplit("/", 1)[-1]
     cleaned = re.sub(r"[^A-Za-z0-9._ -]+", "_", leaf).strip(" .")
@@ -106,8 +296,44 @@ def _safe_export_filename(value: object) -> str:
     return f"{stem}.json"
 
 
+def _validated_external_url(value: object) -> str:
+    """Accept only the exact external destinations shipped in the UI."""
+
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_EXTERNAL_URL_LENGTH
+    ):
+        raise ValueError("external URL must be a non-empty string")
+    if value != value.strip() or any(
+        ord(character) < 0x20 for character in value
+    ):
+        raise ValueError("external URL contains invalid whitespace")
+    if value not in EXTERNAL_LINK_URLS:
+        raise ValueError("external URL is not an approved Spade65 project link")
+    return value
+
+
+def _trusted_external_opener(
+    platform_name: str,
+    system_open: Callable[[str, int, bool], object],
+) -> Callable[[str, int, bool], bool]:
+    """Wrap pywebview's generic target=_blank opener with the same allowlist."""
+
+    def open_url(url: str, new: int = 0, autoraise: bool = True) -> bool:
+        try:
+            target = _validated_external_url(url)
+            if platform_name.startswith("linux"):
+                return _open_linux_external_url(target, new, autoraise)
+            return bool(system_open(target, new, autoraise))
+        except (OSError, ValueError, webbrowser.Error):
+            return False
+
+    return open_url
+
+
 class DesktopApi:
-    """Native bridge for exports, system tray, and login startup settings."""
+    """Native bridge for exports, trusted links, clipboard, tray, and startup."""
 
     def __init__(
         self,
@@ -116,11 +342,13 @@ class DesktopApi:
         tray_controller: TrayController | None = None,
         platform_name: str | None = None,
         preferences_path: Path | None = None,
+        clipboard_writer: Callable[[str], bool] | None = None,
     ) -> None:
         self._window: object | None = None
         self._tray = tray_controller
         self._platform_name = platform_name or sys.platform
         self._preferences_path = preferences_path
+        self._clipboard_writer = clipboard_writer
         self._native_export = self._platform_name not in {"win32", "windows"}
         dialogs = getattr(webview_module, "FileDialog", None)
         self._save_dialog = getattr(dialogs, "SAVE", 30)
@@ -175,6 +403,55 @@ class DesktopApi:
                 )
         set_gui_auto_start(enabled, platform=self._platform_name)
         return self.desktop_status()
+
+    def open_external_url(self, url: str) -> dict[str, bool]:
+        """Open a trusted project link in the host's default browser."""
+
+        target = _validated_external_url(url)
+        try:
+            if self._platform_name.startswith("linux"):
+                opened = _open_linux_external_url(target, new=2, autoraise=True)
+            else:
+                opened = webbrowser.open(target, new=2, autoraise=True)
+        except (OSError, webbrowser.Error) as error:
+            raise RuntimeError("the system browser could not be opened") from error
+        if not opened:
+            raise RuntimeError("the system browser could not be opened")
+        return {"opened": True}
+
+    def copy_service_commands(self, field: str) -> dict[str, bool]:
+        """Copy one canonical packaged-service command block."""
+
+        if not isinstance(field, str) or field not in SERVICE_COMMAND_FIELDS:
+            raise ValueError("unknown service command field")
+        setup = release_service_setup(platform=self._platform_name)
+        contents = setup.get(field)
+        if not isinstance(contents, str) or not contents:
+            raise RuntimeError(
+                "service setup commands are available only in a release package"
+            )
+        if "\x00" in contents:
+            raise ValueError("clipboard contents contain a NUL character")
+        if len(contents.encode("utf-8")) > MAX_NATIVE_CLIPBOARD_BYTES:
+            raise ValueError("clipboard contents are too large")
+        writer = self._clipboard_writer
+        try:
+            copied = (
+                writer(contents)
+                if writer is not None
+                else _copy_native_text(
+                    contents,
+                    self._platform_name,
+                    window=self._window,
+                )
+            )
+        except Exception as error:
+            raise RuntimeError(
+                "the system clipboard could not be updated"
+            ) from error
+        if not copied:
+            raise RuntimeError("the system clipboard could not be updated")
+        return {"copied": True}
 
     def save_json(self, contents: str, suggested_name: str) -> dict[str, object]:
         if not self._native_export:
@@ -399,8 +676,7 @@ def run_desktop_session(
             print(f"Spade65 desktop GUI: {url}")
         storage_path = desktop_storage_path(platform_name)
         original_browser_open = webbrowser.open
-        if current.startswith("linux"):
-            webbrowser.open = _open_linux_external_url
+        webbrowser.open = _trusted_external_opener(current, original_browser_open)
         try:
             webview.start(
                 gui=desktop_backend(platform_name),

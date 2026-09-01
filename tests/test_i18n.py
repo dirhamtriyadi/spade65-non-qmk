@@ -45,6 +45,20 @@ class TranslationKeyParser(HTMLParser):
                 self.keys.add(value)
 
 
+class ExternalLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: dict[str, dict[str, str | None]] = {}
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attributes = dict(attrs)
+        element_id = attributes.get("id")
+        if tag == "a" and element_id:
+            self.links[element_id] = attributes
+
+
 class I18nTests(unittest.TestCase):
     def test_locale_manifest_has_english_default_and_catalogs(self) -> None:
         manifest = load_json(LOCALES / "index.json")
@@ -198,6 +212,60 @@ class I18nTests(unittest.TestCase):
         )
         self.assertIn("document.documentElement.lang=currentLanguage", compact)
         self.assertIn("window.pywebview?.api?.save_json", compact)
+
+    def test_external_links_use_the_native_bridge_without_breaking_browser_mode(self) -> None:
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        compact = without_source_whitespace(javascript)
+        parser = ExternalLinkParser()
+        parser.feed(html)
+        link_ids = (
+            "serviceGuideLink",
+            "repoLink",
+            "updatesLink",
+            "releaseNotesLink",
+        )
+        self.assertEqual(set(parser.links), set(link_ids))
+        for link_id in link_ids:
+            attributes = parser.links[link_id]
+            self.assertEqual(attributes["target"], "_blank")
+            self.assertEqual(
+                set((attributes["rel"] or "").split()), {"noopener", "noreferrer"}
+            )
+        self.assertEqual(
+            parser.links["serviceGuideLink"]["href"],
+            "https://github.com/dirhamtriyadi/spade65-non-qmk/"
+            "blob/main/docs/host-features.md",
+        )
+        self.assertIn("externalLinks.bind(document,openExternalLink)", compact)
+        self.assertIn(
+            "$('serviceGuideLink').href=externalLinks.guideUrl(currentLanguage)",
+            compact,
+        )
+        self.assertLess(
+            html.index('<script src="/external-links.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+        self.assertLess(
+            html.index('<script src="/clipboard.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+
+    def test_service_copy_buttons_use_the_canonical_clipboard_bridge(self) -> None:
+        javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        clipboard = (WEB / "clipboard.js").read_text(encoding="utf-8")
+        compact = without_source_whitespace(javascript)
+        self.assertIn("awaitcopyText(field,commands)", compact)
+        self.assertIn(
+            "copyServiceCommands('prepare_commands','service.prepareCopied')",
+            compact,
+        )
+        self.assertIn(
+            "copyServiceCommands('activate_commands','service.activateCopied')",
+            compact,
+        )
+        self.assertIn("native.copy_service_commands(field)", clipboard)
+        self.assertNotIn("native.copy_text", clipboard)
 
     def test_keyboard_and_lighting_share_device_aware_layout_state(self) -> None:
         html = (WEB / "index.html").read_text(encoding="utf-8")

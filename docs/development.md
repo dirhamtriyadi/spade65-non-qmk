@@ -77,7 +77,15 @@ PyWebView closing handler cancels close only after the native tray adapter has
 attached; otherwise close exits normally. Explicit quit marks the controller as
 quitting before destroying the window. `gui --start-hidden` is used by the
 per-user login launcher, and a failed Linux tray attachment restores a visible
-window. Browser mode and `--no-browser` remain available through the CLI.
+window. External guide, repository, and release links use an exact allowlisted
+`DesktopApi` bridge to the host browser; browser mode retains ordinary anchor
+behavior. Service command copy buttons use the same native bridge pattern for
+the system clipboard and accept only the generated preparation or activation
+command enum. Linux marshals the write to the Qt GUI thread (with host
+compositor tools as a fallback), Windows invokes WinForms on its STA thread, and
+macOS schedules AppKit on the main queue. Browser mode retains Clipboard API and
+user-activated legacy fallbacks. Browser mode and `--no-browser` remain
+available through the CLI.
 
 The GUI layouts use the `ItemCss` coordinates for `SPADE65-01` through
 `SPADE65-04` found in `KeyBoardStyle.js`. The repository stores only the geometry
@@ -119,10 +127,16 @@ python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
 python tools/format_web.py --check
 node --check spade65/web/layout-state.js
+node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
+node --check spade65/web/external-links.js
+node --check spade65/web/clipboard.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
+node tests/key_events.test.js
 node tests/usage_picker.test.js
+node tests/external_links.test.js
+node tests/clipboard.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```

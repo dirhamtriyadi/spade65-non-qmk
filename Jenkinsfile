@@ -182,10 +182,14 @@ command -v "$python_bin"
 node --check spade65/web/layout-state.js
 node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
+node --check spade65/web/external-links.js
+node --check spade65/web/clipboard.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
 node tests/usage_picker.test.js
+node tests/external_links.test.js
+node tests/clipboard.test.js
 '''
                                 } else {
                                     bat '''@echo off
@@ -214,11 +218,19 @@ node --check spade65\web\layout-state.js
 node --check spade65\web\key-events.js
 node --check spade65\web\usage-picker.js
 if errorlevel 1 exit /b 1
+node --check spade65\web\external-links.js
+if errorlevel 1 exit /b 1
+node --check spade65\web\clipboard.js
+if errorlevel 1 exit /b 1
 node --check spade65\web\app.js
 if errorlevel 1 exit /b 1
 node tests\layout_state.test.js
 node tests\key_events.test.js
 node tests\usage_picker.test.js
+if errorlevel 1 exit /b 1
+node tests\external_links.test.js
+if errorlevel 1 exit /b 1
+node tests\clipboard.test.js
 if errorlevel 1 exit /b 1
 '''
                                 }

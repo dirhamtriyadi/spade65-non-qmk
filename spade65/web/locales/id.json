@@ -290,6 +290,7 @@
   "desktop.closeToTraySaved": "Preferensi system tray disimpan",
   "desktop.autoStartEnabledSaved": "Jalankan setelah login diaktifkan",
   "desktop.autoStartDisabledSaved": "Jalankan setelah login dinonaktifkan",
+  "desktop.externalOpenFailed": "Tautan tidak dapat dibuka di browser sistem Anda",
   "service.title": "Layanan latar belakang",
   "service.description": "Pertahankan asosiasi aplikasi dan pemutaran AP/timeline setelah GUI ditutup.",
   "service.platform.linux": "Linux",

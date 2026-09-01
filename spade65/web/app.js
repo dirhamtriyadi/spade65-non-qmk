@@ -3,6 +3,12 @@ const $ = id => document.getElementById(id);
 const layoutState = window.Spade65LayoutState;
 const keyEvents = window.Spade65KeyEvents;
 const usagePicker = window.Spade65UsagePicker;
+const externalLinks = window.Spade65ExternalLinks;
+const copyText = window.Spade65Clipboard.createCopier(
+  () => window.pywebview?.api,
+  () => navigator.clipboard,
+  document
+);
 let meta = null,
   profile = null,
   currentLayer = 'normal',
@@ -2264,13 +2270,21 @@ async function setDesktopIntegration(method, enabled, successKey) {
   }
 }
 
+const openExternalLink = externalLinks.createHandler(
+  () => window.pywebview?.api,
+  error => {
+    console.warn('Unable to open external link', error);
+    toast(t('desktop.externalOpenFailed'), true)
+  }
+);
+
 function renderServiceSetup() {
   if (!meta?.service_setup) return;
   const setup = meta.service_setup,
     platform = t(`service.platform.${setup.platform}`);
   $('servicePlatform').textContent = platform;
   $('servicePlatform').removeAttribute('data-i18n');
-  $('serviceGuideLink').href = `https://github.com/dirhamtriyadi/spade65-non-qmk/blob/main/docs/${currentLanguage==='id'?'id/':''}host-features.md`;
+  $('serviceGuideLink').href = externalLinks.guideUrl(currentLanguage);
   $('serviceReleaseWorkflow').hidden = !setup.packaged;
   if (setup.packaged) {
     $('servicePackageNote').textContent = t('service.packageNote', {
@@ -2292,17 +2306,7 @@ async function copyServiceCommands(field, successKey) {
   const commands = meta?.service_setup?.[field];
   if (!commands) return;
   try {
-    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(commands);
-    else {
-      const area = document.createElement('textarea');
-      area.value = commands;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.append(area);
-      area.select();
-      if (!document.execCommand('copy')) throw new Error('copy failed');
-      area.remove()
-    }
+    await copyText(field, commands);
     toast(t(successKey))
   } catch (error) {
     toast(t('service.copyFailed'), true)
@@ -2332,6 +2336,7 @@ window.addEventListener('blur', () => {
 });
 $('copyServicePrepareBtn').onclick = () => copyServiceCommands('prepare_commands', 'service.prepareCopied');
 $('copyServiceActivateBtn').onclick = () => copyServiceCommands('activate_commands', 'service.activateCopied');
+externalLinks.bind(document, openExternalLink);
 $('closeToTray').onchange = event => setDesktopIntegration('set_close_to_tray', event.target.checked, 'desktop.closeToTraySaved');
 $('autoStartGui').onchange = event => setDesktopIntegration('set_auto_start', event.target.checked, event.target.checked ? 'desktop.autoStartEnabledSaved' : 'desktop.autoStartDisabledSaved');
 document.querySelectorAll('#layerTabs button').forEach(button => button.onclick = () => {

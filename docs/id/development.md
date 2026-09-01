@@ -76,8 +76,16 @@ closing PyWebView sinkron hanya membatalkan close setelah adapter tray native
 berhasil terpasang; bila tidak, close keluar secara normal. Quit eksplisit
 menandai controller sebagai quitting sebelum menghancurkan jendela.
 `gui --start-hidden` dipakai launcher login per pengguna, dan kegagalan tray
-Linux memulihkan jendela yang terlihat. Mode browser dan `--no-browser` tetap
-tersedia melalui CLI.
+Linux memulihkan jendela yang terlihat. Tautan panduan, repository, dan release
+eksternal memakai bridge `DesktopApi` dengan allowlist eksak menuju browser
+host; mode browser mempertahankan perilaku anchor biasa. Tombol salin perintah
+service memakai pola bridge native yang sama untuk clipboard sistem dan hanya
+menerima enum perintah preparation atau activation yang dihasilkan aplikasi.
+Linux memindahkan write ke GUI thread Qt (dengan tool compositor host sebagai
+fallback), Windows memanggil WinForms pada thread STA, dan macOS menjadwalkan
+AppKit pada main queue. Mode browser mempertahankan fallback Clipboard API dan
+jalur legacy yang dipicu pengguna. Mode browser dan `--no-browser` tetap tersedia
+melalui CLI.
 
 Layout GUI memakai koordinat `ItemCss` untuk `SPADE65-01` sampai `SPADE65-04`
 yang ditemukan di `KeyBoardStyle.js`. Repository hanya menyimpan geometri dan
@@ -120,10 +128,16 @@ python -m unittest discover -v
 python -m compileall -q spade65 spade65ctl.py tests tools
 python tools/format_web.py --check
 node --check spade65/web/layout-state.js
+node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
+node --check spade65/web/external-links.js
+node --check spade65/web/clipboard.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
+node tests/key_events.test.js
 node tests/usage_picker.test.js
+node tests/external_links.test.js
+node tests/clipboard.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```

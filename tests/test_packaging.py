@@ -207,9 +207,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("node --check spade65/web/layout-state.js", workflow)
         self.assertIn("node --check spade65/web/key-events.js", workflow)
         self.assertIn("node --check spade65/web/usage-picker.js", workflow)
+        self.assertIn("node --check spade65/web/external-links.js", workflow)
+        self.assertIn("node --check spade65/web/clipboard.js", workflow)
         self.assertIn("node tests/layout_state.test.js", workflow)
         self.assertIn("node tests/key_events.test.js", workflow)
         self.assertIn("node tests/usage_picker.test.js", workflow)
+        self.assertIn("node tests/external_links.test.js", workflow)
+        self.assertIn("node tests/clipboard.test.js", workflow)
         self.assertIn("group: release-${{", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertEqual(workflow.count("retention-days: 1"), 3)
@@ -266,6 +270,26 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Unexpected release remote", pipeline)
         self.assertIn("Draft contains unexpected assets", pipeline)
         self.assertIn("test \"$asset_count\" -eq 3", pipeline)
+        self.assertIn("node --check spade65/web/external-links.js", pipeline)
+        self.assertIn(r"node --check spade65\web\external-links.js", pipeline)
+        self.assertIn("node --check spade65/web/clipboard.js", pipeline)
+        self.assertIn(r"node --check spade65\web\clipboard.js", pipeline)
+        self.assertIn("node tests/external_links.test.js", pipeline)
+        self.assertIn(r"node tests\external_links.test.js", pipeline)
+        self.assertIn("node tests/clipboard.test.js", pipeline)
+        self.assertIn(r"node tests\clipboard.test.js", pipeline)
+
+        test_workflow = (
+            ROOT / ".github" / "workflows" / "test.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "node --check spade65/web/external-links.js", test_workflow
+        )
+        self.assertIn("node tests/external_links.test.js", test_workflow)
+        self.assertIn(
+            "node --check spade65/web/clipboard.js", test_workflow
+        )
+        self.assertIn("node tests/clipboard.test.js", test_workflow)
 
     def test_linux_packager_pins_tool_and_embedded_runtime(self):
         script = (ROOT / "packaging" / "build_linux.sh").read_text(
@@ -616,6 +640,11 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertNotIn("structuredClone", javascript)
         self.assertNotIn("Object.hasOwn(", javascript)
+        launcher = (ROOT / "packaging" / "launcher.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"external-links.js"', launcher)
+        self.assertIn('"clipboard.js"', launcher)
 
     def test_windows_package_contains_console_cli_and_archive_smoke(self):
         spec = (ROOT / "packaging" / "spade65.spec").read_text(encoding="utf-8")

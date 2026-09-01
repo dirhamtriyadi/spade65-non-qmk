@@ -475,6 +475,8 @@ class GuiHandler(BaseHTTPRequestHandler):
             "layout-state.js",
             "key-events.js",
             "usage-picker.js",
+            "external-links.js",
+            "clipboard.js",
             "app.js",
         } and not re.fullmatch(r"locales/[A-Za-z0-9_-]+\.json", asset):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -494,6 +496,8 @@ class GuiHandler(BaseHTTPRequestHandler):
             "layout-state.js": "text/javascript; charset=utf-8",
             "key-events.js": "text/javascript; charset=utf-8",
             "usage-picker.js": "text/javascript; charset=utf-8",
+            "external-links.js": "text/javascript; charset=utf-8",
+            "clipboard.js": "text/javascript; charset=utf-8",
             "app.js": "text/javascript; charset=utf-8",
         }.get(asset, "application/json; charset=utf-8")
         self.send_response(HTTPStatus.OK)

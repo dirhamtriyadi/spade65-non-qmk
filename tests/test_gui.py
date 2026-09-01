@@ -115,6 +115,7 @@ class GuiTests(unittest.TestCase):
         )
         self.assertIn("key-events.js", referenced)
         self.assertIn("usage-picker.js", referenced)
+        self.assertIn("clipboard.js", referenced)
 
         try:
             server, url = create_gui_server(host="127.0.0.1", port=0)

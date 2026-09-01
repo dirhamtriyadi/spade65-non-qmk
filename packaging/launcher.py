@@ -208,7 +208,13 @@ def smoke_test() -> int:
             raise RuntimeError(f"empty packaged WebView resource: {relative_path}")
     web_root = files("spade65.web")
     for relative_path in (
-        "index.html", "layout-state.js", "key-events.js", "app.js",
+        "index.html",
+        "layout-state.js",
+        "key-events.js",
+        "usage-picker.js",
+        "external-links.js",
+        "clipboard.js",
+        "app.js",
     ):
         resource = web_root.joinpath(*relative_path.split("/"))
         contents = resource.read_bytes()
