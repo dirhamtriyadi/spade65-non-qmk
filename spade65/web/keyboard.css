@@ -32,7 +32,7 @@
   display: block;
   width: min(100%, 1050px);
   aspect-ratio: 757 / 236;
-  margin: 0 auto 18px;
+  margin: 0 auto;
   padding: 0;
   overflow: hidden;
   background: linear-gradient(145deg, #d8d0be, #9f988b);
@@ -116,6 +116,11 @@
   border-color: #8fbdb1;
 }
 
+.keyboard .key:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .keyboard .key.unobservable,
 .keyboard .key.host-reserved {
   opacity: 0.55;
@@ -136,6 +141,17 @@
 .keyboard .key.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent), inset 0 -3px rgb(46 43 39 / 38%);
+}
+
+.keyboard .key.assigned::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
 }
 
 .keyboard .key .swatch {

@@ -101,3 +101,13 @@
     margin-top: 12px;
   }
 }
+
+@media (max-width: 640px) {
+  .timeline-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-frame > button {
+    width: 100%;
+  }
+}

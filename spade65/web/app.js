@@ -67,30 +67,47 @@ let languageManifest = {
 const catalogs = {};
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const cloneJson = value => JSON.parse(JSON.stringify(value));
-const subtitles = {
-  device: 'subtitle.device',
-  keymap: 'subtitle.keymap',
-  lighting: 'subtitle.lighting',
-  macros: 'subtitle.macros',
-  settings: 'subtitle.settings',
-  diagnostics: 'subtitle.diagnostics',
-  about: 'subtitle.about'
-};
-const pageLabels = {
-  device: 'nav.device',
-  keymap: 'nav.keyboard',
-  lighting: 'nav.lighting',
-  macros: 'nav.macros',
-  settings: 'nav.settings',
-  diagnostics: 'nav.diagnostics',
-  about: 'nav.about'
-};
+const PAGE_HEADERS = Object.freeze({
+  device: {
+    title: 'nav.device',
+    subtitle: 'subtitle.device'
+  },
+  keymap: {
+    title: 'nav.keyboard',
+    subtitle: 'subtitle.keymap'
+  },
+  tester: {
+    title: 'nav.tester',
+    subtitle: 'subtitle.tester'
+  },
+  lighting: {
+    title: 'nav.lighting',
+    subtitle: 'subtitle.lighting'
+  },
+  macros: {
+    title: 'nav.macros',
+    subtitle: 'subtitle.macros'
+  },
+  settings: {
+    title: 'nav.settings',
+    subtitle: 'subtitle.settings'
+  },
+  diagnostics: {
+    title: 'nav.diagnostics',
+    subtitle: 'subtitle.diagnostics'
+  },
+  about: {
+    title: 'nav.about',
+    subtitle: 'subtitle.about'
+  }
+});
 
 function interpolate(value, variables = {}) {
   return String(value).replace(/\{([A-Za-z0-9_]+)\}/g, (match, key) => hasOwn(variables, key) ? String(variables[key]) : match)
 }
 
 function t(key, variables = {}) {
+  if (typeof key !== 'string' || !key) return '';
   return interpolate(catalogs[currentLanguage]?.[key] ?? catalogs[DEFAULT_LANGUAGE]?.[key] ?? key, variables)
 }
 async function fetchJson(path) {
@@ -128,10 +145,11 @@ function applyTranslations(root = document) {
 }
 
 function updatePageHeader(page) {
-  $('pageTitle').dataset.i18n = pageLabels[page];
-  $('pageSubtitle').dataset.i18n = subtitles[page];
-  $('pageTitle').textContent = t(pageLabels[page]);
-  $('pageSubtitle').textContent = t(subtitles[page])
+  const header = PAGE_HEADERS[page] || PAGE_HEADERS.device;
+  $('pageTitle').dataset.i18n = header.title;
+  $('pageSubtitle').dataset.i18n = header.subtitle;
+  $('pageTitle').textContent = t(header.title);
+  $('pageSubtitle').textContent = t(header.subtitle)
 }
 
 function renderLanguageOptions() {
@@ -171,6 +189,7 @@ function renderLocalizedDynamic() {
   renderAbout();
   renderDesktopIntegration();
   renderServiceSetup();
+  renderTester();
   if (!meta || !profile) return;
   renderSavedProfiles($('savedProfile').value);
   renderEffects();
@@ -1038,6 +1057,7 @@ function usageSearchKeydown(event) {
 }
 
 function keyLabel(key) {
+  if (typeof key !== 'string' || !key) return '—';
   return titles[key] || key.replace(/^n(?=\d)/, '')
 }
 
@@ -1134,6 +1154,8 @@ function renderTester() {
   const testable = testerButtons(),
     seen = testable.filter(key => testerSeen.has(key)),
     remaining = testable.filter(key => !testerSeen.has(key));
+  const selectedLayout = $('layoutVariant')?.selectedOptions?.[0];
+  $('testerLayoutBadge').textContent = selectedLayout?.textContent || layoutVariant;
   $('testerCount').textContent = `${seen.length} / ${testable.length}`;
   $('testerRemaining').textContent = remaining.length ?
     remaining.map(keyLabel).join(', ') :
@@ -1550,10 +1572,16 @@ function renderEvent(event, index) {
   delay.min = 0;
   delay.max = 32767;
   delay.value = event.delay_ms;
+  delay.setAttribute('aria-label', t('macro.delayAria', {
+    number: index + 1
+  }));
   delay.disabled = recordingMacro;
   delay.onchange = () => event.delay_ms = Number(delay.value);
   const usage = document.createElement('input');
   usage.value = event.usage;
+  usage.setAttribute('aria-label', t('macro.functionAria', {
+    number: index + 1
+  }));
   usage.disabled = recordingMacro;
   usage.setAttribute('list', 'macroUsageList');
   usage.onchange = () => event.usage = usage.value;
@@ -1568,11 +1596,17 @@ function renderEvent(event, index) {
     state.append(option)
   }
   state.value = String(event.pressed);
+  state.setAttribute('aria-label', t('macro.stateAria', {
+    number: index + 1
+  }));
   state.disabled = recordingMacro;
   state.onchange = () => event.pressed = state.value === 'true';
   const del = document.createElement('button');
   del.textContent = '×';
   del.className = 'danger';
+  del.setAttribute('aria-label', t('macro.removeEventAria', {
+    number: index + 1
+  }));
   del.disabled = recordingMacro;
   del.onclick = () => {
     profile.macros[activeMacro].events.splice(index, 1);
@@ -2136,10 +2170,16 @@ function renderTimeline() {
     duration.max = 60000;
     duration.value = frame.duration_ms || 100;
     duration.title = t('timeline.durationTitle');
+    duration.setAttribute('aria-label', t('timeline.durationAria', {
+      number: index + 1
+    }));
     duration.onchange = () => frame.duration_ms = Math.max(20, Math.min(60000, Number(duration.value)));
     const del = document.createElement('button');
     del.textContent = '×';
     del.className = 'danger';
+    del.setAttribute('aria-label', t('timeline.removeFrameAria', {
+      number: index + 1
+    }));
     del.onclick = () => {
       data.frames.splice(index, 1);
       renderTimeline()
@@ -2313,18 +2353,31 @@ async function copyServiceCommands(field, successKey) {
   }
 }
 
-document.querySelectorAll('#nav button').forEach(button => button.onclick = () => {
-  if (recordingMacro && button.dataset.page !== 'macros') stopMacroRecording();
-  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('active', x === button));
-  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
-  $(`page-${button.dataset.page}`).classList.add('active');
-  updatePageHeader(button.dataset.page);
-  if (button.dataset.page === 'tester') {
+function activatePage(page, updateHash = true) {
+  if (!hasOwn(PAGE_HEADERS, page)) return false;
+  const header = PAGE_HEADERS[page],
+    button = document.querySelector(`#nav button[data-page="${page}"]`),
+    section = $(`page-${page}`);
+  if (!header || !button || !section) return false;
+  if (recordingMacro && page !== 'macros') stopMacroRecording();
+  document.querySelectorAll('#nav button').forEach(item => {
+    const active = item === button;
+    item.classList.toggle('active', active);
+    if (active) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current')
+  });
+  document.querySelectorAll('.page').forEach(item => item.classList.toggle('active', item === section));
+  updatePageHeader(page);
+  if (page === 'tester') {
     // Leaving a key held while switching pages would strand it lit.
     testerPressed.clear();
     renderTester()
   }
-});
+  if (updateHash && location.hash !== `#${page}`) history.replaceState(null, '', `#${page}`);
+  return true
+}
+document.querySelectorAll('#nav button').forEach(button => button.onclick = () => activatePage(button.dataset.page));
+window.addEventListener('hashchange', () => activatePage(location.hash.slice(1), false));
 $('testerResetBtn').onclick = resetTester;
 document.addEventListener('keydown', testerKeyEvent, true);
 document.addEventListener('keyup', testerKeyEvent, true);
@@ -2512,7 +2565,7 @@ async function initialize() {
   await refreshDesktopIntegration();
   await refresh();
   const initialPage = location.hash.slice(1);
-  if (initialPage && subtitles[initialPage]) document.querySelector(`#nav button[data-page="${initialPage}"]`).click();
+  activatePage(hasOwn(PAGE_HEADERS, initialPage) ? initialPage : 'device', false);
   setInterval(pollDeviceChanges, 2000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && recordingMacro) stopMacroRecording();

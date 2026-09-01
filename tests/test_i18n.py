@@ -18,6 +18,13 @@ I18N_ATTRIBUTES = {
 }
 VARIABLE = re.compile(r"\{([A-Za-z0-9_]+)\}")
 LITERAL_T_CALL = re.compile(r"(?<![A-Za-z0-9_$])t\(\s*(['\"])([^'\"]+)\1")
+PAGE_HEADER_ENTRY = re.compile(
+    r"^\s{2}([a-z][a-z0-9-]*): \{\s*\n"
+    r"\s+title: '([^']+)',\s*\n"
+    r"\s+subtitle: '([^']+)'\s*\n"
+    r"\s+\}",
+    re.MULTILINE,
+)
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -57,6 +64,27 @@ class ExternalLinkParser(HTMLParser):
         element_id = attributes.get("id")
         if tag == "a" and element_id:
             self.links[element_id] = attributes
+
+
+class PageRegistryParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.nav_pages: set[str] = set()
+        self.section_pages: set[str] = set()
+        self.current_pages: set[str] = set()
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attributes = dict(attrs)
+        page = attributes.get("data-page")
+        if tag == "button" and page:
+            self.nav_pages.add(page)
+            if attributes.get("aria-current") == "page":
+                self.current_pages.add(page)
+        section_id = attributes.get("id", "")
+        if tag == "section" and section_id.startswith("page-"):
+            self.section_pages.add(section_id.removeprefix("page-"))
 
 
 class I18nTests(unittest.TestCase):
@@ -173,6 +201,7 @@ class I18nTests(unittest.TestCase):
             *(f"subtitle.{name}" for name in (
                 "device",
                 "keymap",
+                "tester",
                 "lighting",
                 "macros",
                 "settings",
@@ -200,6 +229,63 @@ class I18nTests(unittest.TestCase):
             )),
         }
         self.assertLessEqual(dynamic_keys, set(english))
+
+    def test_navigation_pages_have_complete_safe_header_metadata(self) -> None:
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        parser = PageRegistryParser()
+        parser.feed(html)
+        headers = {
+            page: (title, subtitle)
+            for page, title, subtitle in PAGE_HEADER_ENTRY.findall(javascript)
+        }
+
+        self.assertEqual(parser.nav_pages, parser.section_pages)
+        self.assertEqual(parser.nav_pages, set(headers))
+        self.assertEqual(parser.current_pages, {"device"})
+        self.assertIn("tester", headers)
+        self.assertEqual(headers["tester"], ("nav.tester", "subtitle.tester"))
+
+        manifest = load_json(LOCALES / "index.json")
+        for language in manifest["languages"]:
+            catalog = load_json(LOCALES / f"{language['code']}.json")
+            for page, keys in headers.items():
+                for key in keys:
+                    with self.subTest(language=language["code"], page=page, key=key):
+                        self.assertIn(key, catalog)
+                        self.assertTrue(catalog[key].strip())
+
+        compact = without_source_whitespace(javascript)
+        self.assertIn("if(typeofkey!=='string'||!key)return''", compact)
+        self.assertIn("hasOwn(PAGE_HEADERS,initialPage)", compact)
+        self.assertNotIn("constsubtitles=", compact)
+        self.assertNotIn("constpageLabels=", compact)
+
+    def test_shared_ui_patterns_cover_page_controls_and_responsive_content(self) -> None:
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        app_css = (WEB / "app.css").read_text(encoding="utf-8")
+        keyboard_css = (WEB / "keyboard.css").read_text(encoding="utf-8")
+
+        for marker in (
+            'class="app-header"',
+            'class="profile-apply-bar"',
+            'class="tester-legend"',
+            'class="input-with-unit"',
+            'class="table-scroll"',
+        ):
+            self.assertIn(marker, html)
+        for selector in (
+            ".app-header",
+            ".page.active",
+            ".switch-line",
+            ".tester-readout",
+            ".table-scroll",
+            "@media(max-width:640px)",
+        ):
+            self.assertIn(selector, app_css)
+        self.assertNotRegex(app_css, r"(?m)^\.keyboard \{")
+        self.assertIn(".keyboard .key:disabled", keyboard_css)
+        self.assertIn(".keyboard .key.assigned::after", keyboard_css)
 
     def test_i18n_runtime_keeps_english_fallback_and_persists_choice(self) -> None:
         javascript = (WEB / "app.js").read_text(encoding="utf-8")
