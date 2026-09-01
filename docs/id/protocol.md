@@ -18,7 +18,12 @@ melalui input fisik, lalu dipulihkan), dan reset konfigurasi sejak itu berhasil
 dijalankan pada unit kabel yang sama. Timer dongle tetap belum diuji karena
 `0603:0356` belum pernah muncul pada hardware ini; receiver fisik 2,4 GHz
 terdeteksi sebagai `0603:0352` dan descriptor-nya tidak mengiklankan satu pun
-feature report, sehingga sama sekali tidak dapat dikonfigurasi. Firmware
+feature report, sehingga sama sekali tidak dapat dikonfigurasi. Report keymap,
+macro, lighting, dan debounce secara individual memiliki bukti
+penerimaan fisik, tetapi pemeliharaan visual lighting setelah transaksi profil
+bergaya aplikasi resmi yang baru dilengkapi belum dikonfirmasi. Jumlah byte
+report dan pengujian urutan otomatis tidak dianggap sebagai bukti visual
+tersebut. Firmware
 update tidak diimplementasikan karena dapat menyebabkan brick dan tidak ada
 recovery procedure yang terverifikasi.
 
@@ -86,6 +91,15 @@ Windows/macOS membaca report descriptor melalui HIDAPI lalu menjalankan parser
 yang sama dengan Linux. Jika descriptor tidak dapat dibaca, collection boleh
 ditampilkan oleh `probe`, tetapi tidak memiliki report shape sehingga semua write
 ditolak. Tidak ada fallback yang menulis berdasarkan path atau VID/PID saja.
+
+Apply keymap memerlukan kedua bentuk feature report. Jika satu collection OS
+mengiklankan keduanya, collection tersebut dipakai ulang. Jika terpisah,
+companion report pendek harus memiliki VID/PID dan identitas serial/unique yang
+sama dengan collection utama terpilih, termasuk ketika kedua identitas kosong.
+Companion yang tidak ada atau lebih dari satu kemungkinan adalah error sebelum
+report keymap pertama dikirim. Kedua handle dibuka sebelum write pertama;
+handle utama tetap terbuka untuk seluruh report utama dan report pendek memakai
+handle terbuka tersendiri.
 
 ## Report utama ID 0x07
 
@@ -160,6 +174,38 @@ Entry macro memakai tiga byte: delay high/status key-down, delay low, dan HID ke
 Implementasi menerima maksimal 84 event per macro agar header repeat dua byte dan
 seluruh triplet tetap berada dalam payload 256 byte. Maksimal sepuluh macro dapat
 direferensikan oleh keymap sebagai usage `f0` sampai `f9`.
+
+### Transaksi apply profil / `SetKeyMatrix`
+
+Analisis statis backend original menunjukkan bahwa apply keymap adalah transaksi
+berurutan melalui handle feature report utama dan pendek:
+
+| Urutan | Report | Jeda setelah berhasil |
+|---:|---|---:|
+| 1 | `0x07` utama, opcode `0x03`: ketiga layer keymap | 100 ms |
+| 2 | `0x07` utama, opcode `0x05`: setiap macro yang benar-benar direferensikan keymap | 200 ms per macro |
+| 3 | `0x07` utama, opcode `0x02`: efek lighting saat ini dari cache host | 100 ms |
+| 4 | `0x07` utama, opcode `0x07`: palet per tombol persis, hanya untuk lighting custom | 50 ms |
+| 5 | `0x08` pendek, opcode `0x09`: debounce profil | 10 ms |
+
+Spade65 mengikuti urutan ini untuk setiap operasi profil yang menyertakan
+cakupan `keymap`. GUI memasok lighting yang sedang dipilih dan debounce yang
+ditampilkan; apply dari CLI dan background service memakai nilai yang tersimpan
+di profil. Seluruh report dan kedua descriptor divalidasi sebelum opcode `0x03`
+dikirim. Kegagalan report utama tetap memiliki recovery lighting best-effort.
+Kegagalan report pendek terakhir ditampilkan sebagai transaksi parsial karena
+keymap dan lighting mungkin sudah berhasil; lighting tersimpan sebelumnya
+dikirim ulang secara best-effort sebelum error dikembalikan.
+
+Backend original menginisialisasi profil baru dengan debounce 1 ms. Spade65
+menyimpan `settings.debounce_ms` per profil dan memakai 5 ms untuk template
+sendiri serta profil yang dibuat sebelum field tersebut ada, demi mempertahankan
+perilaku proyek sebelumnya. Fallback kompatibilitas ini tidak boleh disebut
+sebagai default profil baru vendor.
+
+`SetLightOffToDevice` kembali tanpa mengirim pada state kabel. Karena itu
+transaksi keymap di atas berakhir setelah debounce dan tidak pernah menambahkan
+timer light-off/hibernate pada mode kabel.
 
 ### Custom/per-key RGB — opcode 0x07
 

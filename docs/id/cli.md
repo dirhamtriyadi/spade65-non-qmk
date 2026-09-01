@@ -282,7 +282,10 @@ berkabel yang tersedia.
 
 ### Debounce
 
-Nilai default vendor adalah 5 ms:
+Perintah menerima 1–255 ms. Profil baru pada aplikasi original dimulai dari 1
+ms. Template profil Spade65 dan profil lama tanpa field
+`settings.debounce_ms` memakai 5 ms demi kompatibilitas dengan rilis Spade65
+sebelumnya serta nilai yang sudah dijalankan pada keyboard yang tersedia:
 
 ```bash
 spade65ctl debounce 5 --dry-run
@@ -302,6 +305,26 @@ spade65ctl profile validate spade65-profile.json
 spade65ctl profile apply spade65-profile.json --dry-run
 ```
 
+Profil baru memuat snapshot pencahayaan default vendor: Aliran Neon,
+kecerahan 4, kecepatan 5, indeks warna 0, dan multiwarna aktif. Snapshot ini
+merupakan state di host, bukan nilai yang dibaca dari keyboard. GUI baru
+menggantinya setelah transaksi efek bawaan, pencahayaan per tombol, atau
+keymap-dengan-lighting berhasil, sehingga setiap profil mengingat pencahayaan
+terakhir yang berhasil dikirim aplikasi ini untuk profil tersebut. Profil lama
+tanpa objek `lighting` memakai default vendor yang sama. Tabel `colors` tingkat
+atas tetap menjadi draft editable dan tidak diam-diam dianggap sebagai snapshot
+custom aktif.
+Template juga menyimpan `settings.debounce_ms: 5`. Nilai ini adalah nilai profil
+kompatibel-mundur milik proyek, bukan default profil baru aplikasi original
+sebesar 1 ms.
+
+Untuk efek custom, `lighting.colors` merupakan salinan terpisah dari palet
+persis yang terakhir berhasil diterima keyboard. Objek `colors` tingkat atas
+adalah palet berikutnya yang sedang diedit. Di GUI, mengedit palet tersebut
+secara eksplisit memilih lighting custom untuk transaksi per tombol atau
+keymap-dengan-lighting berikutnya; transaksi yang gagal tetap tidak mengubah
+snapshot terakhir yang berhasil.
+
 Objek `layers` berisi `normal`, `fn1`, dan `fn2`. Assignment dapat memakai nama
 HID seperti `"b"`, usage numerik seperti `5`, usage dengan modifier seperti
 `{"usage":"b","modifiers":2}`, atau referensi macro seperti `{"macro":0}`.
@@ -319,19 +342,30 @@ Macro berisi event key-down/key-up beserta delay-nya:
 }
 ```
 
-Apply profil menimpa ketiga layer keymap, menulis setiap macro yang disertakan
-dalam profil tersebut, dan — bila profil memuat warna — memindahkan keyboard ke
-efek custom lalu menulis tabel warna per tombol. Karena itu, perintah ini
-membutuhkan dua acknowledgement eksplisit:
+Apply profil tanpa `--only` mengikuti urutan transaksi aplikasi resmi: menimpa
+ketiga layer keymap, menulis hanya macro yang direferensikan keymap tersebut,
+memulihkan snapshot `lighting` yang tersimpan, lalu menulis nilai debounce yang
+tersimpan pada profil. Operasi ini tidak otomatis mengaktifkan tabel `colors`
+tingkat atas yang sedang diedit. Perintah CLI ini membutuhkan dua
+acknowledgement eksplisit:
 
 ```bash
 spade65ctl profile apply spade65-profile.json \
   --confirm --i-understand-profile-overwrite
 ```
 
-Setiap tombol yang tidak disebut profil disimpan sebagai hitam, sehingga apply
-penuh menggantikan efek bawaan apa pun yang sedang berjalan. Gunakan `--only`
-untuk menulis bagian yang berubah saja:
+Firmware yang diuji menghapus pencahayaan aktif saat menerima penulisan keymap.
+Aplikasi resmi menanganinya dengan mengirim ulang pencahayaan dari cache setelah
+urutan keymap dan macro yang direferensikan, lalu menulis debounce melalui handle
+report pendek; aplikasi tersebut tidak membaca kembali efek aktif dari keyboard.
+Spade65 mengikuti urutan tersebut. Profil lama dari masa sebelum snapshot
+mengirim ulang default vendor Aliran Neon di atas; tabel `colors` tingkat atas
+tetap menjadi draft sampai lighting custom/per tombol dipilih secara eksplisit
+dan berhasil ditulis. Karena tidak ada readback pencahayaan hardware yang
+terverifikasi, fallback ini dapat mengganti state yang diubah di luar Spade65,
+termasuk perubahan melalui shortcut keyboard.
+
+Gunakan `--only` untuk menulis bagian yang berubah saja:
 
 ```bash
 spade65ctl profile apply spade65-profile.json --only keymap \
@@ -340,14 +374,39 @@ spade65ctl profile apply spade65-profile.json --only keymap \
 
 | Cakupan | Report yang dikirim |
 | --- | --- |
-| `keymap` | opcode `0x03`, ketiga layer |
-| `macros` | opcode `0x05`, satu per macro |
-| `colors` | opcode `0x02` efek custom, lalu opcode `0x07` warna per tombol |
+| `keymap` | Opcode utama `0x03` untuk ketiga layer, macro utama opcode `0x05` yang direferensikan bila `macros` juga dipilih, lighting saat ini/tersimpan opcode utama `0x02`, palet custom persis opcode utama `0x07` bila perlu, lalu opcode pendek `0x09` berisi `settings.debounce_ms` |
+| `macros` | Opcode utama `0x05`; seluruh definisi untuk apply macro saja, tetapi hanya definisi yang direferensikan keymap bila dikirim bersama `keymap` |
+| `colors` | lighting opcode `0x02` yang tersimpan dan, hanya jika lighting tersimpan adalah custom, palet persis opcode `0x07` |
 
-`--only` bisa diulang, dan tanpa opsi itu perilakunya tetap menerapkan seluruh
-profil. Keymap yang mengikat tombol ke macro tidak bisa diterapkan tanpa
-cakupan `macros`: keyboard tidak menyediakan readback, sehingga tombol tersebut
-akan menjalankan macro lama yang masih tersimpan di perangkat.
+Jeda resmi dipertahankan: 100 ms setelah `0x03`, 200 ms setelah setiap `0x05`,
+100 ms setelah `0x02`, 50 ms setelah `0x07` opsional, dan 10 ms setelah `0x09`
+pendek terakhir. Sebelum mengirim `0x03`, Spade65 menyelesaikan dan memvalidasi
+collection utama `ff02:0001`/report `0x07` sepanjang 620 byte serta companion
+pendek `ff03:0001`/report `0x08` sepanjang 8 byte. Collection gabungan dipakai
+ulang bila OS menampilkannya; jika terpisah, companion harus memiliki VID/PID
+yang sama dan identitas perangkat yang cocok tanpa ambigu. Companion yang tidak
+ada atau ambigu menyebabkan transaksi ditolak sebelum keymap ditulis.
+
+Report lighting dan debounce setelah `keymap` adalah bagian wajib transaksi ini
+dan tidak berarti cakupan `colors` ataupun aksi debounce mandiri dipilih. Nama
+cakupan `colors` dipertahankan demi kompatibilitas, tetapi artinya adalah
+lighting aktif yang tersimpan di profil dan tidak mengaktifkan draft warna
+tingkat atas pada profil modern. Karena itu, memilih semua cakupan berakhir
+dengan state lighting dan debounce yang sama seperti apply keymap saja. Report
+timer light-off/hibernate tidak ditambahkan pada mode kabel, sama seperti
+aplikasi original.
+
+`--only` bisa diulang. Untuk sengaja mengaktifkan tabel warna tingkat atas dari
+CLI, gunakan `per-key-rgb`; di GUI gunakan **Apply RGB per tombol tersimpan**.
+Setelah penulisan GUI berhasil, palet persis tersebut menjadi snapshot custom
+yang tersimpan. GUI juga mengirim lighting yang sedang dipilih di editornya
+serta nilai debounce yang ditampilkan untuk profil yang sama setiap kali keymap
+diterapkan. Kedua snapshot baru disimpan setelah seluruh transaksi, termasuk
+report debounce pendek, berhasil. Tanpa `--only`, CLI memakai nilai yang
+tersimpan pada profil.
+Keymap yang mengikat tombol ke macro tidak bisa diterapkan tanpa cakupan
+`macros`: keyboard tidak menyediakan readback, sehingga tombol tersebut akan
+menjalankan macro lama yang masih tersimpan di perangkat.
 
 Simpan profil yang tervalidasi dan backup library GUI sebelum menerapkannya.
 Keymap tiga layer dan macro sementara telah diterapkan pada keyboard berkabel
@@ -369,14 +428,17 @@ real-time:
 
 ```bash
 spade65ctl per-key-rgb spade65-profile.json --dry-run
-spade65ctl per-key-rgb spade65-profile.json --confirm
+spade65ctl per-key-rgb spade65-profile.json --brightness 4 --speed 5 \
+  --color-index 0 --multicolor --confirm
 spade65ctl stream-rgb spade65-profile.json --dry-run
 spade65ctl stream-rgb spade65-profile.json --confirm
 ```
 
 Tombol yang tidak ada dalam `colors` bernilai hitam/mati dalam frame yang
 dihasilkan. Transport per-key dan streaming telah divalidasi melalui USB
-berkabel. `stream-rgb` mengirim satu frame yang digerakkan host; efek AP
+berkabel. `per-key-rgb` menerima pengaturan brightness, speed, color-index, dan
+multicolor yang sama seperti lighting bawaan. `stream-rgb` mengirim satu frame
+yang digerakkan host; efek AP
 kontinu dan timeline kustom membutuhkan GUI atau service tetap aktif dan tidak
 disimpan sebagai animasi firmware yang berjalan mandiri.
 

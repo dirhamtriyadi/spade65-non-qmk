@@ -13,6 +13,7 @@ from .transport import (
     Device,
     choose_device,
     discover_devices,
+    feature_report_session,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -23,6 +24,7 @@ from .keymap import (
     default_keymap_report,
     export_default,
     load_profile,
+    profile_lighting_recovery_reports,
     profile_reports,
     profile_template,
 )
@@ -50,6 +52,7 @@ from .protocol import (
     streaming_activation_report,
     streaming_rgb_reports,
 )
+from .profile_apply import choose_profile_devices, send_profile_transaction
 from .settings import GUI_HOST, GUI_PORT
 
 
@@ -249,37 +252,108 @@ def _main_device(args: argparse.Namespace) -> Device:
     return device
 
 
-def _send_main_reports(device: Device, reports: list[bytes] | tuple[bytes, ...]) -> None:
+def _main_report_delay(report: bytes) -> float:
+    return 0.2 if len(report) > 1 and report[1] == 0x05 else 0.1
+
+
+def _recover_main_lighting(
+    device: Device, reports: list[bytes] | tuple[bytes, ...]
+) -> None:
     for index, report in enumerate(reports):
         result = send_feature_report(device, report)
         if result != len(report):
             raise RuntimeError(
-                f"short feature write on report {index + 1}/{len(reports)} "
+                f"short recovery write on report {index + 1}/{len(reports)} "
                 f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
                 f"{result}/{len(report)}"
             )
         if index + 1 < len(reports):
-            time.sleep(0.1)
+            time.sleep(_main_report_delay(report))
+
+
+def _send_main_reports(
+    device: Device,
+    reports: list[bytes] | tuple[bytes, ...],
+    *,
+    recovery_reports: list[bytes] | tuple[bytes, ...] = (),
+) -> None:
+    for index, report in enumerate(reports):
+        try:
+            result = send_feature_report(device, report)
+            if result != len(report):
+                raise RuntimeError(
+                    f"short feature write on report {index + 1}/{len(reports)} "
+                    f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                    f"{result}/{len(report)}"
+                )
+        except Exception as error:
+            if not recovery_reports:
+                raise
+            try:
+                _recover_main_lighting(device, recovery_reports)
+            except Exception as recovery_error:
+                raise RuntimeError(
+                    f"{error}; cached lighting recovery also failed: "
+                    f"{recovery_error}"
+                ) from error
+            raise RuntimeError(
+                f"{error}; cached lighting recovery succeeded"
+            ) from error
+        if index + 1 < len(reports):
+            time.sleep(_main_report_delay(report))
 
 
 def command_profile_apply(args: argparse.Namespace) -> int:
     data = load_profile(args.profile)
     compiled = compile_profile(data)
     reports = list(profile_reports(data, compiled, scopes=args.only))
+    writes_keymap = args.only is None or "keymap" in args.only
     if not reports:
         raise RuntimeError("the selected scopes have nothing to send")
     if args.dry_run:
         for index, report in enumerate(reports, 1):
             print(f"report {index}/{len(reports)}")
             _print_dry_run(report, MAIN_USAGE)
+        if writes_keymap:
+            print("profile debounce tail")
+            _print_dry_run(compiled["debounce"], SHORT_USAGE)
         return 0
     if not args.confirm or not args.i_understand_profile_overwrite:
         raise RuntimeError(
             "profile write requires --confirm and --i-understand-profile-overwrite"
         )
-    device = _main_device(args)
-    _send_main_reports(device, reports)
-    print(f"{len(reports)} profile reports sent to {device.path}.")
+    recovery = profile_lighting_recovery_reports(
+        reports, compiled["lighting"]
+    )
+    if writes_keymap:
+        devices = discover_devices()
+        device, short_device = choose_profile_devices(
+            devices, explicit_path=args.device
+        )
+        results = send_profile_transaction(
+            device,
+            short_device,
+            reports,
+            compiled["debounce"],
+            feature_session=feature_report_session,
+            recovery_reports=recovery,
+            sleep=time.sleep,
+        )
+        destination = (
+            str(device.path)
+            if device.path == short_device.path
+            else f"{device.path} and {short_device.path}"
+        )
+    else:
+        device = _main_device(args)
+        _send_main_reports(
+            device,
+            reports,
+            recovery_reports=recovery,
+        )
+        results = reports
+        destination = str(device.path)
+    print(f"{len(results)} profile reports sent to {destination}.")
     return 0
 
 
@@ -288,7 +362,11 @@ def command_rgb_per_key(args: argparse.Namespace) -> int:
     compiled = compile_profile(data)
     reports = (
         rgb_effect_report(
-            "custom", brightness=args.brightness, speed=args.speed
+            "custom",
+            brightness=args.brightness,
+            speed=args.speed,
+            color_index=args.color_index,
+            multicolor=args.multicolor,
         ),
         compiled["colors"],
     )
@@ -299,7 +377,13 @@ def command_rgb_per_key(args: argparse.Namespace) -> int:
     if not args.confirm:
         raise RuntimeError("refusing to write without --confirm (use --dry-run first)")
     device = _main_device(args)
-    _send_main_reports(device, reports)
+    _send_main_reports(
+        device,
+        reports,
+        recovery_reports=profile_lighting_recovery_reports(
+            reports, compiled["lighting"]
+        ),
+    )
     print(f"Per-key RGB sent to {device.path}.")
     return 0
 
@@ -520,6 +604,8 @@ def build_parser() -> argparse.ArgumentParser:
     per_key.add_argument("profile", type=Path)
     per_key.add_argument("--brightness", type=int, choices=range(0, 5), default=4)
     per_key.add_argument("--speed", type=int, choices=range(1, 6), default=5)
+    per_key.add_argument("--color-index", type=int, choices=range(0, 8), default=0)
+    per_key.add_argument("--multicolor", action="store_true")
     _add_write_options(per_key)
     per_key.set_defaults(handler=command_rgb_per_key)
 
@@ -570,7 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("profile", type=Path)
     validate.set_defaults(handler=command_profile_validate)
     apply = profile_subparsers.add_parser(
-        "apply", help="write keymap, macros, and optional colors"
+        "apply", help="write keymap, macros, cached lighting, and debounce"
     )
     apply.add_argument("profile", type=Path)
     apply.add_argument(
@@ -580,8 +666,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="{" + ",".join(PROFILE_SCOPES) + "}",
         help=(
             "apply only this part of the profile; repeatable. Without it the "
-            "whole profile is written, which repaints every key the profile "
-            "does not name"
+            "official keymap/macro/lighting/debounce sequence is written. "
+            "The legacy colors scope replays cached lighting; it never activates the "
+            "editable per-key color draft"
         ),
     )
     apply.add_argument("--i-understand-profile-overwrite", action="store_true")

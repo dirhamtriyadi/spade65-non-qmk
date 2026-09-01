@@ -275,7 +275,10 @@ wired keyboard.
 
 ### Debounce
 
-The vendor default is 5 ms:
+The command accepts 1–255 ms. A fresh profile in the original application starts
+at 1 ms. Spade65 profile templates and older profiles without a
+`settings.debounce_ms` field use 5 ms for compatibility with earlier Spade65
+releases and with the value already exercised on the available keyboard:
 
 ```bash
 spade65ctl debounce 5 --dry-run
@@ -293,6 +296,24 @@ spade65ctl profile create spade65-profile.json
 spade65ctl profile validate spade65-profile.json
 spade65ctl profile apply spade65-profile.json --dry-run
 ```
+
+New profiles include the vendor's default lighting snapshot: Neon Stream,
+brightness 4, speed 5, color index 0, and multicolor enabled. The snapshot is
+host-side state, not a value read from the keyboard. The GUI replaces it only
+after a built-in, per-key, or keymap-with-lighting transaction succeeds, so
+each profile remembers the last lighting that this application successfully
+sent for it. A legacy profile without a `lighting` object uses the same vendor
+default. Its top-level `colors` table remains an editable draft and is not
+silently treated as an active custom snapshot.
+The template also records `settings.debounce_ms: 5`. This is the project's
+backward-compatible profile value, not the original application's fresh-profile
+default of 1 ms.
+
+For a custom effect, `lighting.colors` is a separate copy of the exact palette
+that last reached the keyboard successfully. The top-level `colors` object is
+the editable next palette. In the GUI, editing that palette explicitly selects
+custom lighting for the next per-key or keymap-with-lighting transaction; a
+failed transaction still leaves the last successful snapshot unchanged.
 
 The `layers` object contains `normal`, `fn1`, and `fn2`. Assignments may use a
 HID name such as `"b"`, a numeric usage such as `5`, a modified usage such as
@@ -312,19 +333,29 @@ A macro contains key-down/key-up events and their delays:
 }
 ```
 
-Applying a profile overwrites all three keymap layers, writes each macro
-included in that profile, and — when the profile defines any colors — switches
-the keyboard to the custom effect and writes the per-key color table. It
-therefore requires two explicit acknowledgements:
+Applying a profile without `--only` follows the official transaction order: it
+overwrites all three keymap layers, writes only the macros referenced by that
+keymap, restores the cached `lighting` snapshot, and finally writes the
+profile's cached debounce value. It does not implicitly activate an edited
+top-level `colors` table. The CLI operation requires two explicit
+acknowledgements:
 
 ```bash
 spade65ctl profile apply spade65-profile.json \
   --confirm --i-understand-profile-overwrite
 ```
 
-Every key the profile does not name is stored as black, so a full apply
-replaces whatever built-in effect the keyboard was running. Use `--only` to
-write just the part that changed:
+The tested firmware clears its active lighting while accepting a keymap write.
+The official application handles this by replaying its cached lighting after
+the keymap and referenced-macro sequence, then writing debounce through its
+short-report handle; it does not read the active effect back from the keyboard.
+Spade65 follows that ordering. A pre-snapshot legacy profile replays the Neon
+Stream vendor default above; a top-level `colors` table remains a draft until
+custom/per-key lighting is explicitly selected and successfully written.
+Because there is no verified hardware lighting readback, this fallback can
+replace a state changed outside Spade65, including a keyboard-shortcut change.
+
+Use `--only` to write just the part that changed:
 
 ```bash
 spade65ctl profile apply spade65-profile.json --only keymap \
@@ -333,14 +364,38 @@ spade65ctl profile apply spade65-profile.json --only keymap \
 
 | Scope | Reports sent |
 | --- | --- |
-| `keymap` | opcode `0x03`, all three layers |
-| `macros` | opcode `0x05`, one per macro |
-| `colors` | opcode `0x02` custom effect, then opcode `0x07` per-key colors |
+| `keymap` | Main opcode `0x03` for all three layers, referenced main opcode `0x05` macros when `macros` is also selected, current/cached main opcode `0x02` lighting, optional exact main opcode `0x07` custom palette, then short opcode `0x09` with `settings.debounce_ms` |
+| `macros` | Main opcode `0x05`; all definitions for a macro-only apply, but only keymap-referenced definitions when sent with `keymap` |
+| `colors` | cached opcode `0x02` lighting and, only when cached lighting is custom, its exact opcode `0x07` palette |
 
-`--only` is repeatable, and omitting it keeps the whole-profile behaviour. A
-keymap that binds a key to a macro cannot be applied without the `macros`
-scope: the keyboard offers no readback, so those keys would otherwise run
-whichever macros the device still holds.
+The official waits are preserved: 100 ms after `0x03`, 200 ms after each `0x05`,
+100 ms after `0x02`, 50 ms after optional `0x07`, and 10 ms after the final
+short `0x09`. Before sending `0x03`, Spade65 resolves and validates both the
+620-byte main `ff02:0001`/report `0x07` collection and the 8-byte short
+`ff03:0001`/report `0x08` companion. A combined collection is reused where the
+OS exposes one; otherwise the companion must have the same VID/PID and an
+unambiguous matching device identity. Missing or ambiguous companions fail
+closed before the keymap is written.
+
+The lighting and debounce reports after `keymap` are required parts of this
+transaction and do not mean that the `colors` scope or the standalone debounce
+action was selected. The `colors` scope name remains for compatibility, but it
+represents the profile's cached active lighting and never activates the mutable
+top-level color draft in a modern profile. Selecting all scopes therefore ends
+with the same known lighting and debounce state as a keymap-only apply. No
+light-off/hibernate timer is appended in wired mode, matching the original
+application.
+
+`--only` is repeatable. To intentionally activate the editable top-level color
+table, use `per-key-rgb`; in the GUI, use **Apply stored per-key RGB**. After a
+successful GUI write, that exact palette becomes the cached custom snapshot.
+The GUI also sends the lighting currently selected in its editor whenever a
+keymap is applied, and sends the debounce value shown for the same profile. It
+saves both snapshots only after the complete transaction, including the short
+debounce report, succeeds. Omitting `--only` in the CLI uses the values stored
+in the profile. A keymap that binds a key to a macro cannot be applied without
+the `macros` scope: the keyboard offers no readback, so those keys would
+otherwise run whichever macros the device still holds.
 
 Keep the validated profile and a GUI library backup before applying it. A
 temporary three-layer keymap and macro have been applied to the available wired
@@ -361,13 +416,16 @@ frame:
 
 ```bash
 spade65ctl per-key-rgb spade65-profile.json --dry-run
-spade65ctl per-key-rgb spade65-profile.json --confirm
+spade65ctl per-key-rgb spade65-profile.json --brightness 4 --speed 5 \
+  --color-index 0 --multicolor --confirm
 spade65ctl stream-rgb spade65-profile.json --dry-run
 spade65ctl stream-rgb spade65-profile.json --confirm
 ```
 
 Keys absent from `colors` are black/off in the generated frame. Per-key and
-streaming transports have been validated over wired USB. `stream-rgb` sends one
+streaming transports have been validated over wired USB. `per-key-rgb` accepts
+the same brightness, speed, color-index, and multicolor controls as built-in
+lighting. `stream-rgb` sends one
 host-driven frame; continuous AP effects and custom timelines require the GUI
 or background service to keep running and are not stored as a self-running
 firmware animation.

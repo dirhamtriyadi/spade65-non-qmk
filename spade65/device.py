@@ -133,3 +133,53 @@ def choose_device(
         paths = ", ".join(str(device.path) for device in matches)
         raise RuntimeError(f"multiple matching interfaces ({paths}); use --device")
     return matches[0]
+
+
+def choose_companion_feature_device(
+    devices: Iterable[Device],
+    *,
+    primary: Device,
+    usage: tuple[int, int],
+    report_id: int,
+    report_length: int,
+) -> Device:
+    """Select a fail-closed feature-report companion for ``primary``.
+
+    Some operating systems expose the main and short Spade65 reports on one
+    HID collection, while others may enumerate separate collections.  Reuse a
+    combined collection when possible.  Otherwise accept only one companion
+    with the same VID/PID and the same serial/unique identity (including both
+    identities being empty).  Never guess between multiple physical keyboards.
+    """
+
+    def compatible(device: Device) -> bool:
+        return (
+            device.vendor_id == primary.vendor_id
+            and device.product_id == primary.product_id
+            and usage in device.usages
+            and device.report_length("feature", report_id) == report_length
+        )
+
+    if compatible(primary):
+        return primary
+
+    candidates = [device for device in devices if compatible(device)]
+    # An absent serial is identity information too: never pair an anonymous
+    # main collection with a short collection that explicitly belongs to some
+    # other serial-numbered device.
+    candidates = [
+        device for device in candidates if device.unique == primary.unique
+    ]
+    if not candidates:
+        raise RuntimeError(
+            "no matching companion HID interface for usage "
+            f"{usage[0]:04x}:{usage[1]:04x}, feature report "
+            f"0x{report_id:02x}/{report_length} bytes"
+        )
+    if len(candidates) > 1:
+        paths = ", ".join(str(device.path) for device in candidates)
+        raise RuntimeError(
+            f"multiple matching companion interfaces ({paths}); "
+            "disconnect the other keyboard before applying a profile"
+        )
+    return candidates[0]

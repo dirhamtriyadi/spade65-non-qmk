@@ -91,7 +91,7 @@ relevan harus dipanggil dari `renderLocalizedDynamic()` agar daftar atau status
 yang sudah tampil ikut diperbarui.
 
 Teks dari backend, nama perangkat, path, keycode HID, token konfirmasi literal
-seperti `RESET SPADE65`/`APPLY PROFILE`, dan isi JSON diagnostics tidak perlu
+seperti `RESET SPADE65`, dan isi JSON diagnostics tidak perlu
 diterjemahkan. Untuk pesan UI yang membungkus error backend, terjemahkan bagian
 UI-nya dan sisipkan detail error sebagai placeholder.
 

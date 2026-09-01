@@ -103,6 +103,13 @@ switch to write a keymap as well, both permissions must be enabled:
 1. `"allow_profile_writes": true` in the configuration file.
 2. The `--allow-profile-writes` runtime flag.
 
+An enabled background profile write uses the same complete transaction as the
+foreground UI: keymap, referenced macros, cached profile lighting, then cached
+profile debounce. Both the main and short companion collections must pass
+descriptor validation before the keymap is sent, and no timer is appended on a
+wired device. See the [protocol notes](protocol.md#profile-apply--setkeymatrix-transaction)
+for exact report delays.
+
 Every write is still checked against the HID descriptor. From a source
 installation, a launcher for the current operating system can be generated
 without installing it immediately:

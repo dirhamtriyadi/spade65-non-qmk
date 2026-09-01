@@ -70,6 +70,17 @@ last selected locally for that model; when none is detected — including when
 only the read-only `0603:0352` receiver is present — it displays the
 `Spade65-04 · ANSI standard` fallback preview.
 
+A keymap apply mirrors the original `SetKeyMatrix` transaction: the main
+collection receives the keymap, only its referenced macros, and the current
+lighting, then the descriptor-matched short collection receives the debounce
+value cached in that profile. The waits are 100 ms after the keymap, 200 ms
+after each macro, 100 ms after the lighting effect, 50 ms after an optional
+custom palette, and 10 ms after debounce. Both collections are resolved and
+validated before the first write; wired mode does not receive a timer report.
+Profiles without `settings.debounce_ms` use the project's historical 5 ms
+compatibility value, while a fresh profile in the original application started
+at 1 ms.
+
 ## Safety boundary
 
 Firmware flashing, bootloader access, raw flash/write operations, and arbitrary
@@ -78,8 +89,9 @@ could brick the keyboard. They have no GUI action, API endpoint, packet builder,
 or hidden fallback in this project.
 
 Configuration writes are descriptor-gated. A complete keymap overwrite requires
-two confirmations, while reset requires a typed confirmation. These exclusions
-and safeguards are part of the design, not unfinished release items.
+one explicit confirmation dialog, while reset requires a typed confirmation.
+These exclusions and safeguards are part of the design, not unfinished release
+items.
 
 ## Download
 
@@ -145,6 +157,11 @@ temporary keymap and macro were verified through physical input and then
 restored, and the keyboard still enumerated correctly after the reset. Keep a
 saved profile before repeating them, because the keyboard still offers no
 guaranteed readback-and-restore path.
+
+Those individual tests do not yet prove that the newly completed combined
+keymap/lighting/debounce transaction preserves the active lighting visually.
+That exact source-GUI result is still awaiting physical confirmation and is not
+inferred from successful report byte counts.
 
 Only the dongle light-off/hibernate timers remain unsent. The logical dongle
 identity `0603:0356` has never enumerated here, and the physical receiver that

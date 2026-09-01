@@ -244,11 +244,20 @@ memerlukan background service setelah diterapkan. Profil bernama, asosiasi
 aplikasi, AP/streaming animation, dan custom timeline adalah data host; efeknya
 memerlukan GUI atau service tetap berjalan.
 
+Pada setiap OS, apply keymap menyelesaikan collection utama dan companion pendek
+yang digerbangi descriptor serta membuka kedua handle sebelum menulis. Handle
+utama tetap terbuka saat mengirim keymap, macro yang direferensikan, dan
+lighting saat ini/tersimpan; handle pendek terpisah mengirim debounce per profil
+sesuai urutan aplikasi original. Mode kabel berakhir setelah debounce;
+transaksi ini tidak pernah mengirim timer dongle.
+
 Keymap tiga layer dan macro sementara telah diterapkan pada unit berkabel
 `0603:0351` dan diverifikasi melalui input fisik, lalu keymap default dan macro
 kosong diterapkan ulang untuk memulihkannya. Persistensi melalui power-cycle
 tetap belum diukur. Perangkat tidak menyediakan readback, sehingga profil
-tersimpan tetap menjadi satu-satunya jalur restore. Firmware flashing,
+tersimpan tetap menjadi satu-satunya jalur restore. Jalur report individual
+memiliki bukti hardware, tetapi pemeliharaan visual lighting setelah transaksi
+gabungan yang baru dilengkapi masih menunggu konfirmasi. Firmware flashing,
 bootloader, raw flash, dan arbitrary HID tidak diimplementasikan pada OS mana pun.
 Paket desktop maupun build lokal tidak memiliki jalur tersembunyi untuk operasi
 tersebut.

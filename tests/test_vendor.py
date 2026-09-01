@@ -27,6 +27,7 @@ class VendorImportTests(unittest.TestCase):
                     "assignedKeyboardKeys": normal,
                     "assignedFnKeyboardKeys": [fn1, fn2],
                     "fnModeindex": 1,
+                    "debounceTime": 7,
                 },
                 "Macro_Export": {
                     "MacroFiletItem": [{
@@ -54,11 +55,124 @@ class VendorImportTests(unittest.TestCase):
         self.assertEqual(profile["layers"]["normal"]["q"], 0x04)
         self.assertEqual(profile["layers"]["normal"]["pageup"], {"macro": 0})
         self.assertEqual(profile["macros"][0]["events"][0]["delay_ms"], 20)
+        self.assertEqual(profile["settings"]["debounce_ms"], 7)
         self.assertEqual(profile["settings"]["app_effects"][0]["mode"], "conic")
         self.assertEqual(len(compile_profile(profile)["keymap"]), 620)
 
     def test_mapping_covers_every_unique_vendor_assignment_usage(self) -> None:
         self.assertEqual(len(set(KCODE_TO_USAGE.values())), 130)
+
+    def test_imports_built_in_vendor_lighting_snapshot(self) -> None:
+        profile, imported = convert_vendor_document({
+            "value": {
+                "Keyboard_Export": {
+                    "lightData": {
+                        "translate": "Fixed_on",
+                        "currentColorsIndex": 6,
+                        "ParameterNumberList": [
+                            {"field": "brightness", "setValue": 3},
+                            {"field": "speed", "setValue": 2},
+                        ],
+                        "ParameterBoolList": [
+                            {"field": "multicolor", "setValue": False},
+                        ],
+                    }
+                }
+            }
+        })
+
+        self.assertEqual(imported, ["KeyAssign"])
+        self.assertEqual(profile["lighting"], {
+            "effect": "fixed",
+            "brightness": 3,
+            "speed": 2,
+            "color_index": 6,
+            "multicolor": False,
+        })
+        lighting_report = compile_profile(profile)["lighting"][0]
+        self.assertEqual(lighting_report[9:12], bytes((0x01, 3, 2)))
+        self.assertEqual(lighting_report[12], 6)
+
+    def test_imports_customize_lighting_and_per_key_colors(self) -> None:
+        custom_colors = [[0, 0, 0] for _ in VENDOR_UI_KEY_NAMES]
+        custom_colors[0] = [0x12, 0x34, 0x56]
+        custom_colors[62] = [0x11, 0x22, 0x33]
+        custom_colors[66] = [0xAA, 0xBB, 0xCC]
+        profile, imported = convert_vendor_document({
+            "value": {
+                "Keyboard_Export": {
+                    "lightData": {
+                        "translate": "Customize",
+                        "currentColorsIndex": 0,
+                        "ParameterNumberList": [
+                            {"field": "brightness", "setValue": 2},
+                            {"field": "speed", "setValue": 4},
+                        ],
+                        "ParameterBoolList": [
+                            {"field": "multicolor", "setValue": False},
+                        ],
+                        "CustomizeColors": custom_colors,
+                    }
+                }
+            }
+        })
+
+        self.assertEqual(imported, ["KeyAssign"])
+        self.assertEqual(
+            {
+                key: value
+                for key, value in profile["lighting"].items()
+                if key != "colors"
+            },
+            {
+                "effect": "custom",
+                "brightness": 2,
+                "speed": 4,
+                "color_index": 0,
+                "multicolor": False,
+            },
+        )
+        self.assertEqual(profile["colors"]["esc"], "#123456")
+        self.assertEqual(profile["colors"]["rctrl"], "#112233")
+        self.assertEqual(profile["colors"]["ralt"], "#aabbcc")
+        self.assertEqual(profile["lighting"]["colors"], profile["colors"])
+        self.assertIsNot(profile["lighting"]["colors"], profile["colors"])
+
+        compiled = compile_profile(profile)
+        self.assertEqual(
+            compiled["matrix_colors"][BUTTON_TO_SLOT["rctrl"]],
+            (0x11, 0x22, 0x33),
+        )
+        self.assertEqual(
+            compiled["matrix_colors"][BUTTON_TO_SLOT["ralt"]],
+            (0xAA, 0xBB, 0xCC),
+        )
+        self.assertEqual(
+            [report[1] for report in compiled["lighting"]],
+            [0x02, 0x07],
+        )
+
+    def test_rejects_an_incomplete_or_malformed_custom_palette(self) -> None:
+        valid = [[0, 0, 0] for _ in VENDOR_UI_KEY_NAMES]
+        cases = (
+            (valid[:-1], "exactly 70 RGB entries"),
+            ([*valid[:-1], [0, 0]], "entry 69 .* three RGB bytes"),
+            ([*valid[:-1], [0, 0, 256]], "entry 69 .* three RGB bytes"),
+            ([*valid[:-1], [0, 0, True]], "entry 69 .* three RGB bytes"),
+        )
+        for colors, message in cases:
+            with self.subTest(colors=colors[-1]):
+                with self.assertRaisesRegex(ValueError, message):
+                    convert_vendor_document({
+                        "value": {
+                            "Keyboard_Export": {
+                                "lightData": {
+                                    "translate": "Customize",
+                                    "CustomizeColors": colors,
+                                }
+                            }
+                        }
+                    })
 
     def test_variant_positions_import_to_distinct_canonical_modifiers(self) -> None:
         normal = [

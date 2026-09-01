@@ -169,15 +169,81 @@ See [`releasing.md`](releasing.md).
    only an allowlist of configuration actions with validated builders.
 9. JSON profiles are declarative data; never accept raw report bytes or packets.
 
+## Official-style keymap transaction
+
+The firmware clears its active lighting while accepting the opcode `0x03`
+keymap report. The original application's `SetKeyMatrix` path is therefore a
+complete, ordered transaction rather than a keymap write with only a lighting
+tail:
+
+1. Send the main `0x03` keymap report, then wait 100 ms.
+2. Send only the main `0x05` macros referenced by that keymap, waiting 200 ms
+   after each one.
+3. Replay host-cached `lightData`: main `0x02`, wait 100 ms, and for custom
+   lighting main `0x07`, wait 50 ms.
+4. Send the profile debounce through short opcode `0x09`, then wait 10 ms.
+
+The original wired path returns before `SetLightOffToDevice`, so never append a
+light-off/hibernate timer to this transaction in wired mode. Standalone
+macro-only and lighting-only scopes also do not receive the debounce tail.
+
+Compile `settings.debounce_ms` with the rest of the profile before device
+discovery. The original application initializes a fresh profile at 1 ms, but
+Spade65 keeps 5 ms for its templates and for legacy profiles missing the field;
+that is the project's backward-compatibility default and the value already
+accepted by the physical wired unit. A successful dedicated debounce write and
+a successful keymap transaction both update the per-profile value in the GUI.
+
+Resolve both HID collections before sending `0x03`. The main collection must
+advertise usage `ff02:0001` and feature report `0x07`/620 bytes; the companion
+must advertise `ff03:0001` and feature report `0x08`/8 bytes. Reuse the primary
+when one OS collection exposes both shapes. Otherwise accept only a same-VID/PID
+companion with the same serial/unique identity, including both identities being
+empty, and reject a missing or ambiguous match. Validate every main, recovery,
+and debounce report before opening both HID handles so a companion failure
+cannot leave a keymap half-applied. Keep the main handle open for the entire
+`0x03`/`0x05`/`0x02`/`0x07` sequence and a separate short handle open for the
+final `0x09`, matching the lifetime used by the original backend.
+
+The official application does not obtain the current lighting from the
+keyboard, and this project has no verified lighting readback report either.
+Keep the last successfully written lighting as a per-profile host snapshot. New
+profiles use the official lighting snapshot (Neon Stream, brightness 4, speed
+5, color index 0, multicolor enabled). The pre-snapshot legacy shape uses that
+same default regardless of its editable top-level `colors` draft; treating an
+unverified draft as active custom lighting can make the selector disagree with
+the write and turn unspecified keys black. A host snapshot can replace a state
+changed by a keyboard shortcut or another host because no readback can
+reconcile the two states.
+
+A custom snapshot owns an exact, independent copy in `lighting.colors` of the
+palette that succeeded. The top-level `colors` table remains an editable draft.
+Never restore custom lighting from that mutable draft. If a main-report failure
+occurs after opcode `0x03`, make the configured best-effort lighting recovery
+before reporting the original error. A failure of the final short debounce is
+reported explicitly as a partial transaction after a best-effort replay of the
+previous cached lighting. This keeps the success-only host snapshot from
+becoming knowingly stale; recovery failure is included in the error.
+
+The legacy-named `colors` profile scope replays the cached lighting snapshot; it
+must never activate the mutable top-level color draft in a modern profile. The
+GUI tracks explicit built-in/custom editor intent. A keymap transaction uses
+that current intent, including an exact copy of the per-key table for custom,
+and the debounce shown for that profile. Persist the lighting and debounce
+snapshots only after the complete transaction succeeds. The dedicated per-key
+and debounce actions follow the same success-only rule.
+
 ## Hardware-testing workflow
 
 Create a separate branch and proceed from the smallest operation:
 
 1. Run `probe` over USB and through the dongle.
 2. Apply one built-in RGB effect.
-3. Set debounce to the default 5 ms first.
+3. Set debounce to the project's 5 ms compatibility value first (the original
+   application's fresh-profile default was 1 ms).
 4. Set dongle timers.
-5. Read current state if the get-report format is known.
+5. Read current state only when the get-report format is verified; lighting has
+   no verified readback and must use the documented host snapshot.
 6. Apply per-key RGB.
 7. Remap one key.
 8. Test layers and macros.

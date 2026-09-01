@@ -2,9 +2,9 @@
 
 # Hardware verification
 
-The wired tests were performed on August 29–31, 2026, using the USB Spade65
-`0603:0351`. On August 31, the same keyboard's physical 2.4 GHz receiver was
-also inspected and enumerated as `0603:0352`.
+The wired tests were performed on August 29–September 1, 2026, using the USB
+Spade65 `0603:0351`. On August 31, the same keyboard's physical 2.4 GHz receiver
+was also inspected and enumerated as `0603:0352`.
 
 ## Successful tests
 
@@ -27,6 +27,64 @@ also inspected and enumerated as `0603:0352`.
   flash, or the bootloader.
 - A sysfs read returned USB revision `01.00`. This value is not labeled as a
   firmware version.
+
+## Official keymap transaction and lighting finding
+
+The wired firmware clears the active lighting state while accepting the opcode
+`0x03` keymap report. Analysis of the official application explains its write
+sequence: `SetKeyMatrix` sends the key matrix, its referenced macros, and then
+replays the host-cached `lightData`. It then sends the profile's debounce value
+through the short-report handle. The waits recovered from that path are 100 ms
+after keymap `0x03`, 200 ms after each referenced macro `0x05`, 100 ms after
+lighting effect `0x02`, 50 ms after an optional custom palette `0x07`, and 10
+ms after short debounce `0x09`. The official application does not read the
+current lighting from the keyboard, and no lighting readback report has been
+verified for this project.
+
+Spade65 now sends the same complete sequence: keymap, only referenced macros,
+current/cached lighting, and the debounce cached in the profile. It resolves
+and descriptor-validates the 620-byte main and 8-byte short companion
+collections before the keymap write. The wired path does not append a timer,
+matching the original application's early return from its timer function.
+
+The individual keymap, macro, lighting, and 5 ms debounce report shapes have
+physical acceptance evidence listed above. A source-run keymap-only apply was
+also observed to leave lighting off before this complete debounce tail was
+implemented. On September 1, a complete default keymap + Neon Stream + 5 ms
+debounce transaction returned full write lengths for all three reports. Visual
+preservation of the active lighting after that new complete transaction has
+**not yet been confirmed on hardware**; successful report byte counts and
+automated ordering tests are not presented as that visual proof.
+
+The GUI uses its current built-in/custom editor selection and displayed
+debounce for this transaction, then persists both exact values only after the
+final short report succeeds. The original application starts a fresh profile
+at 1 ms; Spade65 uses 5 ms when an older profile has no `debounce_ms`, preserving
+the project's historical behavior. New Spade65 profiles also record 5 ms
+explicitly.
+
+Spade65 keeps the last successfully written lighting snapshot in each profile.
+New profiles use the official lighting default: Neon Stream, brightness 4,
+speed 5, color index 0, and multicolor enabled. A legacy profile without a
+lighting snapshot uses that same default; its per-key colors remain an editable
+draft until custom lighting is explicitly selected and successfully written.
+This compatibility fallback may replace lighting changed through a keyboard
+shortcut or another host, because the application cannot observe that external
+change.
+
+For custom lighting, the snapshot contains an independent copy of the exact
+palette that succeeded. A later unsent edit cannot therefore alter keymap
+recovery. If a multi-report write fails after the keymap or while sending a new
+custom palette, the application makes one best-effort replay of only the
+previous cached lighting before surfacing the error.
+
+The legacy-named `colors` profile scope replays the cached active lighting; it
+does not independently activate the editable top-level color draft in a modern
+profile. Editing per-key colors in the GUI selects custom as the current editor
+intent; either Apply Profile with keymap/lighting or the dedicated per-key
+action then writes that complete table. Keys absent from the table are black,
+and the exact table becomes the cached custom snapshot only after the complete
+write succeeds.
 
 ## Observed 2.4 GHz receiver
 

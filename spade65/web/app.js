@@ -31,9 +31,19 @@ let meta = null,
   recordPressed = new Set(),
   usagePickerItems = [],
   usagePickerActive = -1,
-  desktopIntegration = null;
+  desktopIntegration = null,
+  lightingDraft = null,
+  lightingDraftProfile = null;
 const I18N_STORAGE_KEY = 'spade65-language',
   DEFAULT_LANGUAGE = 'en';
+const DEFAULT_LIGHTING = Object.freeze({
+  effect: 'neon-stream',
+  brightness: 4,
+  speed: 5,
+  color_index: 0,
+  multicolor: true
+});
+const DEFAULT_DEBOUNCE_MS = 5;
 const LAYOUT_STORAGE_KEY = 'spade65-device-layouts-v1',
   LEGACY_LAYOUT_STORAGE_KEY = 'spade65-layout';
 const defaultLanguages = [{
@@ -158,6 +168,7 @@ function renderLocalizedDynamic() {
   if (!meta || !profile) return;
   renderSavedProfiles($('savedProfile').value);
   renderEffects();
+  renderLightingControls();
   renderUsageList();
   renderKeyboard();
   renderMacros();
@@ -547,15 +558,17 @@ function renderSavedProfiles(selected = '') {
 async function loadSavedProfile(name) {
   if (!name) return;
   try {
-    const item = storedProfiles()[name];
+    const item = migrateProfileLighting(cloneJson(storedProfiles()[name]));
     await api('validate', {
       profile: item
     });
-    profile = cloneJson(item);
+    profile = item;
     $('profileName').value = name;
     selectedKey = null;
     activeMacro = 0;
     activeAppLayer = 0;
+    renderLightingControls();
+    renderDebounceControl();
     renderKeyboard();
     renderTester();
     renderColorKeyboard();
@@ -566,6 +579,7 @@ async function loadSavedProfile(name) {
       name
     }))
   } catch (error) {
+    renderSavedProfiles();
     toast(error.message, true)
   }
 }
@@ -608,9 +622,12 @@ async function refresh() {
     meta = await fetchGuiStatus();
     deviceSnapshot = deviceSignature(meta.devices);
     if (!profile) profile = cloneJson(meta.profile);
+    migrateProfileLighting(profile);
     renderDevices();
     syncLayoutFromSelectedDevice(false);
     renderEffects();
+    renderLightingControls();
+    renderDebounceControl();
     renderUsageList();
     renderSavedProfiles($('savedProfile').value);
     renderKeyboard();
@@ -675,11 +692,16 @@ function renderDevices() {
   if ([...select.options].some(o => o.value === old)) select.value = old
 }
 
+function builtInEffects() {
+  return meta.effects.filter(effect => effect !== 'custom')
+}
+
 function renderEffects() {
   const select = $('effectSelect'),
-    selected = select.value || 'fixed';
+    selected = select.value || DEFAULT_LIGHTING.effect,
+    effects = meta.effects;
   select.innerHTML = '';
-  for (const effect of meta.effects) {
+  for (const effect of effects) {
     const o = document.createElement('option'),
       key = `effect.${effect}`,
       translated = t(key);
@@ -687,7 +709,167 @@ function renderEffects() {
     o.textContent = translated === key ? effect.replaceAll('-', ' ') : translated;
     select.append(o)
   }
-  select.value = [...select.options].some(option => option.value === selected) ? selected : 'fixed'
+  select.value = effects.includes(selected) ? selected : DEFAULT_LIGHTING.effect
+}
+
+function normalizedLighting(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const baseFields = ['effect', 'brightness', 'speed', 'color_index', 'multicolor'],
+    fields = value.effect === 'custom' ? [...baseFields, 'colors'] : baseFields,
+    invalid = Object.keys(value).length !== fields.length ||
+    fields.some(field => !hasOwn(value, field)) ||
+    !meta?.effects.includes(value.effect) ||
+    !Number.isInteger(value.brightness) || value.brightness < 0 || value.brightness > 4 ||
+    !Number.isInteger(value.speed) || value.speed < 1 || value.speed > 5 ||
+    !Number.isInteger(value.color_index) || value.color_index < 0 || value.color_index > 7 ||
+    typeof value.multicolor !== 'boolean' ||
+    (value.effect === 'custom' && (!value.colors || typeof value.colors !== 'object' || Array.isArray(value.colors)));
+  if (invalid) return null;
+  const lighting = {
+    effect: value.effect,
+    brightness: value.brightness,
+    speed: value.speed,
+    color_index: value.color_index,
+    multicolor: value.multicolor
+  };
+  if (value.effect === 'custom') lighting.colors = cloneJson(value.colors);
+  return lighting
+}
+
+function migrateProfileLighting(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  // A legacy top-level color table is an editable draft, not evidence that it
+  // was the last lighting state applied to hardware.  Default it explicitly
+  // instead of invisibly selecting a sparse custom palette.
+  if (!hasOwn(value, 'lighting') || value.lighting === null) value.lighting = cloneJson(DEFAULT_LIGHTING);
+  return value
+}
+
+function savedLighting() {
+  return normalizedLighting(profile?.lighting)
+}
+
+function lightingTarget() {
+  return {
+    profile,
+    savedName: $('savedProfile').value
+  }
+}
+
+function resetLightingDraft() {
+  migrateProfileLighting(profile);
+  lightingDraft = cloneJson(savedLighting() || DEFAULT_LIGHTING);
+  lightingDraftProfile = profile
+}
+
+function ensureLightingDraft() {
+  if (lightingDraftProfile !== profile || !normalizedLighting(lightingDraft)) resetLightingDraft();
+  return lightingDraft
+}
+
+function lightingForProfileApply() {
+  const controls = lightingFromControls(),
+    draft = ensureLightingDraft();
+  if (draft.effect === 'custom') return {
+    ...controls,
+    effect: 'custom',
+    colors: cloneJson(draft.colors)
+  };
+  return controls
+}
+
+function selectBuiltInLightingDraft() {
+  lightingDraft = lightingFromControls();
+  lightingDraftProfile = profile;
+  renderLightingIntent()
+}
+
+function selectCustomLightingDraft() {
+  $('effectSelect').value = 'custom';
+  const controls = lightingFromControls();
+  lightingDraft = {
+    ...controls,
+    effect: 'custom',
+    colors: cloneJson(profile.colors)
+  };
+  lightingDraftProfile = profile;
+  renderLightingIntent()
+}
+
+function updateLightingDraftParameters() {
+  const controls = lightingFromControls(),
+    draft = ensureLightingDraft();
+  lightingDraft = draft.effect === 'custom' ? {
+    ...controls,
+    effect: 'custom',
+    colors: cloneJson(draft.colors)
+  } : controls;
+  lightingDraftProfile = profile;
+  renderLightingIntent()
+}
+
+function renderLightingIntent() {
+  const lighting = normalizedLighting(lightingDraft) || savedLighting() || DEFAULT_LIGHTING,
+    effectKey = `effect.${lighting.effect}`,
+    translatedEffect = t(effectKey);
+  $('lightingSnapshotStatus').textContent = lighting.effect === 'custom' ?
+    t('lighting.snapshotCustom') :
+    t('lighting.snapshotBuiltIn', {
+      effect: translatedEffect === effectKey ? lighting.effect.replaceAll('-', ' ') : translatedEffect
+    });
+  $('applyEffectBtn').disabled = lighting.effect === 'custom'
+}
+
+function rememberLighting(value, target) {
+  const lighting = normalizedLighting(value);
+  if (!lighting) return;
+  target.profile.lighting = cloneJson(lighting);
+  if (profile === target.profile) {
+    lightingDraft = cloneJson(lighting);
+    lightingDraftProfile = profile;
+    renderLightingControls()
+  }
+  const name = target.savedName;
+  if (!name) return;
+  try {
+    const items = storedProfiles();
+    if (!hasOwn(items, name)) return;
+    // Persist only the state that reached hardware. Unsaved keymap/macro edits
+    // must not be folded into the named profile as a lighting side effect.
+    items[name].lighting = cloneJson(lighting);
+    if (lighting.effect === 'custom') items[name].colors = cloneJson(lighting.colors);
+    localStorage.setItem('spade65-profiles', JSON.stringify(items))
+  } catch (error) {
+    console.warn('Unable to persist the lighting snapshot', error);
+    setTimeout(() => toast(t('lighting.snapshotSaveFailed'), true), 0)
+  }
+}
+
+function lightingFromControls() {
+  const selected = $('effectSelect').value,
+    effect = meta.effects.includes(selected) ? selected : DEFAULT_LIGHTING.effect,
+    lighting = {
+      effect,
+      brightness: Number($('brightness').value),
+      speed: Number($('speed').value),
+      color_index: Number($('colorIndex').value),
+      multicolor: $('multicolor').checked
+    };
+  if (effect === 'custom') lighting.colors = cloneJson(profile.colors);
+  return lighting
+}
+
+function renderLightingControls() {
+  migrateProfileLighting(profile);
+  const lighting = ensureLightingDraft();
+  $('effectSelect').value = meta.effects.includes(lighting.effect) ? lighting.effect : DEFAULT_LIGHTING.effect;
+  $('brightness').value = lighting.brightness;
+  $('brightnessOut').value = lighting.brightness;
+  $('speed').value = lighting.speed;
+  $('speedOut').value = lighting.speed;
+  $('colorIndex').value = lighting.color_index;
+  $('multicolor').checked = lighting.multicolor;
+  renderLightingIntent()
 }
 
 function renderUsageList() {
@@ -888,9 +1070,37 @@ function buildKeyboard(container, mode) {
 function profileSettings() {
   if (!profile.settings || typeof profile.settings !== 'object') profile.settings = {
     win_lock: false,
-    wasd_arrows: false
+    wasd_arrows: false,
+    debounce_ms: DEFAULT_DEBOUNCE_MS
   };
+  if (!Number.isInteger(profile.settings.debounce_ms) || profile.settings.debounce_ms < 1 || profile.settings.debounce_ms > 255) profile.settings.debounce_ms = DEFAULT_DEBOUNCE_MS;
   return profile.settings
+}
+
+function renderDebounceControl() {
+  $('debounce').value = profileSettings().debounce_ms
+}
+
+function currentDebounce() {
+  return Number($('debounce').value)
+}
+
+function rememberDebounce(value, target) {
+  if (!Number.isInteger(value) || value < 1 || value > 255) return;
+  if (!target.profile.settings || typeof target.profile.settings !== 'object') target.profile.settings = {};
+  target.profile.settings.debounce_ms = value;
+  if (profile === target.profile) renderDebounceControl();
+  const name = target.savedName;
+  if (!name) return;
+  try {
+    const items = storedProfiles();
+    if (!hasOwn(items, name)) return;
+    if (!items[name].settings || typeof items[name].settings !== 'object') items[name].settings = {};
+    items[name].settings.debounce_ms = value;
+    localStorage.setItem('spade65-profiles', JSON.stringify(items))
+  } catch (error) {
+    console.warn('Unable to persist the debounce snapshot', error)
+  }
 }
 
 function renderKeyboard() {
@@ -1513,12 +1723,15 @@ function stopMacroRecording({
   return true
 }
 
-async function doAction(action, payload, success) {
+async function doAction(action, payload, success, onSuccess = null) {
   try {
-    await api(action, actionPayload(payload));
-    toast(success)
+    const result = await api(action, actionPayload(payload));
+    if (onSuccess) onSuccess(result);
+    toast(success);
+    return result
   } catch (error) {
-    toast(error.message, true)
+    toast(error.message, true);
+    return null
   }
 }
 
@@ -1534,12 +1747,28 @@ async function applyProfile() {
   const scopes = selectedScopes();
   if (!scopes.length) return toast(t('profile.scopeEmpty'), true);
   if (!confirm(t('profile.confirmApply'))) return;
-  if (prompt(t('profile.typeApply')) !== 'APPLY PROFILE') return toast(t('profile.cancelled'), true);
-  await doAction('profile', {
-    profile,
-    confirmation: 'APPLY PROFILE',
+  const requestProfile = cloneJson(profile),
+    writesLighting = scopes.includes('keymap') || scopes.includes('colors'),
+    writesKeymap = scopes.includes('keymap'),
+    target = lightingTarget(),
+    previousLighting = savedLighting(),
+    appliedLighting = writesLighting ? lightingForProfileApply() : null,
+    debounceMs = writesKeymap ? currentDebounce() : null;
+  if (appliedLighting) requestProfile.lighting = cloneJson(appliedLighting);
+  if (writesKeymap) {
+    if (!requestProfile.settings || typeof requestProfile.settings !== 'object') requestProfile.settings = {};
+    requestProfile.settings.debounce_ms = debounceMs
+  }
+  const payload = {
+    profile: requestProfile,
+    confirmed: true,
     scopes
-  }, t('profile.applied'))
+  };
+  if (writesLighting && previousLighting) payload.recovery_lighting = cloneJson(previousLighting);
+  await doAction('profile', payload, t('profile.applied'), () => {
+    if (appliedLighting) rememberLighting(appliedLighting, target);
+    if (writesKeymap) rememberDebounce(debounceMs, target)
+  })
 }
 async function downloadJson(data, name) {
   const contents = JSON.stringify(data, null, 2) + '\n',
@@ -1583,6 +1812,8 @@ function renderAllEditors() {
   selectedKey = null;
   activeMacro = 0;
   activeAppLayer = 0;
+  renderLightingControls();
+  renderDebounceControl();
   renderKeyboard();
   renderColorKeyboard();
   renderMacros();
@@ -1594,11 +1825,12 @@ function importProfile(file) {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
-      const data = JSON.parse(reader.result);
+      const data = migrateProfileLighting(JSON.parse(reader.result));
       await api('validate', {
         profile: data
       });
       profile = data;
+      renderSavedProfiles();
       renderAllEditors();
       toast(t('profile.imported'))
     } catch (error) {
@@ -1617,7 +1849,8 @@ function importVendor(file) {
           document,
           profile
         });
-      profile = result.profile;
+      profile = migrateProfileLighting(result.profile);
+      renderSavedProfiles();
       renderAllEditors();
       toast(t('profile.vendorImported', {
         areas: result.imported.join(', ')
@@ -1650,12 +1883,18 @@ function restoreLibrary(file) {
     try {
       const data = JSON.parse(reader.result);
       if (data.format !== 'spade65-library-v1' || !data.profiles || typeof data.profiles !== 'object' || Array.isArray(data.profiles)) throw new Error(t('profile.unsupportedBackup'));
-      for (const item of Object.values(data.profiles)) await api('validate', {
-        profile: item
-      });
-      if (data.current_profile) await api('validate', {
-        profile: data.current_profile
-      });
+      for (const item of Object.values(data.profiles)) {
+        migrateProfileLighting(item);
+        await api('validate', {
+          profile: item
+        })
+      }
+      if (data.current_profile) {
+        migrateProfileLighting(data.current_profile);
+        await api('validate', {
+          profile: data.current_profile
+        })
+      }
       if (!confirm(t('profile.confirmRestore', {
           count: Object.keys(data.profiles).length
         }))) return;
@@ -1676,8 +1915,9 @@ function restoreLibrary(file) {
 
 function newProfile() {
   if (!confirm(t('profile.confirmDiscard'))) return;
-  profile = cloneJson(meta.profile);
+  profile = migrateProfileLighting(cloneJson(meta.profile));
   colorKeys.clear();
+  renderSavedProfiles();
   renderAllEditors();
   toast(t('profile.created'))
 }
@@ -1685,6 +1925,7 @@ function newProfile() {
 function setSelectedColor() {
   if (!colorKeys.size) return toast(t('lighting.selectColorKey'), true);
   for (const key of colorKeys) profile.colors[key] = $('colorPicker').value;
+  selectCustomLightingDraft();
   renderColorKeyboard();
   renderLayerSummary();
   toast(t('lighting.colorStored', {
@@ -1695,6 +1936,7 @@ function setSelectedColor() {
 function clearColors() {
   profile.colors = {};
   colorKeys.clear();
+  selectCustomLightingDraft();
   renderColorKeyboard();
   renderLayerSummary()
 }
@@ -2150,8 +2392,17 @@ $('backupLibraryBtn').onclick = backupLibrary;
 $('restoreLibraryBtn').onclick = () => $('libraryFile').click();
 $('libraryFile').onchange = e => e.target.files[0] && restoreLibrary(e.target.files[0]);
 $('applyProfileBtn').onclick = applyProfile;
-$('brightness').oninput = e => $('brightnessOut').value = e.target.value;
-$('speed').oninput = e => $('speedOut').value = e.target.value;
+$('effectSelect').onchange = selectBuiltInLightingDraft;
+$('brightness').oninput = e => {
+  $('brightnessOut').value = e.target.value;
+  updateLightingDraftParameters()
+};
+$('speed').oninput = e => {
+  $('speedOut').value = e.target.value;
+  updateLightingDraftParameters()
+};
+$('colorIndex').oninput = updateLightingDraftParameters;
+$('multicolor').onchange = updateLightingDraftParameters;
 $('appSpeed').oninput = e => {
   $('appSpeedOut').value = e.target.value;
   saveAppLayer()
@@ -2175,20 +2426,31 @@ $('addAppLayerBtn').onclick = addAppLayer;
 $('removeAppLayerBtn').onclick = removeAppLayer;
 $('setAppRangeBtn').onclick = setAppRange;
 $('clearAppRangeBtn').onclick = clearAppRange;
-$('applyEffectBtn').onclick = () => doAction('rgb', {
-  effect: $('effectSelect').value,
-  brightness: Number($('brightness').value),
-  speed: Number($('speed').value),
-  color_index: Number($('colorIndex').value),
-  multicolor: $('multicolor').checked
-}, t('lighting.builtInApplied'));
+$('applyEffectBtn').onclick = () => {
+  selectBuiltInLightingDraft();
+  const lighting = cloneJson(lightingDraft),
+    target = lightingTarget();
+  doAction('rgb', lighting, t('lighting.builtInApplied'), () => {
+    rememberLighting(lighting, target)
+  })
+};
 $('setColorBtn').onclick = setSelectedColor;
 $('clearColorsBtn').onclick = clearColors;
-$('applyColorsBtn').onclick = () => doAction('per-key', {
-  profile,
-  brightness: Number($('brightness').value),
-  speed: Number($('speed').value)
-}, t('lighting.perKeyApplied'));
+$('applyColorsBtn').onclick = () => {
+  selectCustomLightingDraft();
+  const lighting = cloneJson(lightingDraft),
+    target = lightingTarget(),
+    requestProfile = cloneJson(profile);
+  doAction('per-key', {
+    profile: requestProfile,
+    brightness: lighting.brightness,
+    speed: lighting.speed,
+    color_index: lighting.color_index,
+    multicolor: lighting.multicolor
+  }, t('lighting.perKeyApplied'), () => {
+    rememberLighting(lighting, target)
+  })
+};
 $('streamOnceBtn').onclick = () => {
   saveAppLayer();
   animateColors()
@@ -2213,9 +2475,13 @@ $('macroName').onchange = e => {
 $('macroRepeat').onchange = e => {
   if (profile.macros[activeMacro]) profile.macros[activeMacro].repeat = Number(e.target.value)
 };
-$('debounceBtn').onclick = () => doAction('debounce', {
-  milliseconds: Number($('debounce').value)
-}, t('settings.debounceApplied'));
+$('debounceBtn').onclick = () => {
+  const milliseconds = currentDebounce(),
+    target = lightingTarget();
+  doAction('debounce', {
+    milliseconds
+  }, t('settings.debounceApplied'), () => rememberDebounce(milliseconds, target))
+};
 $('sleepBtn').onclick = () => doAction('sleep', {
   light_off: Number($('lightOff').value),
   hibernate: Number($('hibernate').value)

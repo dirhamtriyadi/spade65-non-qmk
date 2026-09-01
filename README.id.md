@@ -71,6 +71,16 @@ dipilih secara lokal untuk model tersebut; saat tidak ada yang terdeteksi —
 termasuk saat hanya receiver hanya-baca `0603:0352` yang ada — aplikasi
 menampilkan pratinjau fallback `Spade65-04 · ANSI standard`.
 
+Apply keymap mengikuti transaksi `SetKeyMatrix` aplikasi original: collection
+utama menerima keymap, hanya macro yang direferensikan, dan lighting saat ini;
+setelah itu collection pendek yang descriptor-nya cocok menerima nilai debounce
+yang tersimpan pada profil. Jeda yang dipakai adalah 100 ms setelah keymap, 200
+ms setelah setiap macro, 100 ms setelah efek lighting, 50 ms setelah palet custom
+opsional, dan 10 ms setelah debounce. Kedua collection diselesaikan serta
+divalidasi sebelum write pertama; mode kabel tidak menerima report timer. Profil
+tanpa `settings.debounce_ms` memakai nilai kompatibilitas historis proyek sebesar
+5 ms, sedangkan profil baru pada aplikasi original dimulai dari 1 ms.
+
 ## Batas keselamatan
 
 Firmware flashing, akses bootloader, operasi raw flash/write, dan paket HID
@@ -78,8 +88,8 @@ arbitrer sengaja **tidak diimplementasikan** karena operasi yang salah dapat
 menyebabkan keyboard brick. Fitur tersebut tidak memiliki aksi GUI, endpoint
 API, packet builder, ataupun fallback tersembunyi dalam proyek ini.
 
-Write konfigurasi dibatasi oleh validasi descriptor. Penimpaan keymap lengkap
-memerlukan dua konfirmasi, sedangkan reset memerlukan konfirmasi tertulis.
+Write konfigurasi dibatasi oleh validasi descriptor. Penimpaan keymap meminta
+satu dialog konfirmasi, sedangkan reset memerlukan konfirmasi tertulis.
 Pengecualian dan perlindungan ini adalah bagian dari desain, bukan fitur rilis
 yang belum selesai.
 
@@ -149,6 +159,11 @@ dan macro sementara diverifikasi melalui input fisik lalu dipulihkan, dan
 keyboard tetap terdeteksi dengan benar setelah reset. Simpan profil yang valid
 sebelum mengulanginya, karena keyboard tetap tidak menyediakan jalur
 readback-and-restore yang terjamin.
+
+Pengujian individual tersebut belum membuktikan bahwa transaksi gabungan
+keymap/lighting/debounce yang baru dilengkapi mempertahankan lighting aktif
+secara visual. Hasil persis dari GUI source masih menunggu konfirmasi fisik dan
+tidak disimpulkan hanya dari jumlah byte report yang berhasil.
 
 Hanya timer light-off/hibernate dongle yang masih belum dikirim. Identitas
 dongle logis `0603:0356` belum pernah terdeteksi di sini, dan receiver fisik

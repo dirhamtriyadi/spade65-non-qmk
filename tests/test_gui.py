@@ -84,9 +84,9 @@ class GuiTests(unittest.TestCase):
                 execute_action("reset", {"confirmation": "yes"})
         discover.assert_not_called()
 
-    def test_profile_requires_exact_confirmation_before_discovery(self) -> None:
+    def test_profile_requires_explicit_confirmation_before_discovery(self) -> None:
         with patch("spade65.gui.discover_devices") as discover:
-            with self.assertRaisesRegex(RuntimeError, "APPLY PROFILE"):
+            with self.assertRaisesRegex(RuntimeError, "confirm the profile overwrite"):
                 execute_action("profile", {"profile": profile_template()})
         discover.assert_not_called()
 

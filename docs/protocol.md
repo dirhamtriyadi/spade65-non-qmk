@@ -21,6 +21,10 @@ configuration reset have since been executed successfully on the same wired
 unit. The dongle timers remain untested because `0603:0356` has never enumerated
 on this hardware; the physical 2.4 GHz receiver enumerates as `0603:0352` and
 its descriptor advertises no feature reports, so it cannot be configured at all.
+The individual keymap, macro, lighting, and debounce reports have physical
+acceptance evidence, but visual lighting preservation after the newly completed
+official-style profile transaction has not yet been confirmed. Report byte
+counts and automated ordering tests are not treated as that visual proof.
 Firmware update is not implemented because it can brick the device and no
 verified recovery procedure exists.
 
@@ -91,6 +95,14 @@ Windows/macOS read the report descriptor through HIDAPI and then run the same
 parser used on Linux. If the descriptor cannot be read, a collection may still
 appear in `probe`, but it has no report shape and every write is therefore
 rejected. There is no fallback that writes based only on a path or VID/PID.
+
+A keymap apply requires both feature-report shapes. If one OS collection
+advertises both, it is reused. Otherwise the short-report companion must have
+the same VID/PID and serial/unique identity as the selected main collection,
+including both identities being empty. A missing companion or more than one
+possible match is an error before the first keymap report is sent. Both handles
+are opened before that first write; the main handle remains open across all
+main reports and the short report uses its own open handle.
 
 ## Main report ID 0x07
 
@@ -173,6 +185,38 @@ keycode. The vendor software enforces a minimum delay of 20 ms.
 The implementation accepts at most 84 events per macro so that the two-byte
 repeat header and every triplet remain within the 256-byte payload. The keymap
 can reference at most ten macros as usages `f0` through `f9`.
+
+### Profile apply / `SetKeyMatrix` transaction
+
+Static analysis of the original backend shows that applying a keymap is an
+ordered transaction across the main and short feature-report handles:
+
+| Order | Report | Delay after success |
+|---:|---|---:|
+| 1 | Main `0x07`, opcode `0x03`: all three keymap layers | 100 ms |
+| 2 | Main `0x07`, opcode `0x05`: each macro actually referenced by the keymap | 200 ms each |
+| 3 | Main `0x07`, opcode `0x02`: host-cached current lighting effect | 100 ms |
+| 4 | Main `0x07`, opcode `0x07`: exact per-key palette, custom lighting only | 50 ms |
+| 5 | Short `0x08`, opcode `0x09`: profile debounce | 10 ms |
+
+Spade65 follows this order for every profile operation that includes the
+`keymap` scope. The GUI supplies its currently selected lighting and displayed
+debounce; CLI and background-service applies use the values cached in the
+profile. The full report set and both descriptors are validated before opcode
+`0x03` is sent. Main-report failures retain best-effort lighting recovery. A
+failure of the final short report is surfaced as a partial transaction because
+the keymap and lighting may already have succeeded; the previous cached
+lighting is replayed best-effort before the error is returned.
+
+The original backend initializes a fresh profile with debounce 1 ms. Spade65
+stores `settings.debounce_ms` per profile and uses 5 ms for its own templates
+and profiles that predate the field, preserving the project's established
+behavior. This compatibility fallback must not be described as the vendor's
+fresh-profile default.
+
+`SetLightOffToDevice` returns without sending on the wired state. Consequently,
+the keymap transaction above ends after debounce and never appends a wired
+light-off/hibernate timer.
 
 ### Custom/per-key RGB — opcode 0x07
 

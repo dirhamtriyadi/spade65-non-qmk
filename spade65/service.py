@@ -17,24 +17,26 @@ from .transport import (
     Device,
     choose_device,
     discover_devices,
+    feature_report_session,
     send_feature_report,
     send_output_report,
 )
-from .keymap import compile_profile, load_profile
+from .keymap import (
+    compile_profile,
+    load_profile,
+    profile_lighting_recovery_reports,
+    profile_reports,
+)
 from .protocol import (
-    MAIN_REPORT_ID,
-    MAIN_REPORT_LENGTH,
-    MAIN_USAGE,
     OUTPUT_USAGE,
-    PRODUCT_IDS,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
     STREAMING_PRODUCT_IDS,
     VENDOR_ID,
-    rgb_effect_report,
     streaming_activation_report,
     streaming_rgb_reports,
 )
+from .profile_apply import choose_profile_devices, send_profile_transaction
 
 
 SERVICE_FORMAT = "spade65-service-v1"
@@ -243,33 +245,27 @@ def matching_rule(config: dict[str, Any]) -> dict[str, str] | None:
     return None
 
 
-def _choose_main(path: Path | None) -> Device:
-    device = choose_device(
-        discover_devices(), vendor_id=VENDOR_ID, product_ids=set(PRODUCT_IDS),
-        usage=MAIN_USAGE, explicit_path=path,
-    )
-    if device.report_length("feature", MAIN_REPORT_ID) != MAIN_REPORT_LENGTH:
-        raise RuntimeError("main feature descriptor does not match")
-    return device
-
-
 def apply_profile(profile: dict[str, Any], *, path: Path | None = None) -> None:
     compiled = compile_profile(profile)
-    reports = [compiled["keymap"], *compiled["macros"]]
-    if profile.get("colors"):
-        reports.extend((rgb_effect_report("custom"), compiled["colors"]))
-    device = _choose_main(path)
-    for index, report in enumerate(reports):
-        result = send_feature_report(device, report)
-        if result != len(report):
-            raise RuntimeError(
-                f"short background profile write on report "
-                f"{index + 1}/{len(reports)} "
-                f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
-                f"{result}/{len(report)}"
-            )
-        if index + 1 < len(reports):
-            time.sleep(0.1)
+    reports = list(profile_reports(profile, compiled))
+    recovery_reports = profile_lighting_recovery_reports(
+        reports, compiled["lighting"]
+    )
+    devices = discover_devices()
+    device, short_device = choose_profile_devices(
+        devices, explicit_path=path
+    )
+    send_profile_transaction(
+        device,
+        short_device,
+        reports,
+        compiled["debounce"],
+        feature_session=feature_report_session,
+        recovery_reports=recovery_reports,
+        sleep=time.sleep,
+        write_label="background profile write",
+        recovery_label="background lighting recovery",
+    )
 
 
 def stream_colors(colors: dict[str, object], *, path: Path | None = None) -> None:

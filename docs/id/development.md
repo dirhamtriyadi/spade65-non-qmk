@@ -167,15 +167,83 @@ glibc mesin build dan tidak otomatis memiliki portabilitas yang sama. Lihat
    konfigurasi yang sudah memiliki builder tervalidasi.
 9. Profil JSON adalah data deklaratif; jangan pernah menerima byte/report mentah.
 
+## Transaksi keymap bergaya aplikasi resmi
+
+Firmware menghapus pencahayaan aktif saat menerima report keymap opcode `0x03`.
+Karena itu jalur `SetKeyMatrix` aplikasi original adalah transaksi lengkap dan
+berurutan, bukan penulisan keymap yang hanya ditambah ekor lighting:
+
+1. Kirim report keymap utama `0x03`, lalu tunggu 100 ms.
+2. Kirim hanya macro utama `0x05` yang direferensikan keymap tersebut, dengan
+   jeda 200 ms setelah masing-masing macro.
+3. Kirim ulang `lightData` cache host: `0x02` utama, tunggu 100 ms, lalu untuk
+   lighting custom kirim `0x07` utama dan tunggu 50 ms.
+4. Kirim debounce profil melalui opcode pendek `0x09`, lalu tunggu 10 ms.
+
+Jalur kabel aplikasi original kembali sebelum `SetLightOffToDevice`, jadi jangan
+menambahkan timer light-off/hibernate ke transaksi ini pada mode kabel. Cakupan
+macro-saja dan lighting-saja juga tidak menerima ekor debounce.
+
+Kompilasi `settings.debounce_ms` bersama seluruh profil sebelum penemuan
+perangkat. Aplikasi original menginisialisasi profil baru pada 1 ms, tetapi
+Spade65 mempertahankan 5 ms untuk template dan profil lama yang tidak memiliki
+field tersebut; ini adalah default kompatibilitas-mundur proyek dan nilai yang
+sudah diterima unit kabel fisik. Write debounce mandiri yang berhasil maupun
+transaksi keymap yang berhasil sama-sama memperbarui nilai per profil di GUI.
+
+Selesaikan kedua collection HID sebelum mengirim `0x03`. Collection utama harus
+mengiklankan usage `ff02:0001` dan feature report `0x07`/620 byte; companion
+harus mengiklankan `ff03:0001` dan feature report `0x08`/8 byte. Pakai ulang
+collection utama bila satu collection OS mengekspos kedua bentuk. Bila terpisah,
+terima hanya companion dengan VID/PID dan identitas serial/unique yang sama,
+termasuk ketika keduanya sama-sama kosong, lalu tolak hasil yang tidak ada atau
+ambigu. Validasi seluruh report utama, recovery, dan debounce sebelum membuka
+kedua handle HID agar kegagalan companion tidak meninggalkan keymap setengah
+diterapkan. Pertahankan handle utama selama seluruh rangkaian
+`0x03`/`0x05`/`0x02`/`0x07` dan handle pendek terpisah untuk `0x09` terakhir,
+sesuai lifetime handle pada backend original.
+
+Aplikasi original tidak memperoleh pencahayaan aktif dari keyboard, dan proyek
+ini juga tidak memiliki report readback pencahayaan yang terverifikasi. Simpan
+pencahayaan terakhir yang berhasil ditulis sebagai snapshot host per profil.
+Profil baru memakai snapshot lighting resmi (Aliran Neon, kecerahan 4, kecepatan
+5, indeks warna 0, multiwarna aktif). Bentuk profil lama sebelum adanya snapshot
+memakai default yang sama terlepas dari draft `colors` tingkat atas; menganggap
+draft yang belum terverifikasi sebagai lighting custom aktif dapat membuat
+selector berbeda dari data yang ditulis dan menjadikan tombol yang tidak diatur
+berwarna hitam. Snapshot host dapat mengganti state yang diubah melalui shortcut
+keyboard atau host lain karena tidak ada readback untuk menyelaraskan keduanya.
+
+Snapshot custom memiliki salinan palet persis yang berhasil secara independen
+di `lighting.colors`. Tabel `colors` tingkat atas tetap menjadi draft editable.
+Jangan pernah memulihkan lighting custom dari draft yang dapat berubah tersebut.
+Jika report utama gagal setelah opcode `0x03`, lakukan recovery lighting
+best-effort yang dikonfigurasi sebelum melaporkan error awal. Kegagalan report
+debounce pendek terakhir dilaporkan secara eksplisit sebagai transaksi parsial
+setelah replay best-effort terhadap lighting tersimpan sebelumnya. Ini mencegah
+snapshot host berbasis keberhasilan menjadi diketahui sudah stale; kegagalan
+recovery ikut dicantumkan dalam error.
+
+Cakupan profil bernama lama `colors` mengirim ulang snapshot lighting tersimpan;
+cakupan itu tidak boleh mengaktifkan draft warna tingkat atas pada profil
+modern. GUI melacak intent editor built-in/custom secara eksplisit. Transaksi
+keymap memakai intent saat ini, termasuk salinan persis tabel per tombol untuk
+custom, serta debounce yang ditampilkan untuk profil tersebut. Simpan snapshot
+lighting dan debounce hanya setelah seluruh transaksi berhasil. Aksi khusus
+per tombol dan debounce memakai aturan hanya-setelah-berhasil yang sama.
+
 ## Workflow pengujian hardware
 
 Buat branch terpisah dan kerjakan dari operasi paling kecil:
 
 1. `probe` pada USB dan dongle.
 2. RGB built-in satu kali.
-3. Debounce dengan nilai default 5 ms terlebih dahulu.
+3. Debounce dengan nilai kompatibilitas proyek 5 ms terlebih dahulu (default
+   profil baru aplikasi original adalah 1 ms).
 4. Timer dongle.
-5. Baca current state jika format get report sudah diketahui.
+5. Baca current state hanya bila format get report sudah terverifikasi;
+   pencahayaan tidak memiliki readback terverifikasi dan harus memakai snapshot
+   host yang didokumentasikan.
 6. Per-key RGB.
 7. Remap satu tombol.
 8. Layer dan macro.

@@ -105,6 +105,13 @@ aplikasi juga menulis keymap, dua izin harus aktif sekaligus:
 1. `"allow_profile_writes": true` di file config.
 2. Flag runtime `--allow-profile-writes`.
 
+Write background profile yang diaktifkan memakai transaksi lengkap yang sama
+dengan UI foreground: keymap, macro yang direferensikan, lighting cache profil,
+lalu debounce cache profil. Collection utama dan companion pendek harus lulus
+validasi descriptor sebelum keymap dikirim, dan tidak ada timer yang ditambahkan
+pada perangkat kabel. Lihat [catatan protokol](protocol.md#transaksi-apply-profil--setkeymatrix)
+untuk jeda report yang tepat.
+
 Semua write tetap diperiksa terhadap HID descriptor. Dari instalasi source,
 launcher untuk OS aktif dapat dibuat tanpa langsung memasangnya:
 

@@ -28,6 +28,7 @@ from spade65.protocol import (
     VENDOR_ID,
 )
 from spade65.service import apply_profile, stream_colors
+from tests.session_support import FeatureSessionRecorder
 
 
 def _short(_device: object, report: bytes) -> int:
@@ -75,6 +76,10 @@ def _short_feature_device() -> Device:
     )
 
 
+def _profile_devices() -> list[Device]:
+    return [_main_device(), _short_feature_device()]
+
+
 def _colors() -> dict[str, str]:
     return {"esc": "#ff0000"}
 
@@ -94,6 +99,9 @@ def _multi_report_profile() -> dict[str, object]:
         }
         for index in range(3)
     ]
+    profile["layers"]["normal"]["esc"] = {"macro": 0}
+    profile["layers"]["fn1"]["esc"] = {"macro": 1}
+    profile["layers"]["fn2"]["esc"] = {"macro": 2}
     profile["colors"] = _colors()
     return profile
 
@@ -138,6 +146,30 @@ class ShortFeatureWriteTests(unittest.TestCase):
 class ShortProfileWriteTests(unittest.TestCase):
     """Multi-report sequences must name the report that failed and stop there."""
 
+    def test_keymap_apply_checks_the_compensating_lighting_write(self) -> None:
+        sessions = FeatureSessionRecorder(_fail_on(1))
+        with (
+            patch("spade65.gui.discover_devices", return_value=_profile_devices()),
+            patch(
+                "spade65.gui.feature_report_session", new=sessions.session
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"short feature write on report 2/2 "
+                r"\(id 0x07 opcode 0x02\): 619/620; "
+                r"cached lighting recovery succeeded",
+            ):
+                execute_action(
+                    "profile",
+                    {
+                        "profile": profile_template(),
+                        "confirmed": True,
+                        "scopes": ["keymap"],
+                    },
+                )
+        self.assertEqual(sessions.opcodes, [0x03, 0x02, 0x02])
+
     def test_cli_profile_apply_aborts_and_names_the_failing_report(self) -> None:
         # Fail on the third of several reports so the index in the message is
         # load-bearing and the abort cannot be confused with "wrote them all".
@@ -147,11 +179,12 @@ class ShortProfileWriteTests(unittest.TestCase):
                 json.dumps(_multi_report_profile()), encoding="utf-8"
             )
             error = io.StringIO()
+            sessions = FeatureSessionRecorder(_fail_on(2))
             with (
-                patch("spade65.cli.discover_devices", return_value=[_main_device()]),
+                patch("spade65.cli.discover_devices", return_value=_profile_devices()),
                 patch(
-                    "spade65.cli.send_feature_report", side_effect=_fail_on(2)
-                ) as send,
+                    "spade65.cli.feature_report_session", new=sessions.session
+                ),
                 redirect_stdout(io.StringIO()),
                 redirect_stderr(error),
             ):
@@ -171,8 +204,10 @@ class ShortProfileWriteTests(unittest.TestCase):
         self.assertRegex(message, r"short feature write on report 3/[2-9]\d*")
         self.assertIn("opcode 0x05", message)
         self.assertIn("619/620", message)
-        # Stopped at the failure instead of writing the rest of the sequence.
-        self.assertEqual(send.call_count, 3)
+        self.assertIn("cached lighting recovery succeeded", message)
+        # The remaining keymap/macro reports stop, then only cached lighting is
+        # retried because opcode 0x03 may already have cleared it.
+        self.assertEqual(sessions.opcodes, [0x03, 0x05, 0x05, 0x02])
 
     def test_cli_per_key_rgb_aborts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -193,41 +228,195 @@ class ShortProfileWriteTests(unittest.TestCase):
         self.assertIn("short feature write on report 1/", error.getvalue())
 
     def test_gui_profile_write_aborts_and_names_the_failing_report(self) -> None:
+        sessions = FeatureSessionRecorder(_fail_on(1))
         with (
-            patch("spade65.gui.discover_devices", return_value=[_main_device()]),
+            patch("spade65.gui.discover_devices", return_value=_profile_devices()),
             patch(
-                "spade65.gui.send_feature_report", side_effect=_fail_on(1)
-            ) as send,
+                "spade65.gui.feature_report_session", new=sessions.session
+            ),
         ):
             with self.assertRaisesRegex(
                 RuntimeError,
                 r"short feature write on report 2/[2-9]\d* "
-                r"\(id 0x07 opcode 0x05\): 619/620",
+                r"\(id 0x07 opcode 0x05\): 619/620; "
+                r"cached lighting recovery succeeded",
             ):
                 execute_action(
                     "profile",
                     {
                         "profile": _multi_report_profile(),
-                        "confirmation": "APPLY PROFILE",
+                        "confirmed": True,
                         "scopes": ["keymap", "macros", "colors"],
                     },
                 )
-        self.assertEqual(send.call_count, 2)
+        self.assertEqual(sessions.opcodes, [0x03, 0x05, 0x02])
 
     def test_service_background_profile_write_aborts(self) -> None:
+        sessions = FeatureSessionRecorder(_fail_on(1))
         with (
-            patch("spade65.service.discover_devices", return_value=[_main_device()]),
+            patch("spade65.service.discover_devices", return_value=_profile_devices()),
             patch(
-                "spade65.service.send_feature_report", side_effect=_fail_on(1)
-            ) as send,
+                "spade65.service.feature_report_session", new=sessions.session
+            ),
         ):
             with self.assertRaisesRegex(
                 RuntimeError,
                 r"short background profile write on report 2/[2-9]\d* "
-                r"\(id 0x07 opcode 0x05\): 619/620",
+                r"\(id 0x07 opcode 0x05\): 619/620; "
+                r"cached lighting recovery succeeded",
             ):
                 apply_profile(_multi_report_profile())
-        self.assertEqual(send.call_count, 2)
+        self.assertEqual(sessions.opcodes, [0x03, 0x05, 0x02])
+
+    def test_gui_reports_when_cached_lighting_recovery_also_fails(self) -> None:
+        calls = {"count": 0}
+
+        def fail_transaction_and_recovery(_device: object, report: bytes) -> int:
+            index = calls["count"]
+            calls["count"] += 1
+            return len(report) - 1 if index in {1, 2} else len(report)
+
+        sessions = FeatureSessionRecorder(fail_transaction_and_recovery)
+        with (
+            patch("spade65.gui.discover_devices", return_value=_profile_devices()),
+            patch(
+                "spade65.gui.feature_report_session", new=sessions.session
+            ),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"short feature write on report 2/[2-9]\d*.*"
+                r"cached lighting recovery also failed: short recovery write",
+            ):
+                execute_action(
+                    "profile",
+                    {
+                        "profile": _multi_report_profile(),
+                        "confirmed": True,
+                        "scopes": ["keymap", "macros"],
+                    },
+                )
+        self.assertEqual(sessions.opcodes, [0x03, 0x05, 0x02])
+
+    def test_gui_profile_debounce_tail_rejects_a_short_write(self) -> None:
+        sessions = FeatureSessionRecorder(_fail_on(2))
+        with (
+            patch("spade65.gui.discover_devices", return_value=_profile_devices()),
+            patch(
+                "spade65.gui.feature_report_session", new=sessions.session
+            ),
+            patch(
+                "spade65.gui.time.sleep",
+                side_effect=lambda delay: sessions.events.append(("sleep", delay)),
+            ) as sleep,
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                execute_action(
+                    "profile",
+                    {
+                        "profile": profile_template(),
+                        "confirmed": True,
+                        "scopes": ["keymap"],
+                    },
+                )
+        self.assertIn("short", str(raised.exception).lower())
+        self.assertIn("7/8", str(raised.exception))
+        self.assertIn("cached lighting recovery succeeded", str(raised.exception))
+        self.assertEqual(
+            [(device.path, report[1]) for device, report in sessions.calls],
+            [
+                (_main_device().path, 0x03),
+                (_main_device().path, 0x02),
+                (_short_feature_device().path, 0x09),
+                (_main_device().path, 0x02),
+            ],
+        )
+        self.assertEqual(
+            [call.args[0] for call in sleep.call_args_list],
+            [0.1, 0.1, 0.1],
+        )
+        self.assertEqual(
+            [device.path for device in sessions.opened].count(_main_device().path),
+            1,
+        )
+        self.assertEqual(
+            sessions.events[-3:],
+            [
+                ("sleep", 0.1),
+                ("close", _short_feature_device().path),
+                ("close", _main_device().path),
+            ],
+        )
+
+    def test_cli_profile_debounce_tail_rejects_a_short_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profile.json"
+            path.write_text(json.dumps(profile_template()), encoding="utf-8")
+            error = io.StringIO()
+            sessions = FeatureSessionRecorder(_fail_on(2))
+            with (
+                patch(
+                    "spade65.cli.discover_devices", return_value=_profile_devices()
+                ),
+                patch(
+                    "spade65.cli.feature_report_session", new=sessions.session
+                ),
+                patch("spade65.cli.time.sleep"),
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(error),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "profile",
+                            "apply",
+                            str(path),
+                            "--only",
+                            "keymap",
+                            "--confirm",
+                            "--i-understand-profile-overwrite",
+                        ]
+                    ),
+                    1,
+                )
+        self.assertIn("short", error.getvalue().lower())
+        self.assertIn("7/8", error.getvalue())
+        self.assertIn("cached lighting recovery succeeded", error.getvalue())
+        self.assertEqual(
+            [(device.path, report[1]) for device, report in sessions.calls],
+            [
+                (_main_device().path, 0x03),
+                (_main_device().path, 0x02),
+                (_short_feature_device().path, 0x09),
+                (_main_device().path, 0x02),
+            ],
+        )
+
+    def test_service_profile_debounce_tail_rejects_a_short_write(self) -> None:
+        sessions = FeatureSessionRecorder(_fail_on(2))
+        with (
+            patch(
+                "spade65.service.discover_devices", return_value=_profile_devices()
+            ),
+            patch(
+                "spade65.service.feature_report_session", new=sessions.session
+            ),
+            patch("spade65.service.time.sleep"),
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                apply_profile(profile_template())
+        self.assertIn("short", str(raised.exception).lower())
+        self.assertIn("7/8", str(raised.exception))
+        self.assertIn("cached lighting recovery succeeded", str(raised.exception))
+        self.assertEqual(
+            [(device.path, report[1]) for device, report in sessions.calls],
+            [
+                (_main_device().path, 0x03),
+                (_main_device().path, 0x02),
+                (_short_feature_device().path, 0x09),
+                (_main_device().path, 0x02),
+            ],
+        )
 
 
 class ShortStreamingWriteTests(unittest.TestCase):

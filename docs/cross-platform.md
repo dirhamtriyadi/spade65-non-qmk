@@ -249,11 +249,20 @@ do not require a background service after they are applied. Named profiles,
 application associations, AP/streaming animations, and custom timelines are host
 data; their effects require the GUI or service to remain running.
 
+On every OS, applying a keymap resolves the descriptor-gated main and short
+companion collections and opens both handles before writing. The main handle
+stays open while it sends keymap, referenced macros, and current/cached
+lighting; the separate short handle sends per-profile debounce in the official
+order. Wired mode ends after debounce; its transaction never sends a dongle
+timer.
+
 A temporary three-layer keymap and macro were applied to the wired `0603:0351`
 unit and verified through physical input, then the default keymap and an empty
 macro were re-applied to restore it. Persistence across a power cycle has still
 not been measured. The device provides no readback, so a saved profile remains
-the only restore path.
+the only restore path. The individual report paths have hardware evidence, but
+visual lighting preservation after the newly completed combined transaction is
+still awaiting confirmation.
 Firmware flashing, bootloader access, raw flashing, and arbitrary HID are not
 implemented on any operating system. Neither desktop packages nor local builds
 contain a hidden path to those operations.

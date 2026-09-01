@@ -31,6 +31,14 @@ is not serialized into the keymap report. The project's saved profiles and
 import/export therefore provide equivalent behavior without inventing a new
 profile opcode.
 
+The original `SetKeyMatrix` operation is also reproduced as one ordered
+transaction: keymap, referenced macros, host-cached current lighting, and
+profile debounce, with its recovered 100/200/100/50/10 ms waits. Main and short
+companion descriptors are resolved before the first write, and the wired path
+skips the dongle timer just as the original backend does. Legacy Spade65
+profiles default missing debounce data to 5 ms for compatibility; the original
+application's fresh-profile value was 1 ms.
+
 ## Bundled code that is not an active Spade65 feature
 
 Several components exist in the generic bundle but are not active device pages:
@@ -52,7 +60,7 @@ Several components exist in the generic bundle but are not active device pages:
 
 The firmware updater, bootloader, raw flash, and arbitrary HID packets
 deliberately have no endpoint or packet builder. Reset requires typed
-confirmation; overwriting the keymap requires two confirmations; and every
+confirmation; overwriting the keymap requires an explicit confirmation; and every
 feature write must match the report-descriptor size. These exclusions are safety
 decisions, not unfinished features.
 
@@ -62,7 +70,9 @@ Descriptor detection, all 20 built-in RGB effects, per-key RGB, streaming/AP
 mode, the custom timeline, the background service, debounce, keymap/macros, and
 reset have been validated over USB on `0603:0351`; the keymap and macro test was
 applied, confirmed by physical key input, and then restored, and the keyboard
-re-enumerated correctly after the reset. Only the dongle timers remain
+re-enumerated correctly after the reset. The complete combined transaction is
+implemented and ordering-tested, but preservation of active lighting after that
+new path has not yet received visual hardware confirmation. Only the dongle timers remain
 unexecuted on hardware, and the reason is known rather than incidental: the
 original backend returns from `SetLightOffToDevice` when `BaseInfo.StateID` is
 the wired state and resolves the write handle from `StateList[1]`, so the frame

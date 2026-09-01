@@ -14,6 +14,7 @@ from spade65.keymap import (
     export_default,
     profile_template,
 )
+from spade65.protocol import debounce_report
 
 
 class KeymapTests(unittest.TestCase):
@@ -91,6 +92,34 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(len(compiled["keymap"]), 620)
         self.assertEqual(len(compiled["macros"]), 1)
         self.assertEqual(compiled["matrix_colors"][17], (0x12, 0x34, 0x56))
+
+    def test_profile_template_compiles_the_vendor_tail_debounce(self) -> None:
+        profile = profile_template()
+
+        self.assertEqual(profile["settings"]["debounce_ms"], 5)
+        self.assertEqual(compile_profile(profile)["debounce"], debounce_report(5))
+
+    def test_legacy_profile_without_debounce_uses_five_milliseconds(self) -> None:
+        profile = profile_template()
+        profile["settings"].pop("debounce_ms")
+
+        self.assertEqual(compile_profile(profile)["debounce"], debounce_report(5))
+
+    def test_profile_debounce_compiles_the_selected_value(self) -> None:
+        profile = profile_template()
+        profile["settings"]["debounce_ms"] = 17
+
+        compiled = compile_profile(profile)
+        self.assertEqual(compiled["debounce_ms"], 17)
+        self.assertEqual(compiled["debounce"], debounce_report(17))
+
+    def test_invalid_profile_debounce_is_rejected(self) -> None:
+        for value in (True, False, 0, 256, "5", None):
+            with self.subTest(value=value):
+                profile = profile_template()
+                profile["settings"]["debounce_ms"] = value
+                with self.assertRaisesRegex(ValueError, "debounce"):
+                    compile_profile(profile)
 
     def test_compiles_right_modifiers_without_alias_collision(self) -> None:
         profile = profile_template()

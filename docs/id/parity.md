@@ -30,6 +30,14 @@ lalu menulis frame keymap yang sama ke perangkat; nomor profil tidak diserialisa
 ke report keymap. Karena itu saved profiles + import/export proyek ini setara,
 tanpa mengarang opcode profile baru.
 
+Operasi `SetKeyMatrix` aplikasi original juga direproduksi sebagai satu transaksi
+berurutan: keymap, macro yang direferensikan, lighting saat ini dari cache host,
+dan debounce profil, dengan jeda hasil analisis 100/200/100/50/10 ms. Descriptor
+collection utama dan companion pendek diselesaikan sebelum write pertama, dan
+jalur kabel melewati timer dongle seperti backend original. Profil Spade65 lama
+memakai default 5 ms bila data debounce tidak ada demi kompatibilitas; nilai
+profil baru aplikasi original adalah 1 ms.
+
 ## Kode bundle yang bukan fitur aktif Spade65
 
 Beberapa komponen ada di bundle generik tetapi bukan halaman aktif perangkat:
@@ -51,7 +59,7 @@ Beberapa komponen ada di bundle generik tetapi bukan halaman aktif perangkat:
 
 Firmware updater, bootloader, raw flash, dan arbitrary HID packet sengaja tidak
 memiliki endpoint atau packet builder. Reset memerlukan teks konfirmasi; overwrite
-keymap memerlukan dua konfirmasi; semua feature write harus cocok dengan ukuran
+keymap memerlukan satu konfirmasi eksplisit; semua feature write harus cocok dengan ukuran
 report descriptor. Pengecualian ini adalah keputusan keselamatan, bukan fitur
 yang belum selesai.
 
@@ -61,7 +69,9 @@ Deteksi descriptor, seluruh 20 efek built-in RGB, per-key RGB, streaming/AP mode
 custom timeline, background service, debounce, keymap/macro, dan reset sudah
 divalidasi melalui USB pada `0603:0351`; pengujian keymap dan macro diterapkan,
 dikonfirmasi melalui input fisik, lalu dipulihkan, dan keyboard kembali terdeteksi
-dengan benar setelah reset. Hanya timer dongle yang belum dieksekusi pada
+dengan benar setelah reset. Transaksi gabungan lengkap sudah diimplementasikan
+dan diuji urutannya, tetapi pemeliharaan lighting aktif melalui jalur baru itu
+belum mendapat konfirmasi visual pada hardware. Hanya timer dongle yang belum dieksekusi pada
 hardware, dan alasannya diketahui, bukan kebetulan: backend original langsung
 kembali dari `SetLightOffToDevice` ketika `BaseInfo.StateID` adalah identitas
 kabel dan menyelesaikan handle tulis dari `StateList[1]`, sehingga frame tersebut

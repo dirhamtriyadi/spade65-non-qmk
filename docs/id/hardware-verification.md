@@ -2,9 +2,9 @@
 
 # Verifikasi hardware
 
-Pengujian kabel dilakukan pada 29–31 Agustus 2026 menggunakan Spade65 USB
-`0603:0351`. Pada 31 Agustus, receiver fisik 2,4 GHz milik keyboard yang sama
-juga diperiksa dan terdeteksi sebagai `0603:0352`.
+Pengujian kabel dilakukan pada 29 Agustus–1 September 2026 menggunakan Spade65
+USB `0603:0351`. Pada 31 Agustus, receiver fisik 2,4 GHz milik keyboard yang
+sama juga diperiksa dan terdeteksi sebagai `0603:0352`.
 
 ## Berhasil
 
@@ -26,6 +26,64 @@ juga diperiksa dan terdeteksi sebagai `0603:0352`.
   streaming kabel. Efek host ini tidak menulis firmware, flash, atau bootloader.
 - Pembacaan sysfs menghasilkan USB revision `01.00`. Nilai ini tidak diberi label
   versi firmware.
+
+## Transaksi keymap resmi dan temuan pencahayaan
+
+Firmware berkabel menghapus state pencahayaan aktif saat menerima report keymap
+opcode `0x03`. Analisis aplikasi resmi menjelaskan urutan penulisannya:
+`SetKeyMatrix` mengirim key matrix, macro yang direferensikan, lalu mengirim
+ulang `lightData` dari cache host. Setelah itu aplikasi mengirim nilai debounce
+profil melalui handle report pendek. Jeda yang ditemukan pada jalur tersebut
+adalah 100 ms setelah keymap `0x03`, 200 ms setelah setiap macro `0x05` yang
+direferensikan, 100 ms setelah efek lighting `0x02`, 50 ms setelah palet custom
+`0x07` opsional, dan 10 ms setelah debounce pendek `0x09`. Aplikasi resmi tidak
+membaca pencahayaan saat ini dari keyboard, dan belum ada report readback
+pencahayaan yang terverifikasi untuk proyek ini.
+
+Spade65 sekarang mengirim urutan lengkap yang sama: keymap, hanya macro yang
+direferensikan, lighting saat ini/tersimpan, dan debounce yang tersimpan di
+profil. Collection utama 620 byte dan companion pendek 8 byte diselesaikan serta
+divalidasi terhadap descriptor sebelum write keymap. Jalur kabel tidak
+menambahkan timer, sesuai early return fungsi timer aplikasi original.
+
+Bentuk report keymap, macro, lighting, dan debounce 5 ms secara individual
+memiliki bukti penerimaan fisik seperti dicatat di atas. Apply keymap-saja dari
+source juga pernah diamati tetap mematikan lighting sebelum ekor debounce
+lengkap ini diimplementasikan. Pada 1 September, transaksi lengkap keymap
+default + Aliran Neon + debounce 5 ms mengembalikan panjang write penuh untuk
+ketiga report. Pemeliharaan visual lighting aktif setelah transaksi lengkap
+tersebut **belum dikonfirmasi pada hardware**; jumlah byte report yang sukses
+dan pengujian urutan otomatis tidak disebut sebagai bukti visual tersebut.
+
+GUI memakai pilihan editor built-in/custom serta debounce yang sedang
+ditampilkan untuk transaksi ini, lalu baru menyimpan kedua nilai persis tersebut
+setelah report pendek terakhir berhasil. Aplikasi original memulai profil baru
+pada 1 ms; Spade65 memakai 5 ms ketika profil lama tidak memiliki
+`debounce_ms`, demi mempertahankan perilaku historis proyek. Profil Spade65 baru
+juga mencatat 5 ms secara eksplisit.
+
+Spade65 menyimpan snapshot pencahayaan terakhir yang berhasil ditulis di setiap
+profil. Profil baru memakai default lighting resmi: Aliran Neon, kecerahan 4,
+kecepatan 5, indeks warna 0, dan multiwarna aktif. Profil lama tanpa snapshot
+lighting memakai default yang sama; warna per tombolnya tetap menjadi draft
+editable sampai lighting custom dipilih secara eksplisit dan berhasil ditulis.
+Fallback kompatibilitas ini dapat mengganti pencahayaan yang diubah melalui
+shortcut keyboard atau host lain karena aplikasi tidak dapat mengamati
+perubahan eksternal tersebut.
+
+Untuk lighting custom, snapshot menyimpan salinan independen dari palet persis
+yang berhasil. Karena itu edit berikutnya yang belum dikirim tidak dapat mengubah
+recovery keymap. Jika penulisan multi-report gagal setelah keymap atau saat
+mengirim palet custom baru, aplikasi mencoba satu kali mengirim ulang hanya
+lighting tersimpan sebelumnya sebelum menampilkan error.
+
+Cakupan profil bernama lama `colors` mengirim ulang lighting aktif yang
+tersimpan; cakupan itu tidak mengaktifkan draft warna tingkat atas pada profil
+modern secara independen. Mengedit warna per tombol di GUI memilih custom
+sebagai intent editor saat ini; Apply Profile dengan keymap/lighting atau aksi
+khusus per tombol kemudian menulis seluruh tabel tersebut. Tombol yang tidak
+ada dalam tabel menjadi hitam, dan tabel persis itu baru menjadi snapshot custom
+setelah seluruh penulisan berhasil.
 
 ## Receiver 2,4 GHz yang diamati
 

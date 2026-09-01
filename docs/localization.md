@@ -92,7 +92,7 @@ renderers from `renderLocalizedDynamic()` so lists and statuses already on the
 screen are updated as well.
 
 Backend text, device names, paths, HID keycodes, literal confirmation tokens such
-as `RESET SPADE65`/`APPLY PROFILE`, and JSON diagnostic contents do not need
+as `RESET SPADE65`, and JSON diagnostic contents do not need
 translation. When a UI message wraps a backend error, translate the UI portion
 and insert the error details as a placeholder.
 

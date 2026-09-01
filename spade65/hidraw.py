@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import fcntl
 import os
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from .device import Device, ReportShape, choose_device, parse_report_descriptor
@@ -71,21 +73,33 @@ def hid_iocsfeature(length: int) -> int:
     return _ioc(3, ord("H"), 0x06, length)
 
 
-def send_feature_report(path: Path, report: bytes) -> int:
-    if not report:
-        raise ValueError("feature report cannot be empty")
-    mutable_report = bytearray(report)
+@contextmanager
+def feature_report_session(path: Path) -> Iterator[Callable[[bytes], int]]:
+    """Keep one hidraw descriptor open for a multi-report transaction."""
+
     descriptor = os.open(path, os.O_RDWR | os.O_CLOEXEC)
     try:
-        result = fcntl.ioctl(
-            descriptor,
-            hid_iocsfeature(len(mutable_report)),
-            mutable_report,
-            True,
-        )
+        def send(report: bytes) -> int:
+            if not report:
+                raise ValueError("feature report cannot be empty")
+            mutable_report = bytearray(report)
+            return int(
+                fcntl.ioctl(
+                    descriptor,
+                    hid_iocsfeature(len(mutable_report)),
+                    mutable_report,
+                    True,
+                )
+            )
+
+        yield send
     finally:
         os.close(descriptor)
-    return int(result)
+
+
+def send_feature_report(path: Path, report: bytes) -> int:
+    with feature_report_session(path) as send:
+        return send(report)
 
 
 def send_output_report(path: Path, report: bytes) -> int:

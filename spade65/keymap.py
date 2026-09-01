@@ -12,6 +12,7 @@ from .protocol import (
     MacroEvent,
     MacroReference,
     custom_rgb_report,
+    debounce_report,
     keymap_report,
     macro_report,
     rgb_effect_report,
@@ -96,6 +97,22 @@ UI_KEY_NAMES = tuple(_ui_key_names)
 BUTTON_TO_SLOT = {name: MATRIX_KEY_NAMES.index(name) for name in UI_KEY_NAMES}
 
 LAYER_NAMES = ("normal", "fn1", "fn2")
+
+# ``lightData`` in every fresh profile from the official application. Keep a
+# host-side snapshot because this firmware exposes no lighting readback and
+# clears lighting while accepting a keymap report.
+DEFAULT_LIGHTING = {
+    "effect": "neon-stream",
+    "brightness": 4,
+    "speed": 5,
+    "color_index": 0,
+    "multicolor": True,
+}
+
+# The GUI has historically exposed 5 ms as its initial value and the physical
+# wired unit has accepted that value.  Keep it as the legacy/profile migration
+# default even though a fresh profile in the vendor application starts at 1 ms.
+DEFAULT_DEBOUNCE_MS = 5
 
 HID_USAGES = {
     **{chr(ord("a") + index): 0x04 + index for index in range(26)},
@@ -243,7 +260,12 @@ def profile_template() -> dict[str, object]:
         "layers": {name: {} for name in LAYER_NAMES},
         "macros": [],
         "colors": {},
-        "settings": {"win_lock": False, "wasd_arrows": False},
+        "lighting": dict(DEFAULT_LIGHTING),
+        "settings": {
+            "win_lock": False,
+            "wasd_arrows": False,
+            "debounce_ms": DEFAULT_DEBOUNCE_MS,
+        },
     }
 
 
@@ -291,6 +313,89 @@ def _color(value: object) -> tuple[int, int, int]:
     raise ValueError(f"invalid RGB color: {value!r}")
 
 
+def _color_table(
+    value: object,
+    *,
+    label: str,
+) -> tuple[tuple[tuple[int, int, int], ...], bytes]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+    colors = [(0, 0, 0)] * MATRIX_LENGTH
+    for button, color in value.items():
+        if button not in BUTTON_TO_SLOT:
+            raise ValueError(f"unknown Spade65 color button: {button}")
+        colors[BUTTON_TO_SLOT[button]] = _color(color)
+    matrix = tuple(colors)
+    return matrix, custom_rgb_report(matrix)
+
+
+def _lighting_reports(value: object) -> tuple[bytes, ...]:
+    """Compile a trusted, host-cached lighting snapshot.
+
+    Spade65 firmware clears its lighting while accepting a keymap frame and
+    offers no verified report for reading the active effect back. A complete
+    snapshot is therefore required before it can be restored. ``None`` uses
+    the same Neon Stream default as the official software; pre-snapshot custom
+    profiles are migrated by ``_profile_lighting`` before this compiler runs.
+    """
+
+    if value is None:
+        value = DEFAULT_LIGHTING
+    if not isinstance(value, dict):
+        raise ValueError("profile lighting must be an object or null")
+
+    base_fields = {"effect", "brightness", "speed", "color_index", "multicolor"}
+    missing = sorted(base_fields - set(value))
+    if missing:
+        raise ValueError(f"profile lighting is missing fields: {', '.join(missing)}")
+
+    effect = value["effect"]
+    if not isinstance(effect, str):
+        raise ValueError("profile lighting effect must be a string")
+    fields = base_fields | ({"colors"} if effect == "custom" else set())
+    missing = sorted(fields - set(value))
+    if missing:
+        raise ValueError(f"profile lighting is missing fields: {', '.join(missing)}")
+    unknown = sorted(set(value) - fields)
+    if unknown:
+        raise ValueError(f"unknown profile lighting fields: {', '.join(unknown)}")
+    for field in ("brightness", "speed", "color_index"):
+        if isinstance(value[field], bool) or not isinstance(value[field], int):
+            raise ValueError(f"profile lighting {field} must be an integer")
+    if not isinstance(value["multicolor"], bool):
+        raise ValueError("profile lighting multicolor must be true or false")
+
+    effect_report = rgb_effect_report(
+        effect,
+        brightness=value["brightness"],
+        speed=value["speed"],
+        color_index=value["color_index"],
+        multicolor=value["multicolor"],
+    )
+    if effect == "custom":
+        _matrix, colors_report = _color_table(
+            value["colors"], label="profile lighting colors"
+        )
+        return effect_report, colors_report
+    return (effect_report,)
+
+
+def _profile_lighting(data: dict[str, Any]) -> object:
+    """Resolve the cached lighting snapshot for old and current profiles.
+
+    The top-level ``colors`` table has always been an editable per-key draft;
+    it does not prove that the custom effect was the last lighting state sent
+    to the keyboard.  Profiles created before ``lighting`` existed therefore
+    use the documented vendor default instead of silently activating that
+    possibly sparse (and mostly black) draft.  An explicit custom snapshot is
+    still preserved exactly.
+    """
+
+    if "lighting" in data:
+        return data["lighting"]
+    return None
+
+
 def compile_profile(data: dict[str, Any]) -> dict[str, object]:
     if data.get("format") != "spade65-profile-v1":
         raise ValueError("unsupported profile format")
@@ -320,6 +425,7 @@ def compile_profile(data: dict[str, Any]) -> dict[str, object]:
     if not isinstance(macros_data, list):
         raise ValueError("profile macros must be an array")
     macro_reports: list[bytes] = []
+    macro_reports_by_index: dict[int, bytes] = {}
     seen_macro_indexes: set[int] = set()
     for macro in macros_data:
         if not isinstance(macro, dict):
@@ -344,21 +450,27 @@ def compile_profile(data: dict[str, Any]) -> dict[str, object]:
                     pressed=bool(event.get("pressed")),
                 )
             )
-        macro_reports.append(
-            macro_report(index, events, repeat=int(macro.get("repeat", 1)))
+        report = macro_report(
+            index, events, repeat=int(macro.get("repeat", 1))
         )
+        macro_reports.append(report)
+        macro_reports_by_index[index] = report
     missing_macros = referenced_macros - seen_macro_indexes
     if missing_macros:
         raise ValueError(f"keymap references undefined macros: {sorted(missing_macros)}")
 
-    colors_data = data.get("colors", {})
-    if not isinstance(colors_data, dict):
-        raise ValueError("profile colors must be an object")
-    colors = [(0, 0, 0)] * MATRIX_LENGTH
-    for button, value in colors_data.items():
-        if button not in BUTTON_TO_SLOT:
-            raise ValueError(f"unknown Spade65 color button: {button}")
-        colors[BUTTON_TO_SLOT[button]] = _color(value)
+    settings = data.get("settings", {})
+    if not isinstance(settings, dict):
+        raise ValueError("profile settings must be an object")
+    debounce_ms = settings.get("debounce_ms", DEFAULT_DEBOUNCE_MS)
+    if isinstance(debounce_ms, bool) or not isinstance(debounce_ms, int):
+        raise ValueError("profile debounce_ms must be an integer")
+    debounce = debounce_report(debounce_ms)
+
+    colors, colors_report = _color_table(
+        data.get("colors", {}), label="profile colors"
+    )
+    lighting = _lighting_reports(_profile_lighting(data))
 
     return {
         "keymap": keymap_report(
@@ -367,8 +479,12 @@ def compile_profile(data: dict[str, Any]) -> dict[str, object]:
             fn_mode_index=int(data.get("fn_mode_index", 0)),
         ),
         "macros": tuple(macro_reports),
-        "colors": custom_rgb_report(colors),
-        "matrix_colors": tuple(colors),
+        "macro_reports_by_index": macro_reports_by_index,
+        "colors": colors_report,
+        "lighting": lighting,
+        "debounce": debounce,
+        "debounce_ms": debounce_ms,
+        "matrix_colors": colors,
         "referenced_macros": frozenset(referenced_macros),
     }
 
@@ -385,8 +501,14 @@ def profile_reports(
 
     ``None`` means the whole profile. Scoping exists because the keyboard has
     no configuration readback: writing more than the operator asked for cannot
-    be inspected afterwards, and sending the colour table repaints every key
-    that the profile does not name.
+    be inspected afterwards. The ``colors`` compatibility scope means the
+    profile's cached active lighting, never its mutable top-level colour draft.
+    Keymap writes are followed by that same snapshot because the firmware
+    clears lighting while accepting opcode ``0x03``; this mirrors the vendor
+    write order and is a compensating write rather than a selected colour
+    change.  This helper remains main-report-only; callers that include the
+    keymap must finish the transaction with ``compiled["debounce"]`` on the
+    short-report usage.
     """
 
     if scopes is None:
@@ -416,11 +538,52 @@ def profile_reports(
     if "keymap" in selected:
         reports.append(compiled["keymap"])  # type: ignore[arg-type]
     if "macros" in selected:
-        reports.extend(compiled["macros"])  # type: ignore[arg-type]
-    if "colors" in selected and data.get("colors"):
-        reports.append(rgb_effect_report("custom"))
-        reports.append(compiled["colors"])  # type: ignore[arg-type]
+        if "keymap" in selected:
+            reports_by_index = compiled["macro_reports_by_index"]
+            reports.extend(
+                report
+                for index, report in reports_by_index.items()  # type: ignore[union-attr]
+                if index in bound
+            )
+        else:
+            # The vendor UI has no independent macro-only device action. Keep
+            # this project's explicit scope useful by writing every definition
+            # when no keymap accompanies it.
+            reports.extend(compiled["macros"])  # type: ignore[arg-type]
+    if "keymap" in selected or "colors" in selected:
+        lighting_reports = compiled["lighting"]
+        if not lighting_reports:
+            raise ValueError(
+                "profile has no trusted lighting snapshot; successfully apply "
+                "a built-in effect or per-key lighting once before applying "
+                "a keymap"
+            )
+        reports.extend(lighting_reports)  # type: ignore[arg-type]
     return tuple(reports)
+
+
+def profile_lighting_recovery_reports(
+    reports: Sequence[bytes],
+    cached_lighting: Sequence[bytes],
+) -> tuple[bytes, ...]:
+    """Return cached lighting for best-effort configuration error recovery.
+
+    A failed multi-report transaction may occur after opcode ``0x03`` has
+    already cleared lighting, or between a new custom-effect ``0x02`` and its
+    palette ``0x07``. Retrying the whole operation would enlarge the failure
+    window, so callers retry only the pre-transaction lighting snapshot before
+    surfacing the original error. This is deliberately not the planned colour
+    suffix: an explicit new palette must not become active after its enclosing
+    transaction failed.
+    """
+
+    recovery_opcodes = {0x02, 0x03, 0x07}
+    if not any(
+        len(report) > 1 and report[1] in recovery_opcodes
+        for report in reports
+    ):
+        return ()
+    return tuple(cached_lighting)
 
 
 def default_keymap_report(*, fn_mode_index: int = 0) -> bytes:

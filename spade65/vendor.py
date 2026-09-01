@@ -76,6 +76,31 @@ VALUE_TO_USAGE.update({
     "(+ )": 0x57, "(+)": 0x57, "(-)": 0x56, "(*)": 0x55, "(/)": 0x54,
 })
 
+# ``SetLEDEffectToDevice`` in the original JupengSeries backend maps these
+# strings to the same opcode-0x02 effect IDs exposed by ``spade65.protocol``.
+VENDOR_EFFECT_TO_NAME = {
+    "Neon_stream": "neon-stream",
+    "Fixed_on": "fixed",
+    "Respire": "breathe",
+    "Ripples_shining": "ripples-shining",
+    "Rainbow_wheel": "rainbow-wheel",
+    "RippleBandUpDown": "ripple-band-up-down",
+    "Reaction": "reaction",
+    "TwoBlock": "two-block",
+    "RandomColor": "random-color",
+    "DoubleWave": "double-wave",
+    "RetroSnake": "retro-snake",
+    "DoubleSpiral": "double-spiral",
+    "RippleBand": "ripple-band",
+    "Kamehemeha": "kamehameha",
+    "Wave90": "wave-90",
+    "Intersect": "intersect",
+    "Shadow_disappear": "shadow-disappear",
+    "Follow": "follow",
+    "SnakeUpDown": "snake-up-down",
+    "Customize": "custom",
+}
+
 
 def _unwrap(document: dict[str, Any]) -> dict[str, Any]:
     value = document.get("value", document)
@@ -134,6 +159,56 @@ def _assignment(item: object) -> object | None:
     return _usage_from_value(item.get("value"))
 
 
+def _convert_lighting(keyboard: dict[str, Any], profile: dict[str, Any]) -> None:
+    """Preserve the official profile's host-cached ``lightData`` state."""
+
+    source = keyboard.get("lightData")
+    if not isinstance(source, dict):
+        return
+    effect = VENDOR_EFFECT_TO_NAME.get(str(source.get("translate", "")))
+    if effect is None:
+        return
+    numbers = source.get("ParameterNumberList")
+    booleans = source.get("ParameterBoolList")
+    brightness = int(_parameter(numbers, "brightness", 4))
+    speed = int(_parameter(numbers, "speed", 5))
+    color_index = int(source.get("currentColorsIndex", 0))
+    lighting: dict[str, Any] = {
+        "effect": effect,
+        "brightness": brightness if 0 <= brightness <= 4 else 4,
+        "speed": speed if 1 <= speed <= 5 else 5,
+        "color_index": color_index if 0 <= color_index <= 7 else 0,
+        "multicolor": bool(_parameter(booleans, "multicolor", False)),
+    }
+    if effect == "custom":
+        custom = source.get("CustomizeColors")
+        if not isinstance(custom, list) or len(custom) != len(UI_KEY_NAMES):
+            raise ValueError(
+                "vendor custom lighting palette must contain exactly "
+                f"{len(UI_KEY_NAMES)} RGB entries"
+            )
+        colors: dict[str, str] = {}
+        for index, (button, value) in enumerate(zip(UI_KEY_NAMES, custom)):
+            if (
+                not isinstance(value, list)
+                or len(value) != 3
+                or any(
+                    isinstance(channel, bool) or not isinstance(channel, int)
+                    for channel in value
+                )
+                or not all(0 <= channel <= 255 for channel in value)
+            ):
+                raise ValueError(
+                    "vendor custom lighting palette entry "
+                    f"{index} ({button}) must be three RGB bytes"
+                )
+            red, green, blue = value
+            colors[button] = f"#{red:02x}{green:02x}{blue:02x}"
+        profile["colors"] = colors
+        lighting["colors"] = copy.deepcopy(colors)
+    profile["lighting"] = lighting
+
+
 def _convert_keyboard(value: dict[str, Any], profile: dict[str, Any]) -> bool:
     exported = value.get("Keyboard_Export")
     if not isinstance(exported, dict):
@@ -159,6 +234,15 @@ def _convert_keyboard(value: dict[str, Any], profile: dict[str, Any]) -> bool:
     settings = profile.setdefault("settings", {})
     settings["win_lock"] = bool(keyboard.get("winLock", False))
     settings["wasd_arrows"] = bool(keyboard.get("directionSwitch", False))
+    if "debounceTime" in keyboard:
+        debounce = keyboard["debounceTime"]
+        if isinstance(debounce, str):
+            try:
+                debounce = int(debounce, 10)
+            except ValueError as error:
+                raise ValueError("invalid vendor debounceTime") from error
+        settings["debounce_ms"] = debounce
+    _convert_lighting(keyboard, profile)
     return True
 
 

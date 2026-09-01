@@ -4,7 +4,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from spade65.device import Device, choose_device, parse_report_descriptor
+from spade65.device import (
+    Device,
+    ReportShape,
+    choose_companion_feature_device,
+    choose_device,
+    parse_report_descriptor,
+)
+from spade65.protocol import SHORT_REPORT_ID, SHORT_REPORT_LENGTH, SHORT_USAGE
 
 if sys.platform.startswith("linux"):
     from spade65.hidraw import (
@@ -15,6 +22,96 @@ if sys.platform.startswith("linux"):
 
 
 class HidrawTests(unittest.TestCase):
+    @staticmethod
+    def _short_device(
+        path: str, *, unique: str = "", length: int = SHORT_REPORT_LENGTH
+    ) -> Device:
+        return Device(
+            path=Path(path),
+            vendor_id=0x0603,
+            product_id=0x0351,
+            unique=unique,
+            usages={SHORT_USAGE},
+            reports=[
+                ReportShape(
+                    "feature", SHORT_REPORT_ID, (length - 1) * 8
+                )
+            ],
+        )
+
+    def test_companion_selection_reuses_a_combined_collection(self) -> None:
+        primary = self._short_device("/dev/hidraw-combined")
+        selected = choose_companion_feature_device(
+            [primary],
+            primary=primary,
+            usage=SHORT_USAGE,
+            report_id=SHORT_REPORT_ID,
+            report_length=SHORT_REPORT_LENGTH,
+        )
+        self.assertIs(selected, primary)
+
+    def test_companion_selection_matches_a_separate_collection_by_serial(self) -> None:
+        primary = Device(
+            path=Path("/dev/hidraw-main"),
+            vendor_id=0x0603,
+            product_id=0x0351,
+            unique="keyboard-a",
+        )
+        expected = self._short_device(
+            "/dev/hidraw-short-a", unique="keyboard-a"
+        )
+        other = self._short_device(
+            "/dev/hidraw-short-b", unique="keyboard-b"
+        )
+        selected = choose_companion_feature_device(
+            [primary, expected, other],
+            primary=primary,
+            usage=SHORT_USAGE,
+            report_id=SHORT_REPORT_ID,
+            report_length=SHORT_REPORT_LENGTH,
+        )
+        self.assertIs(selected, expected)
+
+    def test_companion_selection_refuses_ambiguous_or_wrong_shapes(self) -> None:
+        primary = Device(
+            path=Path("/dev/hidraw-main"),
+            vendor_id=0x0603,
+            product_id=0x0351,
+        )
+        candidates = [
+            self._short_device("/dev/hidraw-short-a"),
+            self._short_device("/dev/hidraw-short-b"),
+        ]
+        with self.assertRaisesRegex(RuntimeError, "multiple matching companion"):
+            choose_companion_feature_device(
+                [primary, *candidates],
+                primary=primary,
+                usage=SHORT_USAGE,
+                report_id=SHORT_REPORT_ID,
+                report_length=SHORT_REPORT_LENGTH,
+            )
+        with self.assertRaisesRegex(RuntimeError, "no matching companion"):
+            choose_companion_feature_device(
+                [primary, self._short_device("/dev/hidraw-short", length=7)],
+                primary=primary,
+                usage=SHORT_USAGE,
+                report_id=SHORT_REPORT_ID,
+                report_length=SHORT_REPORT_LENGTH,
+            )
+        with self.assertRaisesRegex(RuntimeError, "no matching companion"):
+            choose_companion_feature_device(
+                [
+                    primary,
+                    self._short_device(
+                        "/dev/hidraw-other", unique="another-keyboard"
+                    ),
+                ],
+                primary=primary,
+                usage=SHORT_USAGE,
+                report_id=SHORT_REPORT_ID,
+                report_length=SHORT_REPORT_LENGTH,
+            )
+
     def test_parses_vendor_usage_and_feature_length(self) -> None:
         descriptor = bytes.fromhex(
             "06 02 ff "  # Usage Page ff02

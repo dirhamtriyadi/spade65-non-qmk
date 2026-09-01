@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -23,6 +23,7 @@ from .transport import (
     Device,
     choose_device,
     discover_devices,
+    feature_report_session,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -33,6 +34,7 @@ from .keymap import (
     PROFILE_SCOPES,
     USAGE_GROUPS,
     compile_profile,
+    profile_lighting_recovery_reports,
     profile_reports,
     profile_template,
 )
@@ -58,6 +60,7 @@ from .protocol import (
     streaming_activation_report,
     streaming_rgb_reports,
 )
+from .profile_apply import choose_profile_devices, send_profile_transaction
 from .settings import GUI_HOST, GUI_PORT
 from .startup import release_service_setup
 
@@ -129,12 +132,34 @@ def _choose(
     )
 
 
-def _send_features(device: Device, reports: list[bytes]) -> list[int]:
+def _feature_delay(report: bytes) -> float:
+    return 0.2 if len(report) > 1 and report[1] == 0x05 else 0.1
+
+
+def _recover_lighting(device: Device, reports: Sequence[bytes]) -> None:
+    for index, report in enumerate(reports):
+        result = send_feature_report(device, report)
+        if result != len(report):
+            raise RuntimeError(
+                f"short recovery write on report {index + 1}/{len(reports)} "
+                f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                f"{result}/{len(report)}"
+            )
+        if index + 1 < len(reports):
+            time.sleep(_feature_delay(report))
+
+
+def _send_features(
+    device: Device,
+    reports: list[bytes],
+    *,
+    recovery_reports: Sequence[bytes] = (),
+) -> list[int]:
     allowed_shapes = {
         MAIN_REPORT_ID: MAIN_REPORT_LENGTH,
         SHORT_REPORT_ID: SHORT_REPORT_LENGTH,
     }
-    for report in reports:
+    for report in (*reports, *recovery_reports):
         if not report or report[0] not in allowed_shapes:
             raise RuntimeError("refusing unknown feature report")
         required = allowed_shapes[report[0]]
@@ -151,16 +176,30 @@ def _send_features(device: Device, reports: list[bytes]) -> list[int]:
     results = []
     with WRITE_LOCK:
         for index, report in enumerate(reports):
-            result = send_feature_report(device, report)
-            if result != len(report):
+            try:
+                result = send_feature_report(device, report)
+                if result != len(report):
+                    raise RuntimeError(
+                        f"short feature write on report {index + 1}/{len(reports)} "
+                        f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
+                        f"{result}/{len(report)}"
+                    )
+            except Exception as error:
+                if not recovery_reports:
+                    raise
+                try:
+                    _recover_lighting(device, recovery_reports)
+                except Exception as recovery_error:
+                    raise RuntimeError(
+                        f"{error}; cached lighting recovery also failed: "
+                        f"{recovery_error}"
+                    ) from error
                 raise RuntimeError(
-                    f"short feature write on report {index + 1}/{len(reports)} "
-                    f"(id 0x{report[0]:02x} opcode 0x{report[1]:02x}): "
-                    f"{result}/{len(report)}"
-                )
+                    f"{error}; cached lighting recovery succeeded"
+                ) from error
             results.append(result)
             if index + 1 < len(reports):
-                time.sleep(0.1)
+                time.sleep(_feature_delay(report))
     return results
 
 
@@ -199,14 +238,24 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
                 "custom",
                 brightness=int(payload.get("brightness", 4)),
                 speed=int(payload.get("speed", 5)),
+                color_index=int(payload.get("color_index", 0)),
+                multicolor=bool(payload.get("multicolor", False)),
             ),
             compiled["colors"],
         ]
         device = _choose(MAIN_USAGE, explicit_path=path)
-        return {"device": str(device.path), "results": _send_features(device, reports)}
+        recovery = profile_lighting_recovery_reports(
+            reports, compiled["lighting"]
+        )
+        return {
+            "device": str(device.path),
+            "results": _send_features(
+                device, reports, recovery_reports=recovery
+            ),
+        }
     if action == "profile":
-        if payload.get("confirmation") != "APPLY PROFILE":
-            raise RuntimeError("type APPLY PROFILE to confirm profile overwrite")
+        if payload.get("confirmed") is not True:
+            raise RuntimeError("confirm the profile overwrite before applying")
         if "scopes" not in payload:
             raise RuntimeError("profile scopes are required")
         scopes = payload["scopes"]
@@ -215,16 +264,53 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         ):
             raise RuntimeError("profile scopes must be a list of scope names")
         compiled = compile_profile(payload["profile"])
+        recovery_compiled = compiled
+        if "recovery_lighting" in payload:
+            recovery_profile = {
+                **payload["profile"],
+                "lighting": payload["recovery_lighting"],
+            }
+            recovery_compiled = compile_profile(recovery_profile)
         reports = list(
             profile_reports(payload["profile"], compiled, scopes=scopes)
         )
         if not reports:
             raise RuntimeError("the selected scopes have nothing to send")
-        device = _choose(MAIN_USAGE, explicit_path=path)
+        recovery = profile_lighting_recovery_reports(
+            reports, recovery_compiled["lighting"]
+        )
+        if "keymap" in scopes:
+            devices = discover_devices()
+            device, short_device = choose_profile_devices(
+                devices,
+                explicit_path=Path(path) if path else None,
+            )
+            results = send_profile_transaction(
+                device,
+                short_device,
+                reports,
+                compiled["debounce"],
+                feature_session=feature_report_session,
+                recovery_reports=recovery,
+                sleep=time.sleep,
+                lock=WRITE_LOCK,
+            )
+        else:
+            device = _choose(MAIN_USAGE, explicit_path=path)
+            short_device = None
+            results = _send_features(
+                device, reports, recovery_reports=recovery
+            )
         return {
             "device": str(device.path),
+            "short_device": (
+                str(short_device.path) if short_device is not None else None
+            ),
             "scopes": sorted(scopes),
-            "results": _send_features(device, reports),
+            "debounce_ms": (
+                compiled["debounce_ms"] if "keymap" in scopes else None
+            ),
+            "results": results,
         }
     if action == "stream":
         compiled = compile_profile(payload["profile"])

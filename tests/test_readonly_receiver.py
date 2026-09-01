@@ -241,7 +241,7 @@ class ReadonlyReceiverTests(unittest.TestCase):
                 "profile",
                 {
                     "profile": profile,
-                    "confirmation": "APPLY PROFILE",
+                    "confirmed": True,
                     "scopes": ["keymap"],
                 },
             ),
@@ -329,7 +329,7 @@ class ReadonlyReceiverTests(unittest.TestCase):
                 "profile",
                 {
                     "profile": profile,
-                    "confirmation": "APPLY PROFILE",
+                    "confirmed": True,
                     "scopes": ["keymap"],
                 },
             ),

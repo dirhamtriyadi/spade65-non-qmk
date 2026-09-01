@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 
@@ -39,7 +41,14 @@ def _open_hidapi(device: Device, hid: ModuleType | None = None):
         module.hid_darwin_set_open_exclusive(0)
     handle = module.device()
     path = device.hidapi_path if device.hidapi_path is not None else os.fsencode(device.path)
-    handle.open_path(path)
+    try:
+        handle.open_path(path)
+    except BaseException:
+        try:
+            handle.close()
+        except Exception:
+            pass
+        raise
     return handle
 
 
@@ -114,16 +123,33 @@ def discover_devices() -> list[Device]:
     return discover_hidapi()
 
 
-def send_feature_report(device: Device, report: bytes) -> int:
-    if device.backend == "hidraw":
-        from .hidraw import send_feature_report as hidraw_send_feature_report
+@contextmanager
+def feature_report_session(
+    device: Device,
+) -> Iterator[Callable[[bytes], int]]:
+    """Open one feature-report handle for the lifetime of a transaction."""
 
-        return hidraw_send_feature_report(device.path, report)
+    if device.backend == "hidraw":
+        from .hidraw import feature_report_session as hidraw_feature_session
+
+        with hidraw_feature_session(device.path) as send:
+            yield send
+        return
     handle = _open_hidapi(device)
     try:
-        return int(handle.send_feature_report(report))
+        def send(report: bytes) -> int:
+            if not report:
+                raise ValueError("feature report cannot be empty")
+            return int(handle.send_feature_report(report))
+
+        yield send
     finally:
         handle.close()
+
+
+def send_feature_report(device: Device, report: bytes) -> int:
+    with feature_report_session(device) as send:
+        return send(report)
 
 
 def send_output_report(device: Device, report: bytes) -> int:
@@ -161,6 +187,6 @@ def readonly_device_info(device: Device) -> dict[str, object | None]:
 
 __all__ = [
     "Device", "backend_name", "choose_device", "discover_devices",
-    "discover_hidapi", "readonly_device_info", "send_feature_report",
-    "send_output_report",
+    "discover_hidapi", "feature_report_session", "readonly_device_info",
+    "send_feature_report", "send_output_report",
 ]
