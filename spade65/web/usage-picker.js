@@ -21,6 +21,38 @@
     return `${item.name} · ${item.hex}`;
   }
 
+  function rawUsageValue(value) {
+    const normalized = String(value ?? "").trim();
+    if (!/^(?:0x[\da-f]+|0|[1-9]\d*)$/i.test(normalized)) return null;
+    const usage = Number(normalized);
+    return Number.isInteger(usage) && usage >= 0 && usage <= 0xff ? usage : null;
+  }
+
+  function resolveUsage(usages, value) {
+    const normalized = String(value ?? "").trim().toLocaleLowerCase();
+    if (!normalized) return null;
+    if (Object.prototype.hasOwnProperty.call(usages || {}, normalized)) {
+      const usage = Number(usages[normalized]);
+      return {
+        name: normalized,
+        usage,
+        hex: usageHex(usage),
+      };
+    }
+    const raw = rawUsageValue(normalized);
+    if (raw === null) return null;
+    for (const [name, value] of Object.entries(usages || {})) {
+      if (Number(value) === raw) {
+        return {
+          name,
+          usage: raw,
+          hex: usageHex(raw),
+        };
+      }
+    }
+    return null;
+  }
+
   function filterGroups(groups, usages, query, labelForGroup = String) {
     const tokens = normalizeSearch(query).split(" ").filter(Boolean);
     const results = [];
@@ -62,6 +94,8 @@
     filterGroups,
     normalizeSearch,
     optionLabel,
+    rawUsageValue,
+    resolveUsage,
     usageHex,
   });
 });

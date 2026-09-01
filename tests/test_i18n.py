@@ -207,6 +207,14 @@ class I18nTests(unittest.TestCase):
         self.assertIn('id="lightingLayoutVariant"', html)
         self.assertIn('id="usageSearch"', html)
         self.assertIn('role="listbox"', html)
+        self.assertIn('id="usageInput" type="hidden"', html)
+        self.assertIn('id="customUsageInput"', html)
+        self.assertIn('id="macroUsageList"', html)
+        self.assertNotIn('id="usageList"', html)
+        self.assertIn("usage.setAttribute('list','macroUsageList')", compact)
+        self.assertNotIn("a, play-pause, mouse-left, or 0x04", html)
+        self.assertIn("usagePicker.resolveUsage", javascript)
+        self.assertNotIn("open=Boolean(raw&&!selected)", compact)
         self.assertLess(
             html.index('<script src="/layout-state.js"></script>'),
             html.index('<script src="/app.js"></script>'),

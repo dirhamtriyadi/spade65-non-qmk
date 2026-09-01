@@ -75,12 +75,12 @@
             </div>
             <small class="field-help" data-i18n="keymap.searchFunctionHint">Filter by a function name, category, or code such as play, media, mouse, or 0xa1.</small>
             <small id="usageCurrent" class="selection-status" aria-live="polite" data-i18n="keymap.noFunctionSelected">No function selected</small>
+            <input id="usageInput" type="hidden">
             <details id="customUsageDetails" class="advanced-field">
               <summary data-i18n="keymap.customUsage">Advanced: custom HID usage</summary>
-              <label for="usageInput"><span data-i18n="keymap.usage">Usage</span><input id="usageInput" list="usageList" placeholder="a, play-pause, mouse-left, or 0x04" data-i18n-placeholder="keymap.usagePlaceholder"></label>
-              <small class="field-help" data-i18n="keymap.customUsageHint">Use this only for a known usage name or a raw byte value.</small>
+              <label for="customUsageInput"><span data-i18n="keymap.customUsageCode">Custom HID byte</span><input id="customUsageInput" inputmode="text" autocomplete="off" spellcheck="false" placeholder="For example: 0xc0" data-i18n-placeholder="keymap.customUsagePlaceholder"></label>
+              <small class="field-help" data-i18n="keymap.customUsageHint">Only use this for a firmware-specific byte that is not available in the function list above.</small>
             </details>
-            <datalist id="usageList"></datalist>
           </div>
           <label id="macroWrap" hidden><span data-i18n="common.macro">Macro</span><select id="macroAssign"></select></label>
           <div id="modifierWrap" class="checks"><label><input type="checkbox" value="1">Ctrl</label><label><input type="checkbox" value="2">Shift</label><label><input type="checkbox" value="4">Alt</label><label><input type="checkbox" value="8">GUI</label></div>
@@ -123,6 +123,7 @@
 
     <section class="page" id="page-macros">
       <div class="grid macro-grid"><div class="card"><div class="card-heading"><h3 data-i18n="nav.macros">Macros</h3><button id="addMacroBtn" data-i18n="action.add">+ Add</button></div><div id="macroList" class="macro-list"></div></div><div class="card"><div class="card-heading"><div><h3 id="macroTitle" data-i18n="macro.editor">Macro editor</h3><p data-i18n="macro.maximum">Maximum 84 key-down/key-up events.</p></div><div class="button-row"><button id="recordMacroBtn" data-i18n="action.record">● Record</button><button id="stopMacroBtn" class="danger" data-i18n="action.stopRecording" hidden>■ Stop recording</button><button id="deleteMacroBtn" class="danger" data-i18n="action.delete">Delete</button></div></div><label><span data-i18n="common.name">Name</span><input id="macroName" maxlength="40"></label><label><span data-i18n="macro.repeat">Repeat</span><input id="macroRepeat" type="number" min="0" max="65535" value="1"></label><div id="eventList" class="event-list"></div><button id="addEventBtn" data-i18n="action.addEvent">+ Add event</button></div></div>
+      <datalist id="macroUsageList"></datalist>
     </section>
 
     <section class="page" id="page-settings">

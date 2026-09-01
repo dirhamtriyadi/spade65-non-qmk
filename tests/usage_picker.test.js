@@ -68,6 +68,25 @@ test("labels make the selected function and byte unambiguous", () => {
   assert.equal(picker.usageHex(4), "0x04");
 });
 
+test("stored raw bytes resolve back to the named function selector", () => {
+  assert.deepEqual(picker.resolveUsage(usages, "0x04"), {
+    name: "a",
+    usage: 0x04,
+    hex: "0x04",
+  });
+  assert.equal(picker.resolveUsage(usages, 0xa1).name, "play-pause");
+  assert.equal(picker.resolveUsage(usages, "180").name, "mouse-left");
+  assert.equal(picker.resolveUsage(usages, "VOLUME-UP").name, "volume-up");
+});
+
+test("unknown custom bytes remain custom and invalid values are rejected", () => {
+  assert.equal(picker.resolveUsage(usages, "0xc0"), null);
+  assert.equal(picker.rawUsageValue("0xc0"), 0xc0);
+  assert.equal(picker.rawUsageValue("256"), null);
+  assert.equal(picker.rawUsageValue("04"), null);
+  assert.equal(picker.rawUsageValue("not-a-byte"), null);
+});
+
 test("an unknown query produces no empty group shells", () => {
   assert.deepEqual(picker.filterGroups(groups, usages, "not-a-function", labels), []);
 });

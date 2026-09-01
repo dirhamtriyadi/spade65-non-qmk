@@ -691,12 +691,12 @@ function renderEffects() {
 }
 
 function renderUsageList() {
-  const list = $('usageList');
-  list.innerHTML = '';
+  const macroList = $('macroUsageList');
+  macroList.innerHTML = '';
   for (const name of Object.keys(meta.usages).sort()) {
-    const o = document.createElement('option');
-    o.value = name;
-    list.append(o)
+    const option = document.createElement('option');
+    option.value = name;
+    macroList.append(option)
   }
   closeUsagePicker();
   syncUsageSelection()
@@ -710,27 +710,24 @@ function usageGroupLabel(group) {
 
 function selectedUsage() {
   if (!meta) return null;
-  const raw = $('usageInput').value.trim(),
-    name = raw.toLocaleLowerCase();
-  if (!name || !hasOwn(meta.usages, name)) return null;
-  const usage = Number(meta.usages[name]);
-  return {
-    name,
-    usage,
-    hex: usagePicker.usageHex(usage)
-  }
+  return usagePicker.resolveUsage(meta.usages, $('usageInput').value)
 }
 
-function syncUsageSelection() {
+function syncUsageSelection(preserveAdvanced = false) {
   if (!meta) return;
   const raw = $('usageInput').value.trim(),
     selected = selectedUsage(),
-    label = selected ? usagePicker.optionLabel(selected) : raw;
+    label = selected ? usagePicker.optionLabel(selected) : raw ? t('keymap.customUsageValue', {
+      value: raw
+    }) : '';
   $('usageSearch').value = label;
   $('usageCurrent').textContent = raw ? t('keymap.selectedFunction', {
     value: label
   }) : t('keymap.noFunctionSelected');
-  $('customUsageDetails').open = Boolean(raw && !selected)
+  if (!preserveAdvanced) {
+    $('customUsageInput').value = selected ? '' : raw;
+    $('customUsageDetails').open = false
+  }
 }
 
 function renderUsageOptions(query = '') {
@@ -1006,14 +1003,20 @@ function saveAssignment() {
       macro: Number($('macroAssign').value)
     }
   } else {
-    const usage = $('usageInput').value.trim();
-    if (!usage) return toast(t('keymap.usageRequired'), true);
+    const rawUsage = $('usageInput').value.trim(),
+      selected = selectedUsage(),
+      customUsage = usagePicker.rawUsageValue(rawUsage);
+    if (!rawUsage) return toast(t('keymap.usageRequired'), true);
+    if (!selected && customUsage === null) return toast(t('keymap.customUsageInvalid'), true);
+    const usage = selected?.name || usagePicker.usageHex(customUsage);
     let modifiers = 0;
     document.querySelectorAll('#modifierWrap input:checked').forEach(x => modifiers |= Number(x.value));
     profile.layers[currentLayer][selectedKey] = modifiers ? {
       usage,
       modifiers
-    } : usage
+    } : usage;
+    $('usageInput').value = usage;
+    syncUsageSelection()
   }
   renderKeyboard();
   toast(t('keymap.assignmentSaved', {
@@ -1336,7 +1339,7 @@ function renderEvent(event, index) {
   const usage = document.createElement('input');
   usage.value = event.usage;
   usage.disabled = recordingMacro;
-  usage.setAttribute('list', 'usageList');
+  usage.setAttribute('list', 'macroUsageList');
   usage.onchange = () => event.usage = usage.value;
   const state = document.createElement('select');
   for (const [value, key] of [
@@ -2116,7 +2119,14 @@ $('usageToggle').onclick = () => {
   $('usageSearch').select();
   if ($('usageOptions').hidden) openUsagePicker('')
 };
-$('usageInput').oninput = syncUsageSelection;
+$('customUsageInput').oninput = event => {
+  $('usageInput').value = event.target.value;
+  syncUsageSelection(true)
+};
+$('customUsageDetails').ontoggle = event => {
+  if (!event.target.open) return;
+  $('customUsageInput').value = selectedUsage() ? '' : $('usageInput').value.trim()
+};
 document.addEventListener('pointerdown', event => {
   if ($('usagePicker').contains(event.target) || $('usageOptions').hidden) return;
   syncUsageSelection();
