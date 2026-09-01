@@ -207,10 +207,14 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
     if action == "profile":
         if payload.get("confirmation") != "APPLY PROFILE":
             raise RuntimeError("type APPLY PROFILE to confirm profile overwrite")
+        if "scopes" not in payload:
+            raise RuntimeError("profile scopes are required")
+        scopes = payload["scopes"]
+        if not isinstance(scopes, list) or not all(
+            isinstance(scope, str) for scope in scopes
+        ):
+            raise RuntimeError("profile scopes must be a list of scope names")
         compiled = compile_profile(payload["profile"])
-        scopes = payload.get("scopes")
-        if scopes is not None and not isinstance(scopes, list):
-            raise RuntimeError("profile scopes must be a list")
         reports = list(
             profile_reports(payload["profile"], compiled, scopes=scopes)
         )
@@ -219,7 +223,7 @@ def execute_action(action: str, payload: dict[str, Any]) -> dict[str, object]:
         device = _choose(MAIN_USAGE, explicit_path=path)
         return {
             "device": str(device.path),
-            "scopes": sorted(scopes) if scopes is not None else list(PROFILE_SCOPES),
+            "scopes": sorted(scopes),
             "results": _send_features(device, reports),
         }
     if action == "stream":

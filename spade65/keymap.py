@@ -20,9 +20,11 @@ from .protocol import (
 
 MATRIX_LENGTH = 102
 
-# Names are indexed by the firmware matrix slot, not physical/UI order. Empty
-# strings are real unused slots and must not be removed.
-MATRIX_KEY_NAMES = (
+# Raw names from the vendor's generic ``0x06030x0351`` SKLocation record.  Keep
+# this table entry-for-entry in matrix order: it is still needed to explain and
+# convert exports from the original application.  Empty strings are real
+# unused slots and must not be removed.
+VENDOR_MATRIX_KEY_NAMES = (
     "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
     "esc", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n0",
     "minus", "plus", "", "bksp", "", "", "tab", "q", "w", "e", "r", "t",
@@ -34,8 +36,8 @@ MATRIX_KEY_NAMES = (
     "fn", "rctrl", "left", "down", "right", "", "",
 )
 
-# USB HID usages stored in the official default profile, in matrix-slot order.
-DEFAULT_USAGES = bytes.fromhex(
+# Raw usages from the same vendor record, in matrix-slot order.
+VENDOR_DEFAULT_USAGES = bytes.fromhex(
     "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 "
     "29 1e 1f 20 21 22 23 24 25 26 27 2d 2e 00 2a 00 00 "
     "2b 14 1a 08 15 17 1c 18 0c 12 13 2f 30 31 4c 00 00 "
@@ -44,9 +46,8 @@ DEFAULT_USAGES = bytes.fromhex(
     "e0 e3 e2 2c e6 00 2c 00 a2 2c fe e4 50 51 4f 00 00"
 )
 
-# The UI exposes these 70 names. Mapping uses the first matching matrix slot,
-# mirroring the vendor application while retaining all 102 firmware slots.
-UI_KEY_NAMES = (
+# Raw order of the 70 assignment records stored by the original application.
+VENDOR_UI_KEY_NAMES = (
     "esc", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n0",
     "minus", "plus", "bksp", "tab", "q", "w", "e", "r", "t", "y", "u", "i",
     "o", "p", "lqu", "rqu", "k29", "delete", "caps", "a", "s", "d", "f", "g",
@@ -55,6 +56,42 @@ UI_KEY_NAMES = (
     "pagedown", "lctrl", "win", "lalt", "lspace", "ralt", "mspace", "rspace", "fn",
     "rctrl", "left", "down", "right",
 )
+
+# The physically verified keyboard/firmware is the RALT variant.  Its key at
+# the vendor's index 66 / matrix slot 96 is labelled and reports Right Alt; the
+# generic vendor data calls that position Right Ctrl.  Vendor index 62 / slot
+# 89 is hidden on the standard layouts.  Swap the two semantics in the
+# canonical model while preserving the raw source tables above for auditing and
+# vendor-profile conversion.
+_VENDOR_RALT_SLOT = VENDOR_MATRIX_KEY_NAMES.index("ralt")
+_RALT_VARIANT_SLOT = VENDOR_MATRIX_KEY_NAMES.index("rctrl")
+_VENDOR_RALT_INDEX = VENDOR_UI_KEY_NAMES.index("ralt")
+_VENDOR_RCTRL_INDEX = VENDOR_UI_KEY_NAMES.index("rctrl")
+
+_matrix_key_names = list(VENDOR_MATRIX_KEY_NAMES)
+_matrix_key_names[_VENDOR_RALT_SLOT], _matrix_key_names[_RALT_VARIANT_SLOT] = (
+    _matrix_key_names[_RALT_VARIANT_SLOT],
+    _matrix_key_names[_VENDOR_RALT_SLOT],
+)
+MATRIX_KEY_NAMES = tuple(_matrix_key_names)
+
+_default_usages = bytearray(VENDOR_DEFAULT_USAGES)
+_default_usages[_VENDOR_RALT_SLOT], _default_usages[_RALT_VARIANT_SLOT] = (
+    _default_usages[_RALT_VARIANT_SLOT],
+    _default_usages[_VENDOR_RALT_SLOT],
+)
+DEFAULT_USAGES = bytes(_default_usages)
+
+# This remains a 70-entry positional list so ``vendor.py`` can zip it directly
+# with KeyAssign/APMode arrays.  At the two variant positions it canonicalizes
+# vendor index 66 to ``ralt`` and the hidden vendor index 62 to legacy
+# ``rctrl``.
+_ui_key_names = list(VENDOR_UI_KEY_NAMES)
+_ui_key_names[_VENDOR_RALT_INDEX], _ui_key_names[_VENDOR_RCTRL_INDEX] = (
+    _ui_key_names[_VENDOR_RCTRL_INDEX],
+    _ui_key_names[_VENDOR_RALT_INDEX],
+)
+UI_KEY_NAMES = tuple(_ui_key_names)
 
 BUTTON_TO_SLOT = {name: MATRIX_KEY_NAMES.index(name) for name in UI_KEY_NAMES}
 

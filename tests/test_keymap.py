@@ -6,6 +6,9 @@ from spade65.keymap import (
     MATRIX_KEY_NAMES,
     UI_KEY_NAMES,
     USAGE_GROUPS,
+    VENDOR_DEFAULT_USAGES,
+    VENDOR_MATRIX_KEY_NAMES,
+    VENDOR_UI_KEY_NAMES,
     compile_profile,
     default_keymap_report,
     export_default,
@@ -22,6 +25,25 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(BUTTON_TO_SLOT["a"], 52)
         self.assertEqual(BUTTON_TO_SLOT["fn"], 95)
         self.assertEqual(DEFAULT_USAGES[52], 0x04)
+
+    def test_raw_vendor_variant_data_is_preserved(self) -> None:
+        self.assertEqual(VENDOR_MATRIX_KEY_NAMES[89], "ralt")
+        self.assertEqual(VENDOR_DEFAULT_USAGES[89], 0xE6)
+        self.assertEqual(VENDOR_MATRIX_KEY_NAMES[96], "rctrl")
+        self.assertEqual(VENDOR_DEFAULT_USAGES[96], 0xE4)
+        self.assertEqual(VENDOR_UI_KEY_NAMES[62], "ralt")
+        self.assertEqual(VENDOR_UI_KEY_NAMES[66], "rctrl")
+
+    def test_ralt_variant_has_distinct_canonical_modifier_slots(self) -> None:
+        self.assertEqual(MATRIX_KEY_NAMES[89], "rctrl")
+        self.assertEqual(DEFAULT_USAGES[89], 0xE4)
+        self.assertEqual(MATRIX_KEY_NAMES[96], "ralt")
+        self.assertEqual(DEFAULT_USAGES[96], 0xE6)
+        self.assertEqual(UI_KEY_NAMES[62], "rctrl")
+        self.assertEqual(UI_KEY_NAMES[66], "ralt")
+        self.assertEqual(BUTTON_TO_SLOT["rctrl"], 89)
+        self.assertEqual(BUTTON_TO_SLOT["ralt"], 96)
+        self.assertNotEqual(BUTTON_TO_SLOT["rctrl"], BUTTON_TO_SLOT["ralt"])
 
     def test_default_frame_contains_three_complete_layers(self) -> None:
         report = default_keymap_report()
@@ -69,6 +91,22 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(len(compiled["keymap"]), 620)
         self.assertEqual(len(compiled["macros"]), 1)
         self.assertEqual(compiled["matrix_colors"][17], (0x12, 0x34, 0x56))
+
+    def test_compiles_right_modifiers_without_alias_collision(self) -> None:
+        profile = profile_template()
+        profile["layers"]["normal"].update({"rctrl": "b", "ralt": "a"})
+        profile["colors"].update({"rctrl": "#112233", "ralt": "#aabbcc"})
+        compiled = compile_profile(profile)
+        report = compiled["keymap"]
+        self.assertEqual(report[8 + 2 * 89 : 8 + 2 * 89 + 2], b"\x80\x05")
+        self.assertEqual(report[8 + 2 * 96 : 8 + 2 * 96 + 2], b"\x80\x04")
+        self.assertEqual(compiled["matrix_colors"][89], (0x11, 0x22, 0x33))
+        self.assertEqual(compiled["matrix_colors"][96], (0xAA, 0xBB, 0xCC))
+
+    def test_default_report_keeps_ralt_at_physical_variant_slot(self) -> None:
+        report = default_keymap_report()
+        self.assertEqual(report[8 + 2 * 89 : 8 + 2 * 89 + 2], b"\x00\xe4")
+        self.assertEqual(report[8 + 2 * 96 : 8 + 2 * 96 + 2], b"\x00\xe6")
 
     def test_rejects_reference_to_undefined_macro(self) -> None:
         profile = profile_template()

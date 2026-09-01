@@ -333,7 +333,7 @@
   "profile.scopeKeymap": "Keymap",
   "profile.scopeMacros": "Macros",
   "profile.scopeColors": "Per-key colors",
-  "profile.scopeHint": "Unticked parts are left exactly as they are on the keyboard. Sending colors switches it to the custom effect and darkens every key the profile does not name.",
+  "profile.scopeHint": "Keymap and macros are selected by default. Per-key colors are opt-in so a mapping-only apply leaves lighting unchanged. Sending colors switches the keyboard to the custom effect and darkens every key the profile does not name.",
   "profile.scopeEmpty": "Tick at least one part to apply",
   "keymap.originalOptionsHint": "Both switches edit the profile only. Press Apply profile to write them to the keyboard.",
   "nav.tester": "Key tester",

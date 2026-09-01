@@ -78,36 +78,60 @@ satunya node yang melaporkan modifier. Menekan spacebar menghasilkan
 `MSC_SCAN 0x7002c`; tombol berikutnya di sebelah kanannya tidak menghasilkan
 apa pun, karena Fn diproses di dalam firmware dan tidak pernah mengirim usage;
 tombol setelahnya menghasilkan `MSC_SCAN 0x700e6`, usage `0xe6`, Right Alt.
-Left Ctrl menghasilkan `0x700e0` sesuai dugaan.
+Left Ctrl menghasilkan `0x700e0` sesuai dugaan. Ini membuktikan usage dan
+posisi fisiknya; event input tidak mengungkap nomor slot matrix konfigurasi
+vendor.
 
 Jadi baris bawah papan ini adalah `Ctrl Win Alt Space Fn RAlt` ditambah kluster
-panah, dan tidak memiliki tombol Right Ctrl. Ini susunan kelima: data
-`KeyBoardStyle` milik vendor memuat lima baris bawah dan semuanya menempatkan
-`AltRight` sebelum `Custom_Fnkey`, sedangkan hardware ini justru sebaliknya.
+panah, dan tidak memiliki tombol Right Ctrl yang terlihat. Data layout standard
+SPADE65-03/04 menyembunyikan assignment index 62, menampilkan Fn pada index 65,
+dan menggambar index 66 pada posisi fisik tepat di kanan Fn. Keluaran `0xe6`
+yang terukur menunjukkan bahwa posisi produksi tersebut merupakan tombol
+Right Alt pada papan ini.
+
+Record lokasi generik vendor `0x06030x0351` menyatakan hal yang berbeda: tabel
+mentahnya menamai assignment index 62 / matrix slot 89 sebagai `ralt` dengan
+default usage `0xe6`, sedangkan index 66 / slot 96 sebagai `rctrl` dengan
+default usage `0xe4`. Nilai mentah itu dipertahankan secara eksplisit untuk
+audit dan konversi profil original, tetapi tidak dipakai tanpa penyesuaian
+sebagai peta semantik papan produksi.
+
+Sebelumnya aplikasi hanya membetulkan gambar: `ralt` ditampilkan pada posisi
+fisik index 66, tetapi backend masih menulis `ralt` ke slot 89 dan mempertahankan
+`0xe4` pada slot 96. Akibatnya remap Right Alt tidak mencapai tombol fisik, dan
+apply keymap default lengkap dapat mengubah tombol itu menjadi Right Ctrl.
+Model kanonik varian RALT kini memetakan `ralt` ke slot 96 dengan default
+`0xe6`, serta mempertahankan `rctrl` legacy yang tersembunyi pada slot 89 dengan
+default `0xe4`. Keduanya tetap merupakan nama berbeda, sehingga assignment dan
+warna per tombol tidak dapat saling menimpa melalui alias. Import vendor
+posisional mengkanonisasi index mentah 66 menjadi `ralt` dan index mentah 62
+menjadi `rctrl` legacy.
 
 Keempat layout kini menggambar `ralt` di sebelah kanan `fn` dan tidak ada yang
-menggambar `rctrl`. Matrix itu milik PCB, dan slot 89 terukur berada di kanan
-Fn, sehingga memasang spacebar terbelah tidak memindahkannya: yang berubah
-hanya keycap mana yang menutupi slot-slot space. Sebelumnya layout split
-memakai `ralt` sebagai tombol di antara segmen spacebar — berarti satu slot
-menempati dua posisi — dan menaruh `rctrl` di kanan Fn. Celah antar segmen kini
-diisi `mspace`, slot 91, yang default usage-nya `0x2c`.
+menggambar `rctrl`. Geometri efek host menggunakan posisi semantik yang sama.
+Matrix itu milik PCB, sehingga memasang spacebar terbelah tidak memindahkan
+tombol kanonik slot 96: yang berubah hanya keycap mana yang menutupi slot-slot
+space. Sebelumnya layout split memakai `ralt` sebagai tombol di antara segmen
+spacebar — berarti satu slot menempati dua posisi — dan menaruh `rctrl` di kanan
+Fn. Celah antar segmen kini diisi `mspace`, slot 91, yang default usage-nya
+`0x2c`.
 
 Hanya susunan standard yang terkonfirmasi terhadap hardware. Geometri split
 diturunkan dari matrix yang tetap, bukan dari papan split yang memang tidak
 tersedia.
 
-Software original pun akan menggambar baris bawah papan ini secara keliru,
-sehingga data layout-nya bukan rujukan untuk geometri. `SupportDevice.db`
-menetapkan SPADE65 ke `layoutIndex: 0`, dan layout 0 adalah spacebar terbelah
-dengan `AltRight` sebelum `Custom_Fnkey` serta ada `ControlRight` — tiga
-perbedaan dari hardware. Record yang sama mengisi `img` dengan `image/GMMK`,
-gambar milik merek lain; kelas layout-nya bernama `KB61Prohibit` padahal
-arraynya memuat 70 tombol; dan `KeyBoardStyle` memuat dua belas style dengan
-lima baris-bawah berbeda, termasuk yang bernumpad. Itu cangkang ODM generik
-untuk banyak model. Di sini hanya hardware terukur yang menentukan geometri;
-bundel vendor tetap otoritatif untuk protokol wire, yang merupakan persoalan
-terpisah dan sudah dikonfirmasi secara independen.
+Layout vendor lainnya tetap menggambar baris bawah papan ini secara keliru,
+sehingga geometrinya bukan rujukan untuk varian produksi ini.
+`SupportDevice.db` menetapkan SPADE65 ke `layoutIndex: 0`, yaitu layout
+spacebar terbelah dengan `AltRight` sebelum `Custom_Fnkey` serta `ControlRight`
+yang terlihat — tiga perbedaan dari hardware. Record yang sama mengisi `img`
+dengan `image/GMMK`, gambar milik merek lain; kelas layout-nya bernama
+`KB61Prohibit` padahal arraynya memuat 70 tombol; dan `KeyBoardStyle` memuat dua
+belas style dengan lima baris-bawah berbeda, termasuk yang bernumpad. Itu
+cangkang ODM generik untuk banyak model. Hardware terukur serta bukti RALT
+spesifik model menentukan geometri dan semantik varian di sini; bundel vendor
+tetap otoritatif untuk protokol wire, yang merupakan persoalan terpisah dan
+sudah dikonfirmasi secara independen.
 
 Satu anomali matrix masih terbuka: `rspace` menamai slot 92 sekaligus slot 94,
 dan default usage-nya bertentangan — slot 92 `0x00`, slot 94 `0x2c`.

@@ -209,6 +209,7 @@ class ShortProfileWriteTests(unittest.TestCase):
                     {
                         "profile": _multi_report_profile(),
                         "confirmation": "APPLY PROFILE",
+                        "scopes": ["keymap", "macros", "colors"],
                     },
                 )
         self.assertEqual(send.call_count, 2)

@@ -333,7 +333,7 @@
   "profile.scopeKeymap": "Keymap",
   "profile.scopeMacros": "Macro",
   "profile.scopeColors": "Warna per tombol",
-  "profile.scopeHint": "Bagian yang tidak dicentang dibiarkan persis seperti di keyboard. Mengirim warna akan memindahkannya ke efek custom dan menggelapkan setiap tombol yang tidak disebut profil.",
+  "profile.scopeHint": "Keymap dan macro dipilih secara default. Warna per tombol harus dipilih secara sengaja agar apply mapping saja tidak mengubah lighting. Mengirim warna akan memindahkan keyboard ke efek custom dan menggelapkan setiap tombol yang tidak disebut profil.",
   "profile.scopeEmpty": "Centang minimal satu bagian untuk diterapkan",
   "keymap.originalOptionsHint": "Kedua saklar ini hanya menyunting profil. Tekan Apply profile untuk menuliskannya ke keyboard.",
   "nav.tester": "Penguji tombol",

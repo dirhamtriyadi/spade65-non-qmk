@@ -12,7 +12,10 @@ KEY_ROWS = (
     ("tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "lqu", "rqu", "k29", "delete"),
     ("caps", "a", "s", "d", "f", "g", "h", "j", "k", "l", "sem", "quo", "k42", "enter", "pageup"),
     ("lshift", "z", "x", "c", "v", "b", "n", "m", "comma", "dot", "qmark", "rshift", "up", "pagedown"),
-    ("lctrl", "win", "lalt", "lspace", "ralt", "mspace", "rspace", "fn", "rctrl", "left", "down", "right"),
+    # Keep the two variant positions distinct.  The raw vendor index 62 is the
+    # hidden legacy Right Ctrl position; the production RALT variant uses the
+    # key at vendor index 66, immediately after Fn, as Right Alt.
+    ("lctrl", "win", "lalt", "lspace", "rctrl", "mspace", "rspace", "fn", "ralt", "left", "down", "right"),
 )
 
 

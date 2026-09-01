@@ -8,9 +8,11 @@ the keymap.
 
 import io
 import json
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from importlib.resources import files
 from pathlib import Path
 from unittest.mock import patch
 
@@ -231,22 +233,23 @@ class ScopedApplyTests(unittest.TestCase):
         self.assertEqual(self._sent(send.call_args_list), [0x03])
         self.assertEqual(result["scopes"], ["keymap"])
 
-    def test_gui_without_scopes_still_sends_everything(self) -> None:
+    def test_gui_without_scopes_fails_closed_before_device_discovery(self) -> None:
         with (
-            patch("spade65.gui.discover_devices", return_value=[_main_device()]),
-            patch(
-                "spade65.gui.send_feature_report", side_effect=lambda d, r: len(r)
-            ) as send,
+            patch("spade65.gui.discover_devices") as discover,
+            patch("spade65.gui.send_feature_report") as send,
         ):
-            result = execute_action(
-                "profile",
-                {
-                    "profile": _profile(colors=True),
-                    "confirmation": "APPLY PROFILE",
-                },
-            )
-        self.assertEqual(self._sent(send.call_args_list), [0x03, 0x02, 0x07])
-        self.assertEqual(result["scopes"], list(PROFILE_SCOPES))
+            with self.assertRaisesRegex(
+                RuntimeError, "profile scopes are required"
+            ):
+                execute_action(
+                    "profile",
+                    {
+                        "profile": _profile(colors=True),
+                        "confirmation": "APPLY PROFILE",
+                    },
+                )
+        discover.assert_not_called()
+        send.assert_not_called()
 
     def test_gui_still_demands_the_typed_confirmation(self) -> None:
         with (
@@ -261,20 +264,53 @@ class ScopedApplyTests(unittest.TestCase):
         send.assert_not_called()
 
     def test_gui_rejects_a_malformed_scope_list(self) -> None:
-        with (
-            patch("spade65.gui.discover_devices", return_value=[_main_device()]),
-            patch("spade65.gui.send_feature_report") as send,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "must be a list"):
-                execute_action(
-                    "profile",
-                    {
-                        "profile": _profile(),
-                        "confirmation": "APPLY PROFILE",
-                        "scopes": "keymap",
-                    },
-                )
-        send.assert_not_called()
+        for scopes in ("keymap", None, ["keymap", None]):
+            with (
+                self.subTest(scopes=scopes),
+                patch("spade65.gui.discover_devices") as discover,
+                patch("spade65.gui.send_feature_report") as send,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "must be a list"):
+                    execute_action(
+                        "profile",
+                        {
+                            "profile": _profile(),
+                            "confirmation": "APPLY PROFILE",
+                            "scopes": scopes,
+                        },
+                    )
+                discover.assert_not_called()
+                send.assert_not_called()
+
+    def test_web_defaults_leave_per_key_colors_out_of_apply(self) -> None:
+        page = (
+            files("spade65.web")
+            .joinpath("index.html")
+            .read_text(encoding="utf-8")
+        )
+
+        def input_tag(identifier: str) -> str:
+            match = re.search(rf'<input id="{identifier}"[^>]*>', page)
+            if match is None:
+                self.fail(f"missing {identifier} checkbox")
+            return match.group(0)
+
+        self.assertIn(" checked", input_tag("scopeKeymap"))
+        self.assertIn(" checked", input_tag("scopeMacros"))
+        self.assertNotIn(" checked", input_tag("scopeColors"))
+
+        english = json.loads(
+            files("spade65.web.locales")
+            .joinpath("en.json")
+            .read_text(encoding="utf-8")
+        )
+        indonesian = json.loads(
+            files("spade65.web.locales")
+            .joinpath("id.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertIn("opt-in", english["profile.scopeHint"])
+        self.assertIn("secara sengaja", indonesian["profile.scopeHint"])
 
     def test_the_web_ui_is_told_the_scope_names(self) -> None:
         from spade65.gui import gui_metadata

@@ -1,6 +1,11 @@
 import unittest
 
-from spade65.keymap import UI_KEY_NAMES, compile_profile
+from spade65.keymap import (
+    BUTTON_TO_SLOT,
+    UI_KEY_NAMES,
+    VENDOR_UI_KEY_NAMES,
+    compile_profile,
+)
 from spade65.vendor import KCODE_TO_USAGE, convert_vendor_document
 
 
@@ -54,6 +59,48 @@ class VendorImportTests(unittest.TestCase):
 
     def test_mapping_covers_every_unique_vendor_assignment_usage(self) -> None:
         self.assertEqual(len(set(KCODE_TO_USAGE.values())), 130)
+
+    def test_variant_positions_import_to_distinct_canonical_modifiers(self) -> None:
+        normal = [
+            {"keyAssignType": ["", "", ""], "value": ""}
+            for _ in VENDOR_UI_KEY_NAMES
+        ]
+        # Original exports are positional: raw index 62 is the legacy vendor
+        # RAlt position and raw index 66 is the physical RALT-variant key.
+        normal[62] = {"keyAssignType": ["", "", "K170"], "value": "B"}
+        normal[66] = {"keyAssignType": ["", "", "K153"], "value": "A"}
+        profile, imported = convert_vendor_document({
+            "value": {"Keyboard_Export": {"assignedKeyboardKeys": normal}}
+        })
+
+        self.assertEqual(imported, ["KeyAssign"])
+        self.assertEqual(profile["layers"]["normal"]["rctrl"], 0x05)
+        self.assertEqual(profile["layers"]["normal"]["ralt"], 0x04)
+        compiled = compile_profile(profile)["keymap"]
+        self.assertEqual(BUTTON_TO_SLOT["rctrl"], 89)
+        self.assertEqual(BUTTON_TO_SLOT["ralt"], 96)
+        self.assertEqual(compiled[8 + 2 * 89 : 8 + 2 * 89 + 2], b"\x80\x05")
+        self.assertEqual(compiled[8 + 2 * 96 : 8 + 2 * 96 + 2], b"\x80\x04")
+
+    def test_ap_selection_uses_canonical_variant_positions(self) -> None:
+        selected = [False] * len(VENDOR_UI_KEY_NAMES)
+        selected[62] = True
+        selected[66] = True
+        profile, imported = convert_vendor_document({
+            "value": {
+                "Light_Export": [{
+                    "name": "wave",
+                    "frame_selection_range": selected,
+                    "colors": ["#123456"],
+                }]
+            }
+        })
+
+        self.assertEqual(imported, ["APMode"])
+        self.assertEqual(
+            profile["settings"]["app_effects"][0]["keys"],
+            ["rctrl", "ralt"],
+        )
 
     def test_rejects_unrelated_json(self) -> None:
         with self.assertRaisesRegex(ValueError, "no Keyboard_Export"):

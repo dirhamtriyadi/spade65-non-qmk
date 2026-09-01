@@ -239,7 +239,11 @@ class ReadonlyReceiverTests(unittest.TestCase):
             ("per-key", {"profile": profile}),
             (
                 "profile",
-                {"profile": profile, "confirmation": "APPLY PROFILE"},
+                {
+                    "profile": profile,
+                    "confirmation": "APPLY PROFILE",
+                    "scopes": ["keymap"],
+                },
             ),
             ("stream", {"profile": profile}),
             ("debounce", {"milliseconds": 5}),
@@ -321,7 +325,14 @@ class ReadonlyReceiverTests(unittest.TestCase):
         actions = [
             ("rgb", {"effect": "fixed"}),
             ("per-key", {"profile": profile}),
-            ("profile", {"profile": profile, "confirmation": "APPLY PROFILE"}),
+            (
+                "profile",
+                {
+                    "profile": profile,
+                    "confirmation": "APPLY PROFILE",
+                    "scopes": ["keymap"],
+                },
+            ),
             ("stream", {"profile": profile}),
             ("debounce", {"milliseconds": 5}),
             ("sleep", {"light_off": 1, "hibernate": 3}),
