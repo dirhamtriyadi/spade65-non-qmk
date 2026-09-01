@@ -108,11 +108,12 @@ bash packaging/build_macos.sh
 Linux requires an EGL loader, `curl`, and `sha256sum`; the script downloads the official
 `AppImage/appimagetool` 1.9.1 release and verifies its pinned SHA-256 before
 execution. A custom `APPIMAGETOOL_URL` must be paired with the corresponding
-`APPIMAGETOOL_SHA256`. The embedded type-2 runtime is also downloaded by
-immutable GitHub asset ID and hash-checked; overriding `APPIMAGE_RUNTIME_URL`
+`APPIMAGETOOL_SHA256`. The embedded type-2 runtime uses GitHub's public release
+download route instead of the rate-limited API asset route. Its exact bytes are
+still pinned and verified with SHA-256; overriding `APPIMAGE_RUNTIME_URL`
 requires the matching `APPIMAGE_RUNTIME_SHA256`. Verification is never skipped,
-and `--runtime-file` prevents appimagetool from fetching its mutable
-`continuous` runtime.
+and `--runtime-file` prevents appimagetool from independently fetching an
+unverified runtime.
 
 The Linux x86_64 package bundles PySide6 and QtWebEngine. This materially
 increases the AppImage size compared with the earlier browser-only package. The

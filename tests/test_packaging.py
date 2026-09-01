@@ -279,6 +279,15 @@ class PackagingTests(unittest.TestCase):
             "1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf",
             script,
         )
+        self.assertIn(
+            "https://github.com/AppImage/type2-runtime/releases/download/"
+            "continuous/runtime-x86_64",
+            script,
+        )
+        self.assertNotIn(
+            "https://api.github.com/repos/AppImage/type2-runtime/releases/assets/",
+            script,
+        )
         self.assertIn('--runtime-file "$runtime_file"', script)
         for forbidden in (
             "Qt6Graphs",

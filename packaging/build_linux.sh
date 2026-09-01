@@ -181,8 +181,11 @@ curl --fail --location --retry 3 --output "$appimagetool" "$tool_url"
 verify_sha256 "$appimagetool" "$tool_sha256" "appimagetool"
 chmod 0755 "$appimagetool"
 
-runtime_url=${APPIMAGE_RUNTIME_URL:-https://api.github.com/repos/AppImage/type2-runtime/releases/assets/456065460}
-# Asset 456065460 was built from AppImage/type2-runtime commit 75849dc.
+# Use the public release download route instead of the GitHub API asset route.
+# Hosted runners share the API's unauthenticated rate limit and can receive a
+# 403 even for a public asset. The checksum below still pins the exact runtime
+# bytes built from AppImage/type2-runtime commit 75849dc.
+runtime_url=${APPIMAGE_RUNTIME_URL:-https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64}
 runtime_sha256=${APPIMAGE_RUNTIME_SHA256:-1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf}
 curl --fail --location --retry 3 --header "Accept: application/octet-stream" \
   --output "$runtime_file" "$runtime_url"

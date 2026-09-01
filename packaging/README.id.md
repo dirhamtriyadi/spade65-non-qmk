@@ -117,11 +117,12 @@ bash packaging/build_macos.sh
 Linux memerlukan loader EGL, `curl`, dan `sha256sum`; script mengunduh rilis
 resmi `AppImage/appimagetool` 1.9.1 dan memverifikasi SHA-256 yang dipatok
 sebelum menjalankannya. `APPIMAGETOOL_URL` khusus harus disertai
-`APPIMAGETOOL_SHA256` yang sesuai. Runtime type-2 yang ditanam juga diunduh
-berdasarkan ID asset GitHub immutable dan diperiksa hash-nya; override
+`APPIMAGETOOL_SHA256` yang sesuai. Runtime type-2 yang ditanam memakai jalur
+download release publik GitHub, bukan jalur API asset yang terkena rate limit.
+Byte persisnya tetap dipatok dan diverifikasi dengan SHA-256; override
 `APPIMAGE_RUNTIME_URL` memerlukan `APPIMAGE_RUNTIME_SHA256` yang cocok.
 Verifikasi tidak pernah dilewati, dan `--runtime-file` mencegah appimagetool
-mengambil runtime `continuous` yang dapat berubah.
+mengambil runtime yang belum diverifikasi secara mandiri.
 
 Paket Linux x86_64 membundel PySide6 dan QtWebEngine. Hal ini meningkatkan
 ukuran AppImage secara material dibandingkan paket browser-only sebelumnya.
