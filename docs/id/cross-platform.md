@@ -7,8 +7,8 @@
 | Platform | Discovery dan write | Renderer desktop v0.7.0 | Penangkapan output sistem pada paket | Aplikasi aktif | Background launcher | Validasi fisik |
 |---|---|---|---|---|---|---|
 | Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard dengan monitor PipeWire/PulseAudio | X11, fallback proses Wayland | systemd user | Ya, USB `0603:0351` |
-| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Belum diuji pada mesin Windows |
-| macOS | HIDAPI / IOKit | Cocoa/WebKit | CoreAudio tap `pysysaudio` (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Belum diuji pada mesin macOS |
+| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Belum dengan keyboard; dipaket dan di-smoke-test pada runner Windows |
+| macOS | HIDAPI / IOKit | Cocoa/WebKit | CoreAudio tap `pysysaudio` (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Belum dengan keyboard; dipaket dan di-smoke-test pada runner macOS |
 
 GUI, profile compiler, macro, konverter vendor, AP renderer, timeline, dan aturan
 keselamatan memakai source yang sama pada seluruh OS. Windows/macOS tidak memakai

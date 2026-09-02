@@ -7,8 +7,8 @@
 | Platform | Discovery and writes | Desktop renderer (v0.7.0) | Packaged system-output capture | Active application | Background launcher | Physical validation |
 |---|---|---|---|---|---|---|
 | Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard with a PipeWire/PulseAudio monitor | X11, Wayland process fallback | systemd user service | Yes, USB `0603:0351` |
-| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Not yet tested on a Windows machine |
-| macOS | HIDAPI / IOKit | Cocoa/WebKit | `pysysaudio` CoreAudio tap (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Not yet tested on a macOS machine |
+| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | No keyboard yet; packaged and smoke-tested on Windows runners |
+| macOS | HIDAPI / IOKit | Cocoa/WebKit | `pysysaudio` CoreAudio tap (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | No keyboard yet; packaged and smoke-tested on macOS runners |
 
 The GUI, profile compiler, macros, vendor converter, AP renderer, timeline, and
 safety rules share the same source across all operating systems. Windows and
