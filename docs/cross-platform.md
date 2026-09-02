@@ -4,11 +4,11 @@
 
 ## Status
 
-| Platform | Discovery and writes | Desktop renderer (v0.7.0) | Active application | Background launcher | Physical validation |
-|---|---|---|---|---|---|
-| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | X11, Wayland process fallback | systemd user service | Yes, USB `0603:0351` |
-| Windows | HIDAPI / Win32 HID | Edge WebView2 | Win32 foreground window | Startup `.cmd` | Not yet tested on a Windows machine |
-| macOS | HIDAPI / IOKit | Cocoa/WebKit | System Events frontmost process | LaunchAgent `.plist` | Not yet tested on a macOS machine |
+| Platform | Discovery and writes | Desktop renderer (v0.7.0) | Packaged system-output capture | Active application | Background launcher | Physical validation |
+|---|---|---|---|---|---|---|
+| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard with a PipeWire/PulseAudio monitor | X11, Wayland process fallback | systemd user service | Yes, USB `0603:0351` |
+| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Not yet tested on a Windows machine |
+| macOS | HIDAPI / IOKit | Cocoa/WebKit | `pysysaudio` CoreAudio tap (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Not yet tested on a macOS machine |
 
 The GUI, profile compiler, macros, vendor converter, AP renderer, timeline, and
 safety rules share the same source across all operating systems. Windows and
@@ -22,6 +22,15 @@ launcher on those systems. Every push to `main` also runs a native packaging
 preflight: a Windows ZIP, Linux AppImage on Ubuntu 22.04, and universal macOS DMG
 are built and smoke-tested without being published. Physical validation remains
 listed separately in the table above.
+
+The packaged desktop source selector prefers those native system-output paths
+and also offers microphone input as an explicit fallback. Browser-only mode has
+no native bridge, so it can use microphone input but cannot capture system
+output directly. The capture implementations and dependency imports are tested
+automatically. Linux monitor capture was also exercised with a system-played
+125 Hz tone on 2026-09-02 and identified the correct dominant band. Windows and
+macOS output capture still require physical testing; the table's physical-
+validation column otherwise refers to the keyboard transport.
 
 A `vMAJOR.MINOR.PATCH` release tag also runs a native build on each operating
 system and publishes the following assets only when every build succeeds:
@@ -57,9 +66,10 @@ Download the appropriate asset from GitHub Releases.
 - macOS Intel/Apple Silicon: open the DMG, then copy `Spade65.app` to
   `Applications`. The universal bundle is checked to ensure its native binary
   contains both `x86_64` and `arm64` slices. The window uses the system
-  Cocoa/WebKit stack. The bundle permits localhost networking and declares
-  microphone use; the microphone prompt is relevant only when an audio-reactive
-  effect is enabled.
+  Cocoa/WebKit stack. Direct system-output capture requires macOS 14.2 or newer
+  and may prompt for system-audio recording permission; choosing a microphone
+  fallback can prompt separately for microphone permission. Neither permission
+  is requested until an audio-reactive source is used.
 
 With no arguments, a package opens the local GUI at
 `http://127.0.0.1:8765/` in a standalone window. A second launch verifies the
@@ -133,9 +143,19 @@ Linux still requires the repository's udev rule so an ordinary user can open
 an experimental HIDAPI override can still be installed from source through the
 `cross-platform` extra, but it is not part of the AppImage. macOS
 Automation/Accessibility permission requirements for application associations
-also apply to the desktop package. macOS microphone permission is required only
-for audio input used by audio-reactive effects; the localhost server is not
-exposed to an external network.
+also apply to the desktop package. macOS system-audio permission is relevant
+only when system output is selected for an audio-reactive effect, and microphone
+permission is relevant only for the microphone fallback. The localhost server
+is not exposed to an external network.
+
+For live effects, the source selector also exposes sensitivity 200–8000
+(default 1000), noise gate, smoothing, and spectrum, bass, or overall-loudness
+response. Layer opacity is applied before layers are composited; master
+brightness scales the completed frame. Continuous audio reactivity requires the
+GUI and Live preview to remain active over wired USB `0603:0351`. It is not
+stored in the keyboard and is not handled by the background service. Native raw
+PCM stays inside the capture worker: only compact level, peak, and band values
+cross the local desktop bridge, and no audio is stored.
 
 ### Installing from source
 
@@ -160,6 +180,13 @@ python -m pip install -e ".[cross-platform,desktop]"
 python -m spade65 probe
 python -m spade65 gui
 ```
+
+For a source installation on Windows or macOS, direct system-output capture
+currently requires Python 3.10–3.12 because the pinned `pysysaudio` native wheel
+does not support Python 3.13. The official Windows and macOS packages use Python
+3.12.10. With a newer unsupported source interpreter, the rest of the GUI still
+runs and the explicit microphone fallback remains available. Linux system-
+output capture uses SoundCard and does not have that Python 3.12 restriction.
 
 On every operating system, `python -m spade65 gui` selects the desktop window by
 default and falls back to the browser when the native runtime cannot be loaded.
@@ -247,7 +274,9 @@ Keymap, macro, built-in/per-key effect, debounce, and dongle-timer reports targe
 the device's internal configuration, like the official software. Those settings
 do not require a background service after they are applied. Named profiles,
 application associations, AP/streaming animations, and custom timelines are host
-data; their effects require the GUI or service to remain running.
+data; their effects require the GUI or service to remain running. Audio-reactive
+live effects are also host data, but specifically require the GUI because the
+service never opens a system-audio or microphone source.
 
 On every OS, applying a keymap resolves the descriptor-gated main and short
 companion collections and opens both handles before writing. The main handle

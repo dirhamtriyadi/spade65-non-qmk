@@ -28,12 +28,14 @@ jobs:
       - run: node --check spade65/web/usage-picker.js
       - run: node --check spade65/web/external-links.js
       - run: node --check spade65/web/clipboard.js
+      - run: node --check spade65/web/live-effects.js
       - run: node --check spade65/web/app.js
       - run: node tests/layout_state.test.js
       - run: node tests/key_events.test.js
       - run: node tests/usage_picker.test.js
       - run: node tests/external_links.test.js
       - run: node tests/clipboard.test.js
+      - run: node tests/live_effects.test.js
 
   windows-package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -42,7 +44,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.13"
+          python-version: "3.12.10"
           architecture: x64
           cache: pip
       - name: Install pinned desktop build dependencies
@@ -70,7 +72,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes \
             libstdc++6 libgcc-s1 libgbm1 libfontconfig1 libfreetype6 \
-            libexpat1 libx11-6 libx11-xcb1 libasound2 libegl1 libgl1 \
+            libexpat1 libx11-6 libx11-xcb1 libasound2 libpulse0 libegl1 libgl1 \
             libxcb-shape0 libxcb-image0 libxcb-xkb1 \
             libxcb-icccm4 libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 \
             libxcb-keysyms1 libxcb-render-util0

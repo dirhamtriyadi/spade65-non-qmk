@@ -34,6 +34,55 @@ dapat di-loop, tersimpan dalam `settings.custom_timeline`, dan memakai transport
 streaming USB yang sama dengan AP mode. Tidak ada data timeline yang ditulis ke
 flash firmware.
 
+## Efek langsung audio-reactive
+
+Aplikasi desktop terpaket dapat menggerakkan efek langsung dari output komputer
+tanpa mengandalkan suara yang tertangkap kembali oleh mikrofon. **Lighting →
+Efek langsung → Reaktif audio** menyediakan selector sumber dengan jalur native
+berikut:
+
+- Linux memakai SoundCard untuk mengenumerasi sumber monitor
+  PipeWire/PulseAudio. Server audio aktif harus menyediakan monitor yang
+  kompatibel dengan PulseAudio.
+- Windows memakai `pysysaudio` dan WASAPI loopback untuk output sistem default.
+- macOS memakai CoreAudio tap dari `pysysaudio` pada macOS 14.2 atau lebih baru.
+  Sistem operasi dapat meminta izin perekaman audio sistem.
+
+Entri mikrofon eksplisit memakai jalur input Web Audio dan tetap menjadi
+fallback bila sumber output native tidak tersedia. Mode browser saja tidak
+memiliki bridge desktop native sehingga hanya menawarkan input mikrofon.
+
+Setiap lapisan yang mengaktifkan audio dapat memakai salah satu dari tiga
+respons: **Spektrum melintasi tombol** memetakan pita frekuensi ke keyboard,
+**Denyut bass** mengikuti pita rendah, dan **Keras-lembut keseluruhan** memakai
+satu tingkat untuk seluruh lapisan. Sensitivitas memiliki rentang hasil analisis
+200–8000 dan default 1000. Menaikkannya memperkuat input yang pelan; noise gate
+menekan derau dasar yang pelan; sedangkan smoothing mengurangi perubahan
+mendadak. Meter audio menampilkan tingkat yang sudah diproses saat pratinjau
+aktif.
+
+**Opasitas lapisan** hanya mengubah kontribusi lapisan terpilih sebelum seluruh
+lapisan dikomposisikan. Lapisan buram di atasnya dapat menutupi perubahan
+visual tersebut. **Kecerahan utama** menskalakan frame komposit akhir, jadi
+gunakan kontrol itu bila seluruh efek langsung perlu tampak lebih gelap atau
+lebih terang. Pratinjau keyboard langsung menampilkan hasil kedua kontrol tanpa
+mengubah desain warna per tombol yang tersimpan.
+
+Reaksi audio berkelanjutan digerakkan host: GUI dan Pratinjau langsung harus
+tetap berjalan, serta keyboard harus terhubung melalui interface streaming kabel
+`0603:0351` yang telah diverifikasi terhadap descriptor. Efek tidak disimpan di
+memori keyboard dan background service tidak menangkap audio. Penangkapan native
+hanya menghasilkan snapshot tingkat, puncak, dan pita frekuensi yang ringkas;
+PCM mentah tidak disimpan, dikirim melalui API localhost, ataupun diekspos lewat
+bridge WebView. Jalur ini hanya mengirim frame streaming RGB biasa dan tidak
+dapat melakukan flash firmware, masuk bootloader, atau raw write.
+
+Backend penangkapan, analisis, dan batas bridge memiliki cakupan otomatis.
+Output sistem Linux juga diuji pada 2026-09-02 dengan nada 125 Hz melalui
+PipeWire; snapshot monitor bernilai nonzero dan pita 125 Hz menjadi dominan.
+Output Windows serta macOS masih memerlukan validasi fisik, terpisah dari
+transport streaming RGB berkabel yang sudah diverifikasi.
+
 ## Tray desktop dan startup setelah login
 
 Pada aplikasi native, **Pengaturan → Integrasi desktop** mengatur apakah
@@ -132,8 +181,8 @@ launcher `.cmd` untuk folder Startup, dan macOS menghasilkan LaunchAgent
 Service/launcher ini adalah komponen background yang tetap berjalan tanpa GUI.
 Service itu sendiri tidak memiliki ikon tray dan tidak memerlukan toolkit
 desktop tambahan; tray hanya dimiliki GUI native yang dijelaskan di atas.
-Audio-reactive tetap dijalankan dari GUI karena service tidak meminta akses
-mikrofon secara diam-diam.
+Audio-reactive tetap dijalankan dari GUI karena service tidak diam-diam meminta
+akses audio sistem atau mikrofon.
 
 ## Penguji tombol
 

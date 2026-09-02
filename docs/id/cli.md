@@ -519,6 +519,8 @@ memilih profil berdasarkan aplikasi aktif. Service ini tidak memiliki ikon
 tray; system tray dimiliki proses GUI native yang terpisah. Pada Wayland, yang
 tidak menyediakan API jendela foreground portabel, fallback
 memilih rule pertama dengan proses yang sedang berjalan; urutan rule penting.
+Service tidak pernah membuka sumber audio sistem atau mikrofon, sehingga efek
+langsung audio-reactive tetap menjadi fitur GUI foreground.
 
 Penulisan keymap/profil otomatis nonaktif secara default. Mengaktifkannya
 membutuhkan `"allow_profile_writes": true` dalam konfigurasi dan flag runtime
@@ -569,9 +571,12 @@ Perintah untuk efek bawaan, debounce, timer, keymap, macro, dan konfigurasi RGB
 per tombol tersimpan mengirim report konfigurasi vendor yang ditujukan bagi
 perangkat. Pengaturan tersebut diharapkan tetap digunakan saat keyboard
 dipindahkan ke sistem operasi lain, seperti pada software original. Fitur yang
-melakukan streaming frame—efek AP, efek audio-reactive, timeline kustom, dan
-asosiasi aplikasi—digerakkan host dan hanya bekerja selama GUI atau service
-aktif.
+melakukan streaming efek AP atau timeline kustom digerakkan host dan hanya
+bekerja selama GUI atau background service aktif. Efek langsung audio-reactive
+juga digerakkan host, tetapi memerlukan GUI dan Pratinjau langsung karena service
+tidak menangkap audio. Asosiasi aplikasi adalah rule host lokal yang dapat
+dijalankan service. Tidak satu pun fitur host tersebut disimpan dalam memori
+keyboard.
 
 Spade65 tidak dapat membaca seluruh keymap, macro, atau setiap pengaturan saat
 ini kembali dari keyboard dengan aman. Profil tersimpan dan backup library GUI

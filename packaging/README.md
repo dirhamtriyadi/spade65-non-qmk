@@ -72,7 +72,7 @@ sudo apt-get update
 sudo apt-get install --no-install-recommends \
   libegl1 libgl1 libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
   libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
-  libxcb-render-util0 curl coreutils
+  libxcb-render-util0 libpulse0 curl coreutils
 ```
 
 Use the equivalent EGL, curl, and SHA-256 utility packages on other Linux
@@ -83,6 +83,9 @@ For editable source installs that are not building release artifacts, Linux can
 use `python -m pip install -e ".[desktop]"`; Windows and macOS use
 `python -m pip install -e ".[cross-platform,desktop]"`. A base install can still
 run `gui --browser` or `gui --no-browser` without the native desktop extra.
+Use CPython 3.12 on Windows and macOS when building the full desktop package:
+the pinned pysysaudio 0.1.3 native loopback wheels are published through
+CPython 3.12. Linux packaging remains on CPython 3.13.
 
 Build on the target computer with one cross-platform command. It automatically
 selects the native script and uses the same Python interpreter that invoked it:
@@ -126,7 +129,7 @@ session and the normal Qt display dependencies are required to open the window,
 while the packaged smoke test remains headless.
 
 The AppImage deliberately excludes the build host's `libstdc++`, `libgcc_s`,
-GBM, X11 core, ALSA, Fontconfig, FreeType, Expat, and graphics-dispatch
+GBM, X11 core, ALSA, PulseAudio, Fontconfig, FreeType, Expat, and graphics-dispatch
 libraries. Those libraries load GPU/audio drivers or parse host configuration
 and must therefore stay aligned with the target system. The build fails if one
 re-enters the bundle. This prevents an Ubuntu baseline library from shadowing a
@@ -166,19 +169,23 @@ replaced with legacy MSHTML; failure activates the documented browser fallback.
 
 macOS requires Xcode command-line tools and a universal2 Python plus universal2
 native dependencies. The release workflow builds
-with the SHA-256-verified Python.org 3.13.15 universal2 installer instead of
+with the SHA-256-verified Python.org 3.12.10 universal2 installer instead of
 assuming that an architecture-selected CI interpreter is fat. It then builds
 `hidapi` from source for both macOS architectures and scans every Mach-O file in
 the finished application to reject thin native binaries. The desktop renderer
 uses Cocoa/WebKit through PyObjC. The bundle permits local networking for the
-loopback UI and includes a microphone usage description; microphone access is
-only requested when an audio-reactive effect is enabled.
+loopback UI and includes separate microphone and system-audio capture usage
+descriptions. Core Audio tap capture requires macOS 14.2 or newer; microphone
+fallback and the rest of the application retain the macOS 11 baseline.
 
 Every packaged executable runs a no-window/no-browser/no-device-enumeration
 smoke test before upload. It imports the selected PyWebView backend and checks
 the packaged HTTP resources without creating an interactive window.
-Windows/macOS still load the native HID extension so missing linked libraries
-fail the build without touching a keyboard.
+Windows/macOS still load the native HID and pysysaudio extensions so missing
+linked libraries fail the build without touching a keyboard or opening an
+audio device. Linux verifies NumPy, CFFI, SoundCard's package data, and its
+PulseAudio runtime prerequisite without connecting to the headless CI audio
+server.
 
 The Windows script validates both executables, creates the ZIP, and extracts it
 to a temporary directory. It checks that LICENSE, `THIRD-PARTY-NOTICES.md`, and
@@ -213,7 +220,9 @@ preflight artifacts are not reused as release assets. Both layers use the CI
 dependency contract: Windows installs
 `.[cross-platform,desktop]`, Linux installs `.[desktop]` for its hidraw-only
 AppImage, and macOS installs the `desktop` extra then builds HIDAPI universal2
-separately. Each also installs `requirements-build.txt`. All three run `pip
+separately. Windows and macOS package with CPython 3.12.10; the general source
+test matrix still covers Python 3.10 and 3.13. Each also installs
+`requirements-build.txt`. All three run `pip
 check`, the packaged smoke test, and native artifact verification.
 
 The macOS script reads the application version from `pyproject.toml`, verifies
@@ -232,7 +241,10 @@ the licensing material for
 [pywebview](https://github.com/r0x0r/pywebview/blob/master/LICENSE.md),
 [Qt for Python/PySide6](https://doc.qt.io/qtforpython-6/licenses.html),
 [Microsoft Edge WebView2](https://www.microsoft.com/legal/webview2terms), and
-[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt) when
+[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt),
+[SoundCard](https://github.com/bastibe/SoundCard/blob/0.4.6/LICENSE),
+[NumPy](https://github.com/numpy/numpy/blob/v2.5.2/LICENSE.txt), and
+[pysysaudio](https://github.com/scottjg/pysysaudio/blob/v0.1.3/LICENSE) when
 redistributing the release artifacts. Repository copies of the relevant
 [GPL-3.0](../licenses/GPL-3.0.txt) and
 [LGPL-3.0](../licenses/LGPL-3.0.txt) texts are also available for Qt components

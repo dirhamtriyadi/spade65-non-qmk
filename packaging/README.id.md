@@ -77,7 +77,7 @@ sudo apt-get update
 sudo apt-get install --no-install-recommends \
   libegl1 libgl1 libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
   libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
-  libxcb-render-util0 curl coreutils
+  libxcb-render-util0 libpulse0 curl coreutils
 ```
 
 Gunakan paket EGL, curl, dan utilitas SHA-256 yang setara pada distribusi Linux
@@ -90,6 +90,9 @@ memakai `python -m pip install -e ".[desktop]"`; Windows dan macOS memakai
 `python -m pip install -e ".[cross-platform,desktop]"`. Instalasi dasar tetap
 dapat menjalankan `gui --browser` atau `gui --no-browser` tanpa extra desktop
 native.
+Gunakan CPython 3.12 pada Windows dan macOS saat membangun paket desktop penuh:
+wheel loopback native pysysaudio 0.1.3 yang dipatok dipublikasikan sampai
+CPython 3.12. Paket Linux tetap memakai CPython 3.13.
 
 Lakukan build pada komputer target dengan satu perintah lintas platform.
 Perintah ini otomatis memilih script native dan memakai interpreter Python yang
@@ -135,7 +138,8 @@ dan dependency tampilan Qt normal diperlukan untuk membuka jendela, sedangkan
 smoke test paket tetap headless.
 
 AppImage sengaja tidak menyertakan `libstdc++`, `libgcc_s`, GBM, X11 core, ALSA,
-Fontconfig, FreeType, Expat, dan library graphics-dispatch milik host build.
+PulseAudio, Fontconfig, FreeType, Expat, dan library graphics-dispatch milik
+host build.
 Library tersebut memuat driver GPU/audio atau membaca konfigurasi host, sehingga
 harus tetap selaras dengan sistem target. Build akan gagal jika salah satunya
 kembali masuk ke bundle. Hal ini mencegah library baseline Ubuntu menimpa
@@ -178,20 +182,23 @@ yang terdokumentasi.
 
 macOS memerlukan Xcode command-line tools, Python universal2, dan dependency
 native universal2. Workflow rilis melakukan build dengan installer universal2
-Python.org 3.13.15 yang SHA-256-nya telah diverifikasi, bukan berasumsi bahwa
+Python.org 3.12.10 yang SHA-256-nya telah diverifikasi, bukan berasumsi bahwa
 interpreter CI yang dipilih berdasarkan arsitektur sudah berupa binary fat.
 Workflow kemudian membangun `hidapi` dari source untuk kedua arsitektur macOS
 dan memindai setiap file Mach-O pada aplikasi akhir untuk menolak binary native
 yang hanya memiliki satu arsitektur. Renderer desktop memakai Cocoa/WebKit
 melalui PyObjC. Bundle mengizinkan jaringan lokal untuk UI loopback dan memuat
-deskripsi penggunaan mikrofon; akses mikrofon hanya diminta ketika efek
-audio-reactive diaktifkan.
+deskripsi penggunaan terpisah untuk mikrofon dan tangkapan audio sistem.
+Tangkapan Core Audio tap memerlukan macOS 14.2 atau lebih baru; fallback
+mikrofon dan aplikasi lainnya tetap memakai baseline macOS 11.
 
 Setiap executable paket menjalankan smoke test tanpa jendela, browser, atau
 enumerasi perangkat sebelum di-upload. Smoke test mengimpor backend PyWebView
 yang dipilih dan memeriksa resource HTTP paket tanpa membuat jendela interaktif.
-Windows/macOS tetap memuat ekstensi HID native agar library tertaut yang hilang
-menggagalkan build tanpa menyentuh keyboard.
+Windows/macOS tetap memuat ekstensi HID dan pysysaudio native agar library
+tertaut yang hilang menggagalkan build tanpa menyentuh keyboard atau membuka
+perangkat audio. Linux memverifikasi NumPy, CFFI, data paket SoundCard, dan
+prasyarat runtime PulseAudio tanpa tersambung ke server audio CI headless.
 
 Script Windows memvalidasi kedua executable, membuat ZIP, lalu mengekstraknya
 ke direktori sementara. Script memeriksa bahwa LICENSE, `THIRD-PARTY-NOTICES.md`,
@@ -228,8 +235,10 @@ setelahnya mengizinkan publikasi; artifact preflight tidak digunakan kembali
 sebagai asset rilis. Kedua lapisan memakai kontrak dependency CI: Windows
 memasang `.[cross-platform,desktop]`, Linux memasang
 `.[desktop]` untuk AppImage hidraw-only, dan macOS memasang extra `desktop` lalu
-membangun HIDAPI universal2 secara terpisah. Masing-masing juga memasang
-`requirements-build.txt`. Ketiganya menjalankan `pip check`, smoke test paket,
+membangun HIDAPI universal2 secara terpisah. Windows dan macOS melakukan paket
+dengan CPython 3.12.10; matriks pengujian source umum tetap mencakup Python 3.10
+dan 3.13. Masing-masing juga memasang `requirements-build.txt`. Ketiganya
+menjalankan `pip check`, smoke test paket,
 dan verifikasi artifact native.
 
 Script macOS membaca versi aplikasi dari `pyproject.toml`, memverifikasinya
@@ -248,7 +257,10 @@ setiap artifact rilis, bersama materi lisensi untuk
 [pywebview](https://github.com/r0x0r/pywebview/blob/master/LICENSE.md),
 [Qt for Python/PySide6](https://doc.qt.io/qtforpython-6/licenses.html),
 [Microsoft Edge WebView2](https://www.microsoft.com/legal/webview2terms), dan
-[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt) ketika
+[PyObjC](https://github.com/ronaldoussoren/pyobjc/blob/main/LICENSE.txt),
+[SoundCard](https://github.com/bastibe/SoundCard/blob/0.4.6/LICENSE),
+[NumPy](https://github.com/numpy/numpy/blob/v2.5.2/LICENSE.txt), dan
+[pysysaudio](https://github.com/scottjg/pysysaudio/blob/v0.1.3/LICENSE) ketika
 mendistribusikan ulang artifact rilis. Salinan repository dari teks
 [GPL-3.0](../licenses/GPL-3.0.txt) dan
 [LGPL-3.0](../licenses/LGPL-3.0.txt) yang relevan juga tersedia untuk komponen Qt

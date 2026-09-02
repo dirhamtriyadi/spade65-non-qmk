@@ -27,6 +27,27 @@ sama juga diperiksa dan terdeteksi sebagai `0603:0352`.
 - Pembacaan sysfs menghasilkan USB revision `01.00`. Nilai ini tidak diberi label
   versi firmware.
 
+## Validasi penangkapan audio
+
+Pada 2026-09-02, backend Linux menemukan `Monitor of Dummy Output` melalui jalur
+PipeWire/PulseAudio SoundCard. Nada 125 Hz diputar ke output tersebut; worker
+penangkapan menerbitkan tingkat nonzero, menandai pita 125 Hz sebagai yang
+dominan, lalu berhenti dengan bersih. Ini memvalidasi penangkapan monitor serta
+analisis frekuensi Linux nyata, selain transport streaming RGB `0603:0351` yang
+digerbangi descriptor dan telah diverifikasi di atas.
+
+WASAPI loopback Windows dan CoreAudio tap macOS 14.2+ masih memerlukan pengujian
+langsung pada sistem operasinya. Test otomatis mencakup kedua adapter, analisis
+PCM, allowlist sumber, sensitivitas, noise gate, smoothing, pemrosesan bass/
+spektrum/keras-lembut, pembersihan lifecycle, serta aturan bahwa hanya tingkat
+dan pita ringkas yang melewati bridge desktop.
+
+Pengujian audio hanya memakai penangkapan host dan frame RGB kabel biasa.
+Pengujian tidak menambahkan flash firmware, masuk bootloader, raw write, atau
+paket HID arbitrer. Reaksi audio berkelanjutan memerlukan GUI dan Pratinjau
+langsung tetap aktif; efek tidak disimpan dalam memori keyboard atau dijalankan
+oleh background service.
+
 ## Transaksi keymap resmi dan temuan pencahayaan
 
 Firmware berkabel menghapus state pencahayaan aktif saat menerima report keymap

@@ -25,6 +25,22 @@ class EffectTests(unittest.TestCase):
         frames = timeline_frames(profile)
         self.assertEqual(frames[0]["duration_ms"], 20)
 
+    def test_master_brightness_scales_final_layer_mix(self) -> None:
+        profile = profile_template()
+        profile["settings"]["app_effects"] = [{
+            "mode": "cycle", "opacity": 100, "speed": 1,
+            "gradient": False, "colors": ["#ff8040"],
+        }]
+        full = render_app_effects(profile, 0)
+        profile["settings"]["live_effects"] = {"master_brightness": 50}
+        half = render_app_effects(profile, 0)
+        profile["settings"]["live_effects"] = {"master_brightness": 0}
+        off = render_app_effects(profile, 0)
+
+        self.assertEqual(full["esc"], "#ff8040")
+        self.assertEqual(half["esc"], "#804020")
+        self.assertTrue(all(color == "#000000" for color in off.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

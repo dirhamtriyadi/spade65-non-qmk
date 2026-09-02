@@ -27,6 +27,7 @@ from .startup import (
     release_service_setup,
     set_gui_auto_start,
 )
+from .system_audio import SystemAudioProvider
 from .tray import TrayController
 
 
@@ -340,6 +341,7 @@ class DesktopApi:
         webview_module: ModuleType,
         *,
         tray_controller: TrayController | None = None,
+        audio_provider: SystemAudioProvider | None = None,
         platform_name: str | None = None,
         preferences_path: Path | None = None,
         clipboard_writer: Callable[[str], bool] | None = None,
@@ -350,6 +352,11 @@ class DesktopApi:
         self._preferences_path = preferences_path
         self._clipboard_writer = clipboard_writer
         self._native_export = self._platform_name not in {"win32", "windows"}
+        self._audio_provider = (
+            audio_provider
+            if audio_provider is not None
+            else SystemAudioProvider(platform_name=self._platform_name)
+        )
         dialogs = getattr(webview_module, "FileDialog", None)
         self._save_dialog = getattr(dialogs, "SAVE", 30)
 
@@ -373,7 +380,33 @@ class DesktopApi:
             "auto_start_enabled": startup["enabled"],
             "auto_start_current": startup["current"],
             "auto_start_path": startup["path"],
+            "system_audio_bridge": True,
         }
+
+    def audio_capture_sources(self) -> dict[str, object]:
+        """Enumerate exact host-output sources accepted by the native bridge."""
+
+        return self._audio_provider.list_sources()
+
+    def start_audio_capture(self, source_id: str) -> dict[str, object]:
+        """Start analysis for one previously enumerated system-output source."""
+
+        return self._audio_provider.start(source_id)
+
+    def audio_snapshot(self) -> dict[str, object]:
+        """Return compact level/spectrum data without exposing raw PCM."""
+
+        return self._audio_provider.snapshot()
+
+    def stop_audio_capture(self) -> dict[str, object]:
+        """Stop native capture; this operation is safe and idempotent."""
+
+        return self._audio_provider.stop()
+
+    def _close(self) -> None:
+        """Release native resources owned by the WebView bridge."""
+
+        self._audio_provider.close()
 
     def set_close_to_tray(self, enabled: bool) -> dict[str, object]:
         if self._tray is None:
@@ -686,7 +719,10 @@ def run_desktop_session(
             )
         finally:
             webbrowser.open = original_browser_open
-            tray.dispose()
+            try:
+                desktop_api._close()
+            finally:
+                tray.dispose()
     except DesktopUnavailable:
         raise
     except Exception as error:

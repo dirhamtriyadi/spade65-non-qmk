@@ -5,17 +5,24 @@ is released under the MIT license in LICENSE. The desktop distributions also
 contain or interoperate with the components listed below. License identifiers
 are SPDX expressions where upstream publishes one.
 
-Versions below match the Spade65 0.7.0 release dependency manifest. The release
-workflow uses Python 3.13; Windows and Linux use the current Python 3.13 patch
-selected by setup-python, while the universal macOS build uses CPython 3.13.15.
+Versions below match the pinned release dependency manifest. The Linux release
+uses the current CPython 3.13 patch selected by setup-python. Windows and the
+universal macOS build use CPython 3.12.10 because pysysaudio 0.1.3 publishes
+verified native wheels through CPython 3.12.
 
 ## Offline license bundle
 
 Every release artifact contains the complete texts below:
 
 - licenses/PERMISSIVE-LICENSES.txt: pywebview, Bottle, proxy_tools,
-  cython-hidapi, QtPy, pythonnet, clr_loader, cffi, pycparser, PyObjC, and the
-  Microsoft WebView2 SDK LICENSE and NOTICE.
+  cython-hidapi, QtPy, SoundCard, pysysaudio, pythonnet, clr_loader, cffi,
+  pycparser, PyObjC, and the Microsoft WebView2 SDK LICENSE and NOTICE.
+- licenses/NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt: NumPy's BSD terms plus the
+  complete aggregate notices shipped by the Python 3.10/3.11 fallback wheel.
+- licenses/NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt: every license file shipped by
+  the pinned Python 3.12+ manylinux x86_64 wheel, including its aggregate
+  OpenBLAS, LAPACK, libgfortran, and libquadmath notices.
+- licenses/PYTHON-3.12.txt: CPython 3.12.10.
 - licenses/PYTHON-3.13.txt: CPython 3.13.15 and typing_extensions 4.16.0.
 - licenses/PYINSTALLER.txt: PyInstaller 6.22.2, its Bootloader Exception, and
   pyinstaller-hooks-contrib 2026.7.
@@ -35,13 +42,16 @@ Every release artifact contains the complete texts below:
 In the Linux AppImage these paths are rooted at
 usr/share/doc/spade65/licenses. In the macOS application they are rooted at
 Contents/Resources/Legal/licenses; the DMG also includes them at its root. The
-Windows ZIP includes them in its top-level licenses directory.
+Windows ZIP includes them in its top-level licenses directory. This offline
+directory is intentionally a cross-platform superset. The presence of a
+license text does not mean its component is bundled in every artifact; the
+platform-specific component tables below define the actual runtime scope.
 
 ## Common runtime components
 
 | Component | Version | License | Source |
 | --- | --- | --- | --- |
-| CPython | 3.13.x | PSF-2.0 | <https://www.python.org/downloads/source/> |
+| CPython | 3.12.10 (Windows/macOS); 3.13.x (Linux) | PSF-2.0 | <https://www.python.org/downloads/source/> |
 | pywebview | 6.2.1 | BSD-3-Clause | <https://github.com/r0x0r/pywebview/tree/6.2.1> |
 | Bottle | 0.13.4 | MIT | <https://github.com/bottlepy/bottle/tree/0.13.4> |
 | proxy_tools | 0.1.0 | PyPI metadata says MIT; upstream LICENSE.txt is BSD-style | <https://github.com/jtushman/proxy_tools/blob/master/LICENSE.txt> |
@@ -56,7 +66,7 @@ upstream LICENSE.txt verbatim.
 
 CPython and typing_extensions use the Python Software Foundation License
 Version 2. Their complete texts are included offline in
-licenses/PYTHON-3.13.txt.
+licenses/PYTHON-3.12.txt and licenses/PYTHON-3.13.txt.
 
 ## Linux AppImage: PySide6 and Qt
 
@@ -69,6 +79,8 @@ licenses/PYTHON-3.13.txt.
 | shiboken6 | 6.11.2 | LGPL-3.0-only | same PySide source |
 | Qt libraries from the PySide6 wheels | 6.11.2 | upstream module-specific terms; LGPL-3.0 is selected for LGPL-covered libraries | <https://download.qt.io/official_releases/qt/6.11/6.11.2/single/> |
 | Qt WebEngine and Chromium third-party code | Qt 6.11.2 snapshot | LGPL-3.0 for LGPL-covered Qt code; BSD and other terms for Chromium code | <https://code.qt.io/cgit/qt/qtwebengine.git/tag/?h=v6.11.2> |
+| SoundCard | 0.4.6 | BSD-3-Clause | <https://github.com/bastibe/SoundCard/tree/0.4.6> |
+| NumPy | 2.1.3 (Python 3.10/3.11); 2.5.2 (Python 3.12+) | BSD-3-Clause plus bundled-component terms | <https://github.com/numpy/numpy/tree/v2.5.2> |
 | AppImage type-2 runtime | commit 75849dc | MIT plus the statically linked component terms named by upstream | <https://github.com/AppImage/type2-runtime/tree/75849dc> |
 | appimagetool build tool | 1.9.1 | MIT; used at build time and not embedded as a tool | <https://github.com/AppImage/appimagetool/tree/1.9.1> |
 
@@ -86,6 +98,14 @@ The complete QtPy MIT text is included in
 licenses/PERMISSIVE-LICENSES.txt.
 The exact Qt 6.11.2 LICENSE.Chromium and LGPL-2.1-or-later texts are included
 as licenses/Qt-6.11.2-LICENSE.Chromium and licenses/LGPL-2.1.txt.
+
+SoundCard uses the host PulseAudio-compatible server (including PipeWire's
+PulseAudio service). Its complete BSD text is in
+licenses/PERMISSIVE-LICENSES.txt. The NumPy manylinux wheel carries OpenBLAS,
+LAPACK, libgfortran, and libquadmath. Every license file from the official
+Python 3.12+ package wheel is preserved verbatim in
+licenses/NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt; the Python 3.10/3.11 fallback
+aggregate is in licenses/NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt.
 
 Qt WebEngine includes Chromium and other third-party projects, including
 components under LGPL 2/2.1 and numerous permissive licenses. Their exact
@@ -146,12 +166,15 @@ not warrant compatibility with arbitrary modified Qt builds.
 | clr_loader | 0.3.1 | MIT | <https://pypi.org/project/clr-loader/0.3.1/#files> |
 | cffi | 2.1.1 | MIT-0 | <https://pypi.org/project/cffi/2.1.1/#files> |
 | pycparser | 3.0 | BSD-3-Clause | <https://pypi.org/project/pycparser/3.0/#files> |
+| pysysaudio | 0.1.3 | MIT | <https://github.com/scottjg/pysysaudio/tree/v0.1.3> |
 | Microsoft WebView2 SDK assemblies delivered by pywebview | 1.0.3856.49 | BSD-3-Clause plus bundled third-party notices | <https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3856.49> |
 
 pythonnet copyright (c) 2006-2021 the contributors of the Python.NET project.
 clr_loader copyright (c) 2019-2026 Benedikt Reinartz. pycparser copyright (c)
 2008-2022 Eli Bendersky. Their complete texts and cffi's MIT-0 text are
-included in licenses/PERMISSIVE-LICENSES.txt.
+included in licenses/PERMISSIVE-LICENSES.txt. pysysaudio's MIT text is included
+there as well; the packaged CPython 3.12 wheel supplies the native WASAPI
+loopback extension without bundling an audio driver.
 
 The Microsoft Edge WebView2 Runtime and .NET Framework are system
 prerequisites, not bundled components. Their installed versions are determined
@@ -168,10 +191,14 @@ NOTICE.txt are reproduced in licenses/PERMISSIVE-LICENSES.txt.
 | pyobjc-framework-WebKit | 12.2.2 | MIT | <https://pypi.org/project/pyobjc-framework-WebKit/12.2.2/#files> |
 | pyobjc-framework-Security | 12.2.2 | MIT | <https://pypi.org/project/pyobjc-framework-Security/12.2.2/#files> |
 | pyobjc-framework-UniformTypeIdentifiers | 12.2.2 | MIT | <https://pypi.org/project/pyobjc-framework-UniformTypeIdentifiers/12.2.2/#files> |
+| pysysaudio | 0.1.3 | MIT | <https://github.com/scottjg/pysysaudio/tree/v0.1.3> |
 
 Copyright is held by Ronald Oussoren and other PyObjC contributors. Apple Cocoa
 and WebKit are system frameworks and are not bundled in the DMG. The complete
 PyObjC MIT text is included in licenses/PERMISSIVE-LICENSES.txt.
+pysysaudio's MIT text is in the same file. Its universal2 native extension uses
+the system Core Audio tap API; it requires macOS 14.2 or newer for system-audio
+capture and does not bundle an audio driver.
 
 ## Build tooling present in the executables
 

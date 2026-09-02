@@ -16,7 +16,7 @@ The original software's `setPageData` enables only four areas for this device:
 | Original area | Project implementation |
 |---|---|
 | Keyboard settings | Normal/FN1/FN2 editor, four physical layouts, assignments, shortcuts, macro binding, group disabling, Win Lock, WASD/arrow swap, local profiles, and import/export |
-| Lighting setting / AP mode | Ten modes, up to ten layers, layer show/hide, key ranges, palettes, opacity, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient, and audio-reactive controls |
+| Lighting setting / AP mode | Ten modes, up to ten layers, layer show/hide, key ranges, palettes, layer opacity, final master brightness, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient, and system-output or microphone audio reactivity |
 | Built-in effects | All 20 firmware effect IDs, brightness, speed, palette index, multicolor, and custom per-key color |
 | Macro settings | Up to ten device macros, 84 events per macro, delay, key-down/up, repeat, rename, keyboard recording, deletion, and key binding |
 
@@ -38,6 +38,22 @@ companion descriptors are resolved before the first write, and the wired path
 skips the dongle timer just as the original backend does. Legacy Spade65
 profiles default missing debounce data to 5 ms for compatibility; the original
 application's fresh-profile value was 1 ms.
+
+The original AP-mode implementation captures the Windows system output rather
+than depending on a microphone. The packaged project maps that behavior to
+WASAPI loopback on Windows, a PipeWire/PulseAudio monitor through SoundCard on
+Linux, and a CoreAudio tap through `pysysaudio` on macOS 14.2 or later. The
+source selector also exposes an explicit microphone fallback. Audio-enabled
+layers can respond to spectrum position, bass, or overall loudness, with the
+recovered 200–8000 sensitivity range (default 1000), noise gate, and smoothing.
+Layer opacity affects one layer before compositing; master brightness affects
+the completed frame.
+
+This is a host-streaming equivalent, not a new firmware effect. It requires the
+GUI and Live preview to remain active over wired USB `0603:0351`, and is not
+stored in keyboard memory or delegated to the background service. Only compact
+level and frequency-band values cross the desktop bridge; raw PCM is not stored
+or exposed to the local web interface.
 
 ## Bundled code that is not an active Spade65 feature
 
@@ -80,3 +96,9 @@ is only ever addressed to `0603:0356`. That identity has never enumerated here.
 The physical 2.4 GHz receiver enumerates as `0603:0352`, and its report
 descriptors advertise no feature reports at all, so configuration over the
 receiver is impossible rather than merely refused.
+
+Native audio capture and analysis have automated coverage. Linux monitor
+capture was also physically exercised on 2026-09-02 with a system-played 125 Hz
+tone and selected the correct dominant band. Windows and macOS capture remain
+physically unverified; the hardware-validated RGB transport is not presented as
+validation of either operating-system capture path.

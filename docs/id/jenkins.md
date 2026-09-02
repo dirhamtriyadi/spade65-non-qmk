@@ -47,8 +47,8 @@ virtual environment terisolasi dan bundle desktop.
 | Label | Host dan command yang dibutuhkan |
 |---|---|
 | `linux` | Ubuntu 22.04 x86_64; `python3.10`, `python3.13`, Bash, `curl`, `sha256sum`, `dpkg-query`; GitHub CLI `gh` untuk job rilis |
-| `windows` | Windows x64; Python Launcher `py -3.10` dan `py -3.13`, PowerShell, Node.js, serta Microsoft Edge WebView2 Runtime |
-| `macos` | macOS dengan Xcode Command Line Tools; `python3.10`, `python3.13`, `lipo`, `codesign`, `hdiutil`, serta interpreter Python 3.13 universal2 dari Python.org |
+| `windows` | Windows x64; Python Launcher `py -3.10`, `py -3.12`, dan `py -3.13`, PowerShell, Node.js, serta Microsoft Edge WebView2 Runtime |
+| `macos` | macOS dengan Xcode Command Line Tools; `python3.10`, `python3.13`, `lipo`, `codesign`, `hdiutil`, serta interpreter Python 3.12 universal2 dari Python.org |
 
 Tahap packaging Linux menerapkan baseline Ubuntu 22.04 x86_64 yang sama dengan
 GitHub Actions. Pasang paket runtime berikut lebih dahulu:
@@ -57,7 +57,7 @@ GitHub Actions. Pasang paket runtime berikut lebih dahulu:
 sudo apt-get update
 sudo apt-get install --no-install-recommends --yes \
   libstdc++6 libgcc-s1 libgbm1 libfontconfig1 libfreetype6 \
-  libexpat1 libx11-6 libx11-xcb1 libasound2 libegl1 libgl1 \
+  libexpat1 libx11-6 libx11-xcb1 libasound2 libpulse0 libegl1 libgl1 \
   libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
   libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
   libxcb-render-util0 curl coreutils
@@ -66,7 +66,7 @@ sudo apt-get install --no-install-recommends --yes \
 Tahap paket macOS secara default menggunakan interpreter universal2 di:
 
 ```text
-/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
+/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
 ```
 
 Pasang dan verifikasi interpreter Python.org yang dipin satu kali saat

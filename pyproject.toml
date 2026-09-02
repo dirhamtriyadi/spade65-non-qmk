@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spade65-non-qmk"
-version = "0.8.6"
+version = "0.8.7"
 description = "Cross-platform configuration utility for the non-QMK Noir Spade65"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,10 +25,14 @@ desktop = [
     "typing_extensions==4.16.0",
     "QtPy==2.4.3; sys_platform == 'linux'",
     "PySide6==6.11.2; sys_platform == 'linux'",
+    "SoundCard==0.4.6; sys_platform == 'linux'",
+    "numpy==2.1.3; sys_platform == 'linux' and python_version < '3.12'",
+    "numpy==2.5.2; sys_platform == 'linux' and python_version >= '3.12'",
     "pythonnet==3.1.0; sys_platform == 'win32'",
     "clr_loader==0.3.1; sys_platform == 'win32'",
-    "cffi==2.1.1; sys_platform == 'win32'",
-    "pycparser==3.0; sys_platform == 'win32'",
+    "cffi==2.1.1; sys_platform == 'linux' or sys_platform == 'win32'",
+    "pycparser==3.0; sys_platform == 'linux' or sys_platform == 'win32'",
+    "pysysaudio==0.1.3; (sys_platform == 'win32' or sys_platform == 'darwin') and python_version < '3.13'",
     "pyobjc-core==12.2.2; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa==12.2.2; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz==12.2.2; sys_platform == 'darwin'",

@@ -351,14 +351,15 @@ class I18nTests(unittest.TestCase):
         self.assertIn("Math.min(32767", compact)
         self.assertNotIn("macro.events.splice(index,1);break", compact)
 
-        animation = javascript.split("function animateColors()", 1)[1].split(
-            "function hsl", 1
+        composition = javascript.split("function composeAnimationColors", 1)[1].split(
+            "function refreshLivePreview", 1
         )[0]
         playback = javascript.split("function playTimelineFrame()", 1)[1].split(
             "function toggleTimeline", 1
         )[0]
-        self.assertIn("frameColors[key]", animation)
-        self.assertNotIn("profile.colors[key]", animation)
+        self.assertIn("frameColors[key]", composition)
+        self.assertNotIn("profile.colors[key]", composition)
+        self.assertIn("applyMasterBrightness", composition)
         self.assertNotIn("profile.colors =", playback)
 
         macro_assignment = compact.split(
@@ -428,6 +429,10 @@ class I18nTests(unittest.TestCase):
         )
         self.assertLess(
             html.index('<script src="/clipboard.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+        self.assertLess(
+            html.index('<script src="/live-effects.js"></script>'),
             html.index('<script src="/app.js"></script>'),
         )
 

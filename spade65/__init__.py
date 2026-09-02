@@ -1,3 +1,3 @@
 """Cross-platform tooling for the non-QMK Noir Spade65 keyboard."""
 
-__version__ = "0.8.6"
+__version__ = "0.8.7"

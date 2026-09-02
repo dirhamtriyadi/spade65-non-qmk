@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import multiprocessing
 import os
@@ -177,6 +178,28 @@ def verify_native_hid_load(platform_name: str | None = None) -> None:
         importlib.import_module("hid")
 
 
+def verify_native_audio_load(platform_name: str | None = None) -> None:
+    """Verify packaged audio dependencies without opening an audio device."""
+
+    current = platform_name or sys.platform
+    if current.startswith("linux"):
+        # Importing SoundCard immediately connects to PulseAudio, which would
+        # make the intentionally headless package smoke test device-dependent.
+        # NumPy and CFFI are safe to load, and the package/data checks prove the
+        # lazy SoundCard backend plus its generated C declarations were frozen.
+        importlib.import_module("numpy")
+        importlib.import_module("cffi")
+        spec = importlib.util.find_spec("soundcard")
+        locations = [] if spec is None else spec.submodule_search_locations
+        if not locations or not any(
+            (Path(location) / "pulseaudio.py.h").is_file()
+            for location in locations
+        ):
+            raise RuntimeError("packaged SoundCard PulseAudio data is missing")
+    elif current in {"win32", "darwin"}:
+        importlib.import_module("pysysaudio._pysysaudio_native")
+
+
 def running_gui_token(url: str = GUI_URL) -> str | None:
     return _running_gui_token(url)
 
@@ -198,6 +221,7 @@ def smoke_test() -> int:
     """Exercise bundled web resources and routing without probing USB HID."""
 
     verify_native_hid_load()
+    verify_native_audio_load()
     from spade65.desktop import verify_desktop_runtime
 
     verify_desktop_runtime()
@@ -214,6 +238,7 @@ def smoke_test() -> int:
         "usage-picker.js",
         "external-links.js",
         "clipboard.js",
+        "live-effects.js",
         "app.js",
     ):
         resource = web_root.joinpath(*relative_path.split("/"))

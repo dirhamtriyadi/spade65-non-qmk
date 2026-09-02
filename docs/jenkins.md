@@ -48,8 +48,8 @@ environments and desktop bundles.
 | Label | Required host and commands |
 |---|---|
 | `linux` | Ubuntu 22.04 x86_64; `python3.10`, `python3.13`, Bash, `curl`, `sha256sum`, `dpkg-query`; GitHub CLI `gh` for release jobs |
-| `windows` | Windows x64; Python Launcher commands `py -3.10` and `py -3.13`, PowerShell, Node.js, and Microsoft Edge WebView2 Runtime |
-| `macos` | macOS with Xcode Command Line Tools; `python3.10`, `python3.13`, `lipo`, `codesign`, `hdiutil`, and a Python.org universal2 Python 3.13 interpreter |
+| `windows` | Windows x64; Python Launcher commands `py -3.10`, `py -3.12`, and `py -3.13`, PowerShell, Node.js, and Microsoft Edge WebView2 Runtime |
+| `macos` | macOS with Xcode Command Line Tools; `python3.10`, `python3.13`, `lipo`, `codesign`, `hdiutil`, and a Python.org universal2 Python 3.12 interpreter |
 
 The Linux packaging stage enforces the same Ubuntu 22.04 x86_64 baseline as
 GitHub Actions. Preinstall its runtime packages:
@@ -58,7 +58,7 @@ GitHub Actions. Preinstall its runtime packages:
 sudo apt-get update
 sudo apt-get install --no-install-recommends --yes \
   libstdc++6 libgcc-s1 libgbm1 libfontconfig1 libfreetype6 \
-  libexpat1 libx11-6 libx11-xcb1 libasound2 libegl1 libgl1 \
+  libexpat1 libx11-6 libx11-xcb1 libasound2 libpulse0 libegl1 libgl1 \
   libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
   libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
   libxcb-render-util0 curl coreutils
@@ -67,7 +67,7 @@ sudo apt-get install --no-install-recommends --yes \
 The macOS package stage defaults to the universal2 interpreter at:
 
 ```text
-/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
+/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
 ```
 
 Install and verify the pinned Python.org interpreter once while preparing the

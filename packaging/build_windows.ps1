@@ -75,6 +75,9 @@ try {
         "licenses\QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html",
         "licenses\GFDL-1.3-no-invariants-only.txt",
         "licenses\PERMISSIVE-LICENSES.txt",
+        "licenses\NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt",
+        "licenses\NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt",
+        "licenses\PYTHON-3.12.txt",
         "licenses\PYTHON-3.13.txt",
         "licenses\PYINSTALLER.txt"
     )) {

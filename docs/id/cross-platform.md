@@ -4,11 +4,11 @@
 
 ## Status
 
-| Platform | Discovery dan write | Renderer desktop v0.7.0 | Aplikasi aktif | Background launcher | Validasi fisik |
-|---|---|---|---|---|---|
-| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | X11, fallback proses Wayland | systemd user | Ya, USB `0603:0351` |
-| Windows | HIDAPI / Win32 HID | Edge WebView2 | Win32 foreground window | Startup `.cmd` | Belum diuji pada mesin Windows |
-| macOS | HIDAPI / IOKit | Cocoa/WebKit | System Events frontmost process | LaunchAgent `.plist` | Belum diuji pada mesin macOS |
+| Platform | Discovery dan write | Renderer desktop v0.7.0 | Penangkapan output sistem pada paket | Aplikasi aktif | Background launcher | Validasi fisik |
+|---|---|---|---|---|---|---|
+| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard dengan monitor PipeWire/PulseAudio | X11, fallback proses Wayland | systemd user | Ya, USB `0603:0351` |
+| Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Belum diuji pada mesin Windows |
+| macOS | HIDAPI / IOKit | Cocoa/WebKit | CoreAudio tap `pysysaudio` (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Belum diuji pada mesin macOS |
 
 GUI, profile compiler, macro, konverter vendor, AP renderer, timeline, dan aturan
 keselamatan memakai source yang sama pada seluruh OS. Windows/macOS tidak memakai
@@ -22,6 +22,15 @@ dan launcher pada OS tersebut. Setiap push ke `main` juga menjalankan package
 preflight native: ZIP Windows, AppImage Linux pada Ubuntu 22.04, dan DMG macOS
 universal dibangun serta di-smoke-test tanpa dipublikasikan. Status fisik tetap
 dipisahkan pada tabel di atas.
+
+Selector sumber aplikasi desktop terpaket memprioritaskan jalur output sistem
+native tersebut dan juga menawarkan input mikrofon sebagai fallback eksplisit.
+Mode browser saja tidak memiliki bridge native sehingga dapat memakai mikrofon,
+tetapi tidak dapat menangkap output sistem secara langsung. Implementasi
+penangkapan dan import dependency diuji secara otomatis. Penangkapan monitor
+Linux juga diuji pada 2026-09-02 memakai nada sistem 125 Hz dan mengidentifikasi
+pita dominan yang benar. Output Windows dan macOS masih memerlukan uji fisik;
+kolom validasi fisik pada tabel lainnya mengacu pada transport keyboard.
 
 Tag rilis `vMAJOR.MINOR.PATCH` juga menjalankan build native per OS dan, hanya
 jika semuanya berhasil, memublikasikan:
@@ -58,8 +67,10 @@ Unduh asset yang sesuai dari GitHub Releases.
 - macOS Intel/Apple Silicon: buka DMG, lalu salin `Spade65.app` ke
   `Applications`. Bundle universal diperiksa agar native binary-nya memiliki
   slice `x86_64` dan `arm64`. Jendela memakai Cocoa/WebKit sistem. Bundle
-  mengizinkan networking localhost dan mendeklarasikan penggunaan mikrofon;
-  prompt mikrofon hanya relevan saat efek audio-reactive diaktifkan.
+  mendukung penangkapan output sistem langsung pada macOS 14.2 atau lebih baru
+  dan dapat menampilkan prompt izin perekaman audio sistem; pemilihan fallback
+  mikrofon dapat menampilkan prompt izin mikrofon secara terpisah. Kedua izin
+  tidak diminta sampai sumber audio-reactive digunakan.
 
 Tanpa argumen, paket membuka GUI lokal `http://127.0.0.1:8765/` di jendela
 standalone. Peluncuran kedua memverifikasi token sesi lalu mengaktifkan,
@@ -130,8 +141,19 @@ Linux tetap membutuhkan rule udev repository agar user biasa dapat membuka
 override HIDAPI untuk eksperimen tetap dapat dipasang dari source melalui extra
 `cross-platform`, tetapi tidak menjadi bagian dari AppImage. Kebutuhan izin
 Automation/Accessibility macOS untuk association aplikasi juga tetap berlaku
-pada paket desktop. Izin mikrofon macOS hanya diperlukan untuk input audio pada
-efek audio-reactive; localhost tidak mengekspos server ke jaringan eksternal.
+pada paket desktop. Izin audio sistem macOS hanya relevan saat output sistem
+dipilih bagi efek audio-reactive, sedangkan izin mikrofon hanya relevan bagi
+fallback mikrofon. Localhost tidak mengekspos server ke jaringan eksternal.
+
+Untuk efek langsung, selector sumber juga menyediakan sensitivitas 200–8000
+(default 1000), noise gate, smoothing, dan respons spektrum, bass, atau
+keras-lembut keseluruhan. Opasitas lapisan diterapkan sebelum lapisan
+dikomposisikan; kecerahan utama menskalakan frame yang sudah selesai. Reaksi
+audio berkelanjutan memerlukan GUI dan Pratinjau langsung tetap aktif melalui
+USB berkabel `0603:0351`. Efek tidak disimpan di keyboard dan tidak ditangani
+oleh background service. PCM mentah native tetap berada di worker penangkapan:
+hanya nilai tingkat, puncak, dan pita yang ringkas yang melewati bridge desktop
+lokal, dan tidak ada audio yang disimpan.
 
 ### Instalasi dari source
 
@@ -156,6 +178,14 @@ python -m pip install -e ".[cross-platform,desktop]"
 python -m spade65 probe
 python -m spade65 gui
 ```
+
+Untuk instalasi source pada Windows atau macOS, penangkapan output sistem
+langsung saat ini memerlukan Python 3.10–3.12 karena wheel native `pysysaudio`
+yang dipin belum mendukung Python 3.13. Paket Windows dan macOS resmi memakai
+Python 3.12.10. Dengan interpreter source lebih baru yang belum didukung, bagian
+GUI lain tetap berjalan dan fallback mikrofon eksplisit tetap tersedia.
+Penangkapan output sistem Linux memakai SoundCard dan tidak memiliki batasan
+Python 3.12 tersebut.
 
 Pada seluruh OS, `python -m spade65 gui` memilih jendela desktop secara default
 dan beralih ke browser bila runtime native tidak dapat dimuat. Gunakan
@@ -242,7 +272,9 @@ Report keymap, macro, efek bawaan/per-key, debounce, dan timer dongle ditujukan
 ke konfigurasi internal perangkat seperti software resmi. Setting tersebut tidak
 memerlukan background service setelah diterapkan. Profil bernama, asosiasi
 aplikasi, AP/streaming animation, dan custom timeline adalah data host; efeknya
-memerlukan GUI atau service tetap berjalan.
+memerlukan GUI atau service tetap berjalan. Efek langsung audio-reactive juga
+merupakan data host, tetapi secara khusus memerlukan GUI karena service tidak
+pernah membuka sumber audio sistem atau mikrofon.
 
 Pada setiap OS, apply keymap menyelesaikan collection utama dan companion pendek
 yang digerbangi descriptor serta membuka kedua handle sebelum menulis. Handle

@@ -252,6 +252,22 @@ Builder dan transport streaming telah diimplementasikan. Pada unit USB
 animasi AP-mode, dan modulasi audio reactive. Streaming tetap dibatasi ke PID USB
 dan descriptor output report `0x06` sepanjang 64 byte.
 
+Penangkapan audio tidak menambahkan opcode keyboard lain. Pada GUI desktop
+terpaket, monitor PipeWire/PulseAudio (Linux), WASAPI loopback (Windows), atau
+CoreAudio tap pada macOS 14.2+ dianalisis di host; input mikrofon adalah fallback
+eksplisit. Sensitivitas 200–8000 (default 1000), noise gate, smoothing, serta
+mode spektrum/bass/keras-lembut diterapkan sebelum lima chunk RGB yang sama
+dibangun. Opasitas lapisan diterapkan saat komposisi dan kecerahan utama pada
+frame akhir. Hanya pengukuran tingkat dan pita ringkas yang melewati bridge
+desktop; PCM mentah tidak disimpan atau diteruskan ke antarmuka lokal.
+
+Streaming audio-reactive berkelanjutan memerlukan GUI dan Pratinjau langsung
+tetap aktif serta tidak disimpan ke memori keyboard atau diserahkan kepada
+background service. Jalur native memiliki cakupan otomatis; monitor Linux juga
+mengidentifikasi nada sistem 125 Hz pada 2026-09-02, sedangkan Windows dan macOS
+masih memerlukan validasi audio fisik. Semua ini tidak memperluas batas
+keselamatan firmware, bootloader, raw write, atau arbitrary HID.
+
 ## Data yang masih diperlukan
 
 Simpan dari setiap sesi hardware:
@@ -262,5 +278,9 @@ Simpan dari setiap sesi hardware:
 3. Hasil sukses/gagal setiap command beserta mode kabel/dongle.
 4. Jika keymap ditulis kembali, profil yang diterapkan dan profil yang dipakai
    untuk memulihkannya, agar perubahan dapat dibalik tanpa readback.
+5. Untuk validasi audio-reactive, catat sumber output sistem terpilih, sistem
+   operasi/server audio, mode respons, nilai kontrol, dan apakah keyboard
+   mengikuti sinyal musik atau video yang diketahui. Pisahkan bukti ini dari
+   bukti streaming yang hanya memvalidasi transport.
 
 Tidak perlu memulai dari firmware dump. HID descriptor dan satu-delta capture jauh lebih aman dan cukup untuk memvalidasi protokol konfigurasi.

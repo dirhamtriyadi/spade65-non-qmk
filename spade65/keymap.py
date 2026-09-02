@@ -265,6 +265,14 @@ def profile_template() -> dict[str, object]:
             "win_lock": False,
             "wasd_arrows": False,
             "debounce_ms": DEFAULT_DEBOUNCE_MS,
+            "live_effects": {
+                "master_brightness": 100,
+                "audio_source": "",
+                "audio_mode": "spectrum",
+                "audio_sensitivity": 1000,
+                "audio_noise_gate": 2,
+                "audio_smoothing": 65,
+            },
         },
     }
 

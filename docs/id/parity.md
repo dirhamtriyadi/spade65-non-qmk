@@ -16,7 +16,7 @@ dibundel dalam aplikasi vendor.
 | Area original | Implementasi proyek |
 |---|---|
 | Keyboard settings | Editor Normal/FN1/FN2, empat layout fisik, assignment, shortcut, macro binding, disable group, Win Lock, pertukaran WASD/panah, profil lokal dan import/export |
-| Lighting setting / AP mode | Sepuluh mode, maksimal sepuluh layer, show/hide layer, rentang tombol, palet, opacity, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient dan audio reactive |
+| Lighting setting / AP mode | Sepuluh mode, maksimal sepuluh layer, show/hide layer, rentang tombol, palet, opasitas lapisan, kecerahan utama akhir, speed, bandwidth, angle, number, gap, fire, effect center, direction, bump, bidirectional, gradient, dan reaksi audio dari output sistem atau mikrofon |
 | Built-in effects | Seluruh 20 effect ID firmware, brightness, speed, palette index, multicolor, dan custom per-key color |
 | Macro settings | Maksimal sepuluh macro perangkat, 84 event per macro, delay, key-down/up, repeat, rename, rekam dari keyboard, hapus dan bind ke tombol |
 
@@ -37,6 +37,22 @@ collection utama dan companion pendek diselesaikan sebelum write pertama, dan
 jalur kabel melewati timer dongle seperti backend original. Profil Spade65 lama
 memakai default 5 ms bila data debounce tidak ada demi kompatibilitas; nilai
 profil baru aplikasi original adalah 1 ms.
+
+Implementasi AP mode original menangkap output sistem Windows dan tidak
+bergantung pada mikrofon. Paket proyek memetakan perilaku tersebut ke WASAPI
+loopback pada Windows, monitor PipeWire/PulseAudio melalui SoundCard pada Linux,
+dan CoreAudio tap melalui `pysysaudio` pada macOS 14.2 atau lebih baru. Selector
+sumber juga menyediakan fallback mikrofon eksplisit. Lapisan yang memakai audio
+dapat merespons posisi spektrum, bass, atau keras-lembut keseluruhan, dengan
+rentang sensitivitas hasil analisis 200–8000 (default 1000), noise gate, dan
+smoothing. Opasitas lapisan memengaruhi satu lapisan sebelum komposisi;
+kecerahan utama memengaruhi frame akhir.
+
+Ini adalah ekuivalen streaming host, bukan efek firmware baru. GUI dan
+Pratinjau langsung harus tetap aktif melalui USB berkabel `0603:0351`; efek
+tidak disimpan di memori keyboard atau diserahkan kepada background service.
+Hanya nilai tingkat dan pita frekuensi yang ringkas yang melewati bridge
+desktop; PCM mentah tidak disimpan atau diekspos ke antarmuka web lokal.
 
 ## Kode bundle yang bukan fitur aktif Spade65
 
@@ -79,3 +95,9 @@ hanya pernah ditujukan ke `0603:0356`. Identitas itu sampai kini belum pernah
 muncul pada hardware ini. Receiver fisik 2,4 GHz terdeteksi sebagai `0603:0352`,
 dan report descriptor-nya tidak mengiklankan feature report sama sekali, sehingga
 konfigurasi lewat receiver bukan sekadar ditolak, melainkan tidak mungkin.
+
+Penangkapan dan analisis audio native memiliki cakupan otomatis. Penangkapan
+monitor Linux juga diuji secara fisik pada 2026-09-02 memakai nada sistem 125 Hz
+dan memilih pita dominan yang benar. Penangkapan Windows serta macOS masih belum
+diverifikasi secara fisik; transport RGB yang tervalidasi pada hardware bukan
+validasi bagi kedua jalur penangkapan OS tersebut.

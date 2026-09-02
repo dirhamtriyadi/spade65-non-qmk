@@ -184,12 +184,14 @@ node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
 node --check spade65/web/external-links.js
 node --check spade65/web/clipboard.js
+node --check spade65/web/live-effects.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
 node tests/usage_picker.test.js
 node tests/external_links.test.js
 node tests/clipboard.test.js
+node tests/live_effects.test.js
 '''
                                 } else {
                                     bat '''@echo off
@@ -222,6 +224,8 @@ node --check spade65\web\external-links.js
 if errorlevel 1 exit /b 1
 node --check spade65\web\clipboard.js
 if errorlevel 1 exit /b 1
+node --check spade65\web\live-effects.js
+if errorlevel 1 exit /b 1
 node --check spade65\web\app.js
 if errorlevel 1 exit /b 1
 node tests\layout_state.test.js
@@ -231,6 +235,8 @@ if errorlevel 1 exit /b 1
 node tests\external_links.test.js
 if errorlevel 1 exit /b 1
 node tests\clipboard.test.js
+if errorlevel 1 exit /b 1
+node tests\live_effects.test.js
 if errorlevel 1 exit /b 1
 '''
                                 }
@@ -273,7 +279,7 @@ if errorlevel 1 exit /b 1
 for /f %%C in ('git rev-parse HEAD') do set "ACTUAL_COMMIT=%%C"
 if /I not "%ACTUAL_COMMIT%"=="%SOURCE_COMMIT%" exit /b 1
 
-py -3.13 -m venv .jenkins-venv
+py -3.12 -m venv .jenkins-venv
 if errorlevel 1 exit /b 1
 .jenkins-venv\Scripts\python.exe -m pip install -r requirements-build.txt ".[cross-platform,desktop]"
 if errorlevel 1 exit /b 1
@@ -324,7 +330,7 @@ test "$ID" = ubuntu
 test "$VERSION_ID" = 22.04
 for package in \
   libstdc++6 libgcc-s1 libgbm1 libfontconfig1 libfreetype6 \
-  libexpat1 libx11-6 libx11-xcb1 libasound2 libegl1 libgl1 \
+  libexpat1 libx11-6 libx11-xcb1 libasound2 libpulse0 libegl1 libgl1 \
   libxcb-shape0 libxcb-image0 libxcb-xkb1 libxcb-icccm4 \
   libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 libxcb-keysyms1 \
   libxcb-render-util0; do
@@ -373,7 +379,7 @@ fi
 git checkout --detach "${SOURCE_COMMIT}"
 test "$(git rev-parse HEAD)" = "${SOURCE_COMMIT}"
 
-macos_python=${SPADE65_MACOS_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13}
+macos_python=${SPADE65_MACOS_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12}
 test -x "$macos_python"
 resolved_python=$("$macos_python" -c \
   'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')

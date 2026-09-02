@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -209,11 +210,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("node --check spade65/web/usage-picker.js", workflow)
         self.assertIn("node --check spade65/web/external-links.js", workflow)
         self.assertIn("node --check spade65/web/clipboard.js", workflow)
+        self.assertIn("node --check spade65/web/live-effects.js", workflow)
         self.assertIn("node tests/layout_state.test.js", workflow)
         self.assertIn("node tests/key_events.test.js", workflow)
         self.assertIn("node tests/usage_picker.test.js", workflow)
         self.assertIn("node tests/external_links.test.js", workflow)
         self.assertIn("node tests/clipboard.test.js", workflow)
+        self.assertIn("node tests/live_effects.test.js", workflow)
         self.assertIn("group: release-${{", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertEqual(workflow.count("retention-days: 1"), 3)
@@ -274,10 +277,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn(r"node --check spade65\web\external-links.js", pipeline)
         self.assertIn("node --check spade65/web/clipboard.js", pipeline)
         self.assertIn(r"node --check spade65\web\clipboard.js", pipeline)
+        self.assertIn("node --check spade65/web/live-effects.js", pipeline)
+        self.assertIn(r"node --check spade65\web\live-effects.js", pipeline)
         self.assertIn("node tests/external_links.test.js", pipeline)
         self.assertIn(r"node tests\external_links.test.js", pipeline)
         self.assertIn("node tests/clipboard.test.js", pipeline)
         self.assertIn(r"node tests\clipboard.test.js", pipeline)
+        self.assertIn("node tests/live_effects.test.js", pipeline)
+        self.assertIn(r"node tests\live_effects.test.js", pipeline)
 
         test_workflow = (
             ROOT / ".github" / "workflows" / "test.yml"
@@ -290,6 +297,10 @@ class PackagingTests(unittest.TestCase):
             "node --check spade65/web/clipboard.js", test_workflow
         )
         self.assertIn("node tests/clipboard.test.js", test_workflow)
+        self.assertIn(
+            "node --check spade65/web/live-effects.js", test_workflow
+        )
+        self.assertIn("node tests/live_effects.test.js", test_workflow)
 
     def test_linux_packager_pins_tool_and_embedded_runtime(self):
         script = (ROOT / "packaging" / "build_linux.sh").read_text(
@@ -412,8 +423,20 @@ class PackagingTests(unittest.TestCase):
                 "81391139f5f7985631c93ef242b206a4"
             ),
             "PERMISSIVE-LICENSES.txt": (
-                "b017f481b152d00b1824efcafa3cbbd9"
-                "a665ac200c5609083dc6fcb0f62410b9"
+                "5e308284bedb66ce3f41b3bedab3c785"
+                "e943244a133c5e2dd24befa3cdff9b36"
+            ),
+            "NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt": (
+                "c002bd26de7dc7aa464250a0de063d58"
+                "fe55974452e4389e5c21c350a820bf06"
+            ),
+            "NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt": (
+                "eca21ebc64b5bbebf4b23a47e2ff0458"
+                "31f97926f6262b5f9b6aa606c77c7e23"
+            ),
+            "PYTHON-3.12.txt": (
+                "32da2c84981c2eed6276b12e8f6427c"
+                "229f97ba44bd6445a3752e0238acc9071"
             ),
             "PYTHON-3.13.txt": (
                 "93c2662e7c314ed238efd37a7cc6b8c4"
@@ -443,8 +466,14 @@ class PackagingTests(unittest.TestCase):
             "pycparser 3.0",
             "PyObjC 12.2.2",
             "Microsoft WebView2 SDK 1.0.3856.49",
+            "SoundCard 0.4.6",
+            "pysysaudio 0.1.3",
         ):
             self.assertIn(component, permissive)
+        self.assertIn(
+            "CPython 3.12.10",
+            (ROOT / "licenses" / "PYTHON-3.12.txt").read_text(encoding="utf-8"),
+        )
         self.assertIn(
             "CPython 3.13.15",
             (ROOT / "licenses" / "PYTHON-3.13.txt").read_text(encoding="utf-8"),
@@ -453,6 +482,12 @@ class PackagingTests(unittest.TestCase):
             "Bootloader Exception",
             (ROOT / "licenses" / "PYINSTALLER.txt").read_text(encoding="utf-8"),
         )
+        numpy_notices = (
+            ROOT / "licenses" / "NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(numpy_notices.count("Wheel path:"), 17)
+        self.assertIn("Name: OpenBLAS", numpy_notices)
+        self.assertIn("GCC RUNTIME LIBRARY EXCEPTION", numpy_notices)
         qtwebengine_notices = (
             ROOT / "licenses" / "QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html"
         ).read_text(encoding="utf-8")
@@ -479,6 +514,9 @@ class PackagingTests(unittest.TestCase):
             "QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html",
             "GFDL-1.3-no-invariants-only.txt",
             "PERMISSIVE-LICENSES.txt",
+            "NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt",
+            "NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt",
+            "PYTHON-3.12.txt",
             "PYTHON-3.13.txt",
             "PYINSTALLER.txt",
         ):
@@ -581,18 +619,32 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertIn('"pywebview==6.2.1"', project)
         self.assertIn("PySide6==6.11.2", project)
+        self.assertIn("SoundCard==0.4.6", project)
+        self.assertIn("numpy==2.1.3", project)
+        self.assertIn("numpy==2.5.2", project)
+        self.assertIn("pysysaudio==0.1.3", project)
+        self.assertIn("python_version < '3.13'", project)
         self.assertIn("pythonnet==3.1.0", project)
         self.assertIn(
             '"clr_loader==0.3.1; sys_platform == \'win32\'"', project
         )
-        self.assertIn('"cffi==2.1.1; sys_platform == \'win32\'"', project)
-        self.assertIn('"pycparser==3.0; sys_platform == \'win32\'"', project)
+        self.assertIn(
+            '"cffi==2.1.1; sys_platform == \'linux\' or sys_platform == \'win32\'"',
+            project,
+        )
+        self.assertIn(
+            '"pycparser==3.0; sys_platform == \'linux\' or sys_platform == \'win32\'"',
+            project,
+        )
         self.assertIn("pyobjc-core==12.2.2", project)
         self.assertNotIn("pywebview[qt6]", project)
-        self.assertIn('"linux": ["webview.platforms.qt"]', spec)
+        self.assertIn('"webview.platforms.qt"', spec)
+        self.assertIn('"soundcard.pulseaudio"', spec)
         self.assertIn('"webview.platforms.winforms"', spec)
         self.assertIn('"webview.platforms.cocoa"', spec)
-        self.assertIn('"darwin": ["hid", "webview.platforms.cocoa"]', spec)
+        self.assertIn('"pysysaudio._pysysaudio_native"', spec)
+        self.assertIn("AUDIO_DATA_FILES", spec)
+        self.assertIn('collect_data_files("soundcard")', spec)
         self.assertNotIn('hiddenimports=["hid"', spec)
         self.assertIn('"qtpy.QtDataVisualization"', spec)
         self.assertIn('"PySide6.QtDataVisualization"', spec)
@@ -609,6 +661,7 @@ class PackagingTests(unittest.TestCase):
             "libX11.so.6",
             "libX11-xcb.so.1",
             "libasound.so.2",
+            "libpulse.so.0",
         ):
             self.assertIn(library, spec)
         hook_root = ROOT / "packaging" / "hooks"
@@ -628,12 +681,15 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("virtualkeyboard", gui_hook.casefold())
         self.assertIn("binaries = []", positioning_hook)
         self.assertIn("NSMicrophoneUsageDescription", spec)
+        self.assertIn("NSAudioCaptureUsageDescription", spec)
         self.assertIn("NSAllowsLocalNetworking", spec)
         self.assertEqual(release.count(".[cross-platform,desktop]"), 1)
         self.assertGreaterEqual(release.count(".[desktop]"), 2)
         self.assertIn("  windows-package:", test_workflow)
         self.assertIn("  linux-package:", test_workflow)
         self.assertIn("  macos-package:", test_workflow)
+        self.assertEqual(release.count('python-version: "3.12.10"'), 1)
+        self.assertEqual(test_workflow.count('python-version: "3.12.10"'), 1)
 
         javascript = (ROOT / "spade65" / "web" / "app.js").read_text(
             encoding="utf-8"
@@ -645,6 +701,7 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertIn('"external-links.js"', launcher)
         self.assertIn('"clipboard.js"', launcher)
+        self.assertIn('"live-effects.js"', launcher)
 
     def test_windows_package_contains_console_cli_and_archive_smoke(self):
         spec = (ROOT / "packaging" / "spade65.spec").read_text(encoding="utf-8")
@@ -673,6 +730,7 @@ class PackagingTests(unittest.TestCase):
             "libxcb-cursor0",
             "libxcb-keysyms1",
             "libxcb-render-util0",
+            "libpulse0",
         )
         test_workflow = (
             ROOT / ".github" / "workflows" / "test.yml"
@@ -726,6 +784,41 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(import_module.call_args_list[0].args, ("hid",))
         self.assertEqual(import_module.call_args_list[1].args, ("hid",))
 
+    def test_native_audio_smoke_loads_dependencies_without_opening_devices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory)
+            package.joinpath("pulseaudio.py.h").write_text(
+                "typedef int pa_context;", encoding="utf-8"
+            )
+            soundcard_spec = SimpleNamespace(
+                submodule_search_locations=[directory]
+            )
+            with (
+                patch.object(launcher.importlib, "import_module") as import_module,
+                patch.object(
+                    launcher.importlib.util,
+                    "find_spec",
+                    return_value=soundcard_spec,
+                ) as find_spec,
+            ):
+                launcher.verify_native_audio_load("linux")
+            self.assertEqual(
+                [call.args for call in import_module.call_args_list],
+                [("numpy",), ("cffi",)],
+            )
+            find_spec.assert_called_once_with("soundcard")
+
+        with patch.object(launcher.importlib, "import_module") as import_module:
+            launcher.verify_native_audio_load("win32")
+            launcher.verify_native_audio_load("darwin")
+        self.assertEqual(
+            [call.args for call in import_module.call_args_list],
+            [
+                ("pysysaudio._pysysaudio_native",),
+                ("pysysaudio._pysysaudio_native",),
+            ],
+        )
+
     def test_macos_release_uses_verified_universal_python_and_hid_build(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
@@ -743,9 +836,9 @@ class PackagingTests(unittest.TestCase):
         prepare = (ROOT / "packaging" / "prepare_macos_ci.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("python-3.13.15-macos11.pkg", prepare)
+        self.assertIn("python-3.12.10-macos11.pkg", prepare)
         self.assertIn(
-            "3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3",
+            "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
             prepare,
         )
         self.assertIn("shasum -a 256 -c -", prepare)

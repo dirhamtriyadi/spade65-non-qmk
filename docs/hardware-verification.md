@@ -28,6 +28,26 @@ was also inspected and enumerated as `0603:0352`.
 - A sysfs read returned USB revision `01.00`. This value is not labeled as a
   firmware version.
 
+## Audio-capture validation
+
+On 2026-09-02, the Linux backend enumerated `Monitor of Dummy Output` through
+SoundCard's PipeWire/PulseAudio path. A 125 Hz tone was played into that output;
+the capture worker published a nonzero level and correctly reported the 125 Hz
+band as dominant, then stopped cleanly. This validates real Linux monitor
+capture and frequency analysis in addition to the descriptor-gated `0603:0351`
+RGB streaming transport already verified above.
+
+Windows WASAPI loopback and the macOS 14.2+ CoreAudio tap still require direct
+tests on their operating systems. Automated tests cover both adapters, PCM
+analysis, source allowlisting, sensitivity, noise gate, smoothing, bass/
+spectrum/loudness processing, lifecycle cleanup, and the rule that only compact
+levels and bands cross the desktop bridge.
+
+Audio testing uses only host capture and ordinary wired RGB frames. It does not
+add firmware flashing, bootloader entry, raw writes, or arbitrary HID packets.
+Continuous audio reactivity requires the GUI and Live preview to remain active;
+it is not stored in keyboard memory or run by the background service.
+
 ## Official keymap transaction and lighting finding
 
 The wired firmware clears the active lighting state while accepting the opcode

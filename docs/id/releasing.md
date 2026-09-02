@@ -97,9 +97,10 @@ Sebelum memublikasikan asset, pipeline:
 - menyertakan HTML, CSS, JavaScript, seluruh katalog locale, PyWebView, dan
   backend renderer platform dalam bundle;
 - menjalankan smoke test executable tanpa membuat window, membuka browser,
-  enumerasi perangkat, atau HID write; test mengimpor backend WebView, dan pada
-  Windows/macOS tetap memuat extension HID native agar dependency binary yang
-  rusak terdeteksi;
+  enumerasi perangkat, atau HID write; test mengimpor backend WebView,
+  memverifikasi backend audio platform terpaket tanpa membuka sumber audio, dan
+  pada Windows/macOS tetap memuat extension HID native agar dependency binary
+  yang rusak terdeteksi;
 - menguji route HTTP locale dari bundle agar data PyInstaller yang hilang
   terdeteksi;
 - membuat dan menjalankan smoke test AppImage x86_64 pada runner Ubuntu 22.04
@@ -110,17 +111,24 @@ Sebelum memublikasikan asset, pipeline:
   console hasil ekstraksi, termasuk validasi renderer Edge WebView2;
 - membangun aplikasi macOS universal dan memeriksa setiap file Mach-O agar
   memiliki slice `x86_64` dan `arm64`; bundle memakai Cocoa/WebKit dan
-  mendeklarasikan local networking serta penggunaan mikrofon untuk audio-reactive;
+  mendeklarasikan local networking, penangkapan audio sistem, serta penggunaan
+  fallback mikrofon untuk audio-reactive;
 - memverifikasi serta mount DMG read-only sebelum smoke test terakhir;
 - menolak publish bila salah satu dari tiga file keluaran hilang atau kosong.
 
 Smoke test packaging hanya menguji startup, import runtime desktop, resource,
 dan route aplikasi. Ia tidak membuka GUI interaktif, menggantikan pengujian
 keyboard fisik, atau mengirim HID report. Uji manual per OS tetap harus mencakup
-second-launch activation, close/quit, fallback browser, file picker, dan download
-ekspor.
+second-launch activation, close/quit, fallback browser, file picker, download
+ekspor, penangkapan output sistem native, serta fallback mikrofon.
 
 ## Build lokal
+
+Gunakan Python 3.12.10 untuk artifact desktop Windows dan macOS agar wheel native
+`pysysaudio` 0.1.3 yang dipin ikut disertakan; wheel yang dipublikasikannya belum
+mendukung Python 3.13. Artifact Linux resmi tetap memakai Python 3.13 dan
+SoundCard. Pilihan build paket ini terpisah dari minimum Python 3.10 untuk
+aplikasi inti.
 
 Pasang dependency project serta tool build:
 
@@ -159,8 +167,10 @@ menemukan Mach-O satu arsitektur. Wheel `hidapi` tipis tidak cukup; gunakan
 dicantumkan di panduan packaging. Helper itu menetapkan `ARCHFLAGS`, memaksa
 build dari source dengan `--no-binary=:all:`, memeriksa hash sdist `hidapi`
 terpatok, dan menolak hasil thin. macOS memakai Cocoa/WebKit melalui PyObjC dan
-metadata bundle mengizinkan localhost serta menjelaskan prompt mikrofon
-audio-reactive.
+metadata bundle mengizinkan localhost serta menjelaskan prompt audio sistem dan
+mikrofon yang terpisah untuk audio-reactive. CoreAudio tap memerlukan macOS 14.2
+atau lebih baru; fallback mikrofon tetap tersedia pada versi macOS lama yang
+masih didukung.
 
 Build Windows serta smoke test-nya memerlukan Edge WebView2 Runtime pada host.
 Build Linux membutuhkan loader EGL, `curl`, dan `sha256sum`; pada Debian/Ubuntu

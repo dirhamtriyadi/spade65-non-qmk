@@ -503,7 +503,8 @@ host-streamed lighting active after the GUI closes and select profiles according
 to the active application. On Wayland, where no portable foreground-window API
 exists, it falls back to the first configured rule whose process is running;
 rule order matters. This service has no tray icon; the system tray belongs to
-the separate native GUI process.
+the separate native GUI process. It never opens a system-audio or microphone
+source, so audio-reactive live effects remain a foreground-GUI feature.
 
 Automatic keymap/profile writes are disabled by default. Enabling them requires
 both `"allow_profile_writes": true` in the configuration and the independent
@@ -553,9 +554,11 @@ Commands for built-in effects, debounce, timers, keymaps, macros, and stored
 per-key configuration send the vendor configuration reports intended for the
 device. Those settings are expected to remain when the keyboard moves to
 another operating system, as they do with the original software. Features that
-stream frames—AP effects, audio-reactive effects, custom timelines, and
-application associations—are host-driven and work only while the GUI or service
-is running.
+stream AP effects or custom timelines are host-driven and work only while the
+GUI or background service is running. Audio-reactive live effects are also
+host-driven, but require the GUI and Live preview because the service does not
+capture audio. Application associations are local host rules that the service
+can run. None of those host features are stored in keyboard memory.
 
 Spade65 cannot safely read the full current keymap, macros, or every setting
 back from the keyboard. A saved profile and GUI library backup are therefore

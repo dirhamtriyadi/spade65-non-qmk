@@ -44,7 +44,8 @@ configuration paths that can be reproduced with clear safety boundaries.
   original application.
 - Macro recording, editing, repeat settings, and key binding.
 - All 20 built-in lighting effect IDs, brightness, speed, palette, per-key RGB,
-  AP-mode effects, audio reactivity, and a custom-effect timeline.
+  AP-mode effects, system-audio or microphone reactivity, and a custom-effect
+  timeline.
 - Local profiles, full library backup/restore, and conversion of original
   KeyAssign, Macro, and APMode JSON exports.
 - Optional background effects and application-to-profile associations on all
@@ -55,6 +56,15 @@ configuration paths that can be reproduced with clear safety boundaries.
 The GUI and backend run locally. The embedded server listens only on loopback,
 uses a random session token, and rejects foreign Host and Origin values.
 
+In the packaged desktop application, audio-reactive live effects can capture
+the computer's selected output directly: a PipeWire/PulseAudio monitor on Linux,
+WASAPI loopback on Windows, or a CoreAudio tap on macOS 14.2 and later. A
+microphone remains available as an explicit fallback. The source selector is
+joined by loudness, bass, and spectrum modes; sensitivity from 200 to 8000
+(default 1000); a noise gate; smoothing; per-layer opacity; and final master
+brightness. Only compact level and frequency-band measurements reach the local
+interface—raw PCM is neither stored nor passed across the desktop bridge.
+
 ## What persists on the keyboard?
 
 Spade65 uses both device-backed configuration and host-side features:
@@ -62,7 +72,9 @@ Spade65 uses both device-backed configuration and host-side features:
 | Configuration | Where it lives | Available after changing computers or operating systems? |
 |---|---|---|
 | Keymap, macros, built-in lighting, per-key lighting, debounce, and supported dongle timers | Sent through the vendor configuration reports to keyboard memory | Designed to remain on the keyboard after it is applied |
-| Profile library, selected visual layout, application associations, AP/custom timeline playback, and audio-reactive streaming | Local application data | Requires Spade65 or its optional background service on that host |
+| Profile library, selected visual layout, and application associations | Local application data | Requires Spade65 on that host; associations can be run by its optional background service |
+| AP/custom timeline playback | Local application data and host-driven USB frames | Requires the GUI or optional background service on that host |
+| Audio-reactive live effects | Local settings and host-driven USB frames | Requires a running GUI, an available audio source, and wired USB; it is not stored on the keyboard or run by the background service |
 
 The four physical layout variants cannot be read from the keyboard descriptor.
 When a configurable interface is connected, the application restores the layout
@@ -162,6 +174,12 @@ Those individual tests do not yet prove that the newly completed combined
 keymap/lighting/debounce transaction preserves the active lighting visually.
 That exact source-GUI result is still awaiting physical confirmation and is not
 inferred from successful report byte counts.
+
+The Linux PipeWire/PulseAudio path was physically exercised on 2026-09-02: it
+enumerated the active monitor, captured a system-played 125 Hz test tone, and
+reported 125 Hz as the dominant band before stopping cleanly. Windows WASAPI
+and macOS CoreAudio capture still need physical validation; verified wired RGB
+streaming is not presented as proof of those operating-system backends.
 
 Only the dongle light-off/hibernate timers remain unsent. The logical dongle
 identity `0603:0356` has never enumerated here, and the physical receiver that

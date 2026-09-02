@@ -45,6 +45,7 @@ for host_library_pattern in \
   'libX11.so*' \
   'libX11-xcb.so*' \
   'libasound.so*' \
+  'libpulse.so*' \
   'libEGL.so*' \
   'libGL.so*' \
   'libGLX.so*' \
@@ -150,6 +151,11 @@ test -s "$app_dir/usr/share/doc/spade65/licenses/Qt-6.11.2-LICENSE.Chromium"
 test -s "$app_dir/usr/share/doc/spade65/licenses/QtWebEngine-6.11.2-THIRD-PARTY-NOTICES.html"
 test -s "$app_dir/usr/share/doc/spade65/licenses/GFDL-1.3-no-invariants-only.txt"
 test -s "$app_dir/usr/share/doc/spade65/licenses/PERMISSIVE-LICENSES.txt"
+test -s \
+  "$app_dir/usr/share/doc/spade65/licenses/NUMPY-2.1.3-LINUX-WHEEL-LICENSE.txt"
+test -s \
+  "$app_dir/usr/share/doc/spade65/licenses/NUMPY-2.5.2-LINUX-WHEEL-LICENSES.txt"
+test -s "$app_dir/usr/share/doc/spade65/licenses/PYTHON-3.12.txt"
 test -s "$app_dir/usr/share/doc/spade65/licenses/PYTHON-3.13.txt"
 test -s "$app_dir/usr/share/doc/spade65/licenses/PYINSTALLER.txt"
 test -s \

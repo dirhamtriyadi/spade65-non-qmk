@@ -15,6 +15,7 @@ spade65ctl.py
         ├── spade65.instance   # identitas/aktivasi instance localhost
         ├── spade65.gui        # API HTTP loopback + asset web
         ├── spade65.desktop    # lifecycle jendela + bridge native PyWebView
+        ├── spade65.system_audio # capture host + analisis PCM ringkas
         ├── spade65.tray       # adapter tray Qt/WinForms/Cocoa
         ├── spade65.desktop_preferences # preferensi shell native
         ├── spade65.startup    # launcher login GUI + background service
@@ -40,6 +41,10 @@ Pemisahan ini disengaja:
 - `desktop.py` mengelola PyWebView, storage persisten, lifecycle server/window,
   download, aktivasi instance yang sudah berjalan, serta API JavaScript sempit
   untuk integrasi desktop.
+- `system_audio.py` membuka backend output sistem terpaket secara lazy—monitor
+  SoundCard pada Linux atau `pysysaudio` pada Windows/macOS—dan hanya
+  memublikasikan snapshot tingkat/puncak/pita yang ringkas. PCM mentah tidak
+  pernah melewati bridge `DesktopApi` atau mencapai disk.
 - `tray.py` terhubung ke toolkit yang sudah dipilih PyWebView: Qt pada Linux,
   WinForms pada Windows, dan Cocoa pada macOS. Tidak ada toolkit tray kedua.
 - `desktop_preferences.py` menyimpan close-to-tray secara terpisah dari
@@ -62,7 +67,13 @@ backend platform: PySide6/QtWebEngine pada Linux, pythonnet/Edge WebView2 pada
 Windows, dan PyObjC/Cocoa/WebKit pada macOS. Extra `cross-platform` tetap
 memasang `hidapi` untuk Windows/macOS; jangan membuat fallback write bila HIDAPI
 gagal membaca descriptor. Windows mengharuskan Edge WebView2 Runtime tersedia
-pada host.
+pada host. Extra `desktop` yang sama menyediakan SoundCard bagi monitor
+PipeWire/PulseAudio pada Linux dan, pada Python 3.10–3.12, `pysysaudio` bagi
+WASAPI loopback pada Windows atau CoreAudio tap pada macOS 14.2+. Job paket
+Windows/macOS resmi memakai Python 3.12.10 bagi wheel native tersebut. Mode
+browser, serta interpreter source Windows/macOS yang lebih baru daripada 3.12,
+mempertahankan fallback Web Audio khusus mikrofon karena tidak memiliki bridge
+capture native yang dapat digunakan.
 
 Desktop memakai `private_mode=False` dan direktori storage khusus aplikasi agar
 `localStorage` tidak hilang ketika jendela ditutup. Lokasinya dipilih oleh
@@ -132,12 +143,14 @@ node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
 node --check spade65/web/external-links.js
 node --check spade65/web/clipboard.js
+node --check spade65/web/live-effects.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
 node tests/usage_picker.test.js
 node tests/external_links.test.js
 node tests/clipboard.test.js
+node tests/live_effects.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```
@@ -151,10 +164,12 @@ bernama `{...}`, serta fallback English. Ikuti
 Perubahan desktop packaging harus diuji pada OS target. Setiap executable wajib
 lulus `--smoke-test` tanpa membuat jendela, membuka browser, enumerasi device,
 atau HID write sebelum dikemas. Smoke test mengimpor backend WebView platform
-dan memeriksa asset/route localhost; unit test lifecycle memakai WebView mock
-agar tidak memerlukan display. Tetap lakukan uji manual untuk window close,
-**Quit application**, second-launch activation, import, dan download ekspor pada
-OS target.
+serta memverifikasi runtime audio terpaket tanpa membuka sumber, lalu memeriksa
+asset/route localhost; unit test lifecycle memakai WebView mock agar tidak
+memerlukan display. Tetap lakukan uji manual untuk window close, **Quit
+application**, second-launch activation, import, download ekspor, penangkapan
+output sistem, fallback mikrofon, dan penghentian sumber audio pada OS target.
+Cakupan audio otomatis tidak boleh disebut sebagai validasi penangkapan fisik.
 
 Workflow test pada setiap push ke `main` menjalankan package preflight native
 Windows, Linux, dan macOS tanpa publish. Workflow tag kemudian memasang extra
@@ -180,6 +195,10 @@ glibc mesin build dan tidak otomatis memiliki portabilitas yang sama. Lihat
    serta `Origin` browser yang tidak cocok, dan mengekspos allowlist tindakan
    konfigurasi yang sudah memiliki builder tervalidasi.
 9. Profil JSON adalah data deklaratif; jangan pernah menerima byte/report mentah.
+10. Penangkapan audio hanya boleh mengekspos nilai tingkat, puncak, dan pita
+    frekuensi terbatas kepada JavaScript. Jangan pernah meneruskan, menyimpan,
+    mencatat log, atau mengunggah PCM mentah, dan jangan biarkan sumber audio
+    melemahkan gerbang descriptor streaming kabel `0603:0351`.
 
 ## Transaksi keymap bergaya aplikasi resmi
 

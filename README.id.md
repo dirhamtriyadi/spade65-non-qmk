@@ -44,7 +44,8 @@ dapat direproduksi dengan batas keselamatan yang jelas yang didukung.
   aplikasi original.
 - Perekaman dan penyuntingan macro, pengaturan pengulangan, serta binding tombol.
 - Seluruh 20 ID efek pencahayaan bawaan, brightness, speed, palet, RGB per
-  tombol, efek AP mode, audio reactive, dan custom-effect timeline.
+  tombol, efek AP mode, reaksi terhadap audio sistem atau mikrofon, dan
+  custom-effect timeline.
 - Profil lokal, backup/restore seluruh library, serta konversi ekspor JSON
   KeyAssign, Macro, dan APMode dari aplikasi original.
 - Efek background dan asosiasi aplikasi-ke-profil opsional pada ketiga platform
@@ -55,6 +56,16 @@ dapat direproduksi dengan batas keselamatan yang jelas yang didukung.
 GUI dan backend berjalan secara lokal. Server tertanam hanya menerima koneksi
 loopback, memakai token sesi acak, dan menolak nilai Host serta Origin asing.
 
+Pada aplikasi desktop terpaket, efek langsung audio-reactive dapat menangkap
+output komputer yang dipilih secara langsung: monitor PipeWire/PulseAudio pada
+Linux, WASAPI loopback pada Windows, atau CoreAudio tap pada macOS 14.2 dan
+seterusnya. Mikrofon tetap tersedia sebagai fallback yang dipilih secara
+eksplisit. Selector sumber dilengkapi mode keras-lembut, bass, dan spektrum;
+sensitivitas 200 sampai 8000 (default 1000); noise gate; smoothing; opasitas per
+lapisan; serta kecerahan utama akhir. Hanya pengukuran tingkat dan pita frekuensi
+ringkas yang diteruskan ke antarmuka lokal—PCM mentah tidak disimpan atau
+diteruskan melalui bridge desktop.
+
 ## Apa yang tersimpan di keyboard?
 
 Spade65 menggunakan konfigurasi yang tersimpan pada perangkat dan fitur yang
@@ -63,7 +74,9 @@ berjalan pada host:
 | Konfigurasi | Lokasi penyimpanan | Tetap tersedia setelah berpindah komputer atau sistem operasi? |
 |---|---|---|
 | Keymap, macro, pencahayaan bawaan, pencahayaan per tombol, debounce, dan timer dongle yang didukung | Dikirim melalui report konfigurasi vendor ke memori keyboard | Dirancang untuk tetap tersimpan di keyboard setelah diterapkan |
-| Library profil, layout visual terpilih, asosiasi aplikasi, playback AP/custom timeline, dan streaming audio reactive | Data lokal aplikasi | Memerlukan Spade65 atau background service opsional pada host tersebut |
+| Library profil, layout visual terpilih, dan asosiasi aplikasi | Data lokal aplikasi | Memerlukan Spade65 pada host tersebut; asosiasi dapat dijalankan melalui background service opsional |
+| Playback AP/custom timeline | Data lokal aplikasi dan frame USB yang digerakkan host | Memerlukan GUI atau background service opsional pada host tersebut |
+| Efek langsung audio-reactive | Pengaturan lokal dan frame USB yang digerakkan host | Memerlukan GUI yang tetap berjalan, sumber audio yang tersedia, dan USB berkabel; efek tidak disimpan di keyboard atau dijalankan oleh background service |
 
 Keempat varian layout fisik tidak dapat dibaca dari descriptor keyboard. Saat
 interface konfigurasi terhubung, aplikasi memulihkan layout yang terakhir
@@ -164,6 +177,12 @@ Pengujian individual tersebut belum membuktikan bahwa transaksi gabungan
 keymap/lighting/debounce yang baru dilengkapi mempertahankan lighting aktif
 secara visual. Hasil persis dari GUI source masih menunggu konfirmasi fisik dan
 tidak disimpulkan hanya dari jumlah byte report yang berhasil.
+
+Jalur PipeWire/PulseAudio Linux diuji secara fisik pada 2026-09-02: aplikasi
+menemukan monitor aktif, menangkap nada uji 125 Hz yang diputar oleh sistem,
+menandai 125 Hz sebagai pita dominan, lalu berhenti dengan bersih. Penangkapan
+WASAPI Windows dan CoreAudio macOS masih memerlukan validasi fisik; streaming RGB
+berkabel yang sudah diverifikasi bukan bukti bagi kedua backend OS tersebut.
 
 Hanya timer light-off/hibernate dongle yang masih belum dikirim. Identitas
 dongle logis `0603:0356` belum pernah terdeteksi di sini, dan receiver fisik

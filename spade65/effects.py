@@ -116,6 +116,16 @@ def render_app_effects(
     layers = settings.get("app_effects", []) if isinstance(settings, dict) else []
     if not isinstance(layers, list):
         layers = []
+    live_settings = settings.get("live_effects", {}) if isinstance(settings, dict) else {}
+    try:
+        master_brightness = float(
+            live_settings.get("master_brightness", 100)
+            if isinstance(live_settings, dict)
+            else 100
+        )
+    except (TypeError, ValueError):
+        master_brightness = 100
+    master_brightness = max(0.0, min(100.0, master_brightness)) / 100
     output: dict[str, str] = {}
     index = 0
     randomizer = random.Random(round(phase * 1000))
@@ -131,7 +141,8 @@ def render_app_effects(
                 )
                 if pixel:
                     color = _blend(color, pixel[0], pixel[1])
-            output[key] = "#" + "".join(f"{channel:02x}" for channel in color)
+            scaled = tuple(round(channel * master_brightness) for channel in color)
+            output[key] = "#" + "".join(f"{channel:02x}" for channel in scaled)
             index += 1
     return output
 

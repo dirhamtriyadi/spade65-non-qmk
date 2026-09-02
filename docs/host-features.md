@@ -33,6 +33,52 @@ Each frame lasts 20–60000 ms. A timeline can contain up to 200 frames, can loo
 is stored in `settings.custom_timeline`, and uses the same USB streaming
 transport as AP mode. Timeline data is never written to firmware flash.
 
+## Audio-reactive live effects
+
+The packaged desktop application can drive a live effect from the computer's
+output instead of relying on sound leaking back into a microphone. **Lighting →
+Live effects → Audio reactive** provides a source selector with these native
+paths:
+
+- Linux uses SoundCard to enumerate PipeWire/PulseAudio monitor sources. A
+  PulseAudio-compatible monitor must be published by the active audio server.
+- Windows uses `pysysaudio` and WASAPI loopback for the default system output.
+- macOS uses a `pysysaudio` CoreAudio tap on macOS 14.2 or later. The operating
+  system may ask for system-audio recording permission.
+
+The explicit microphone entries use the Web Audio input path and remain the
+fallback when a native output source is unavailable. Browser-only mode has no
+native desktop bridge and therefore offers microphone input only.
+
+Each audio-enabled layer can use one of three responses: **Spectrum across
+keys** maps frequency bands across the keyboard, **Bass pulse** follows the low
+bands, and **Overall loudness** applies one level to the layer. Sensitivity has
+the recovered 200–8000 range and defaults to 1000. Raising it amplifies quiet
+input; the noise gate suppresses a quiet floor; and smoothing reduces abrupt
+changes. The audio meter shows the processed level while the preview is active.
+
+**Layer opacity** changes only the selected layer's contribution before the
+layers are composited. A later opaque layer can cover that visual change.
+**Master brightness** scales the final composited frame, so use it when the
+whole live effect should become visibly darker or brighter. The on-screen live
+keyboard preview shows both controls without changing the saved per-key color
+design.
+
+Continuous audio reactivity is host-driven: the GUI and Live preview must stay
+running, and the keyboard must be connected through the descriptor-verified
+wired `0603:0351` streaming interface. It is not stored in keyboard memory and
+the background service does not capture audio. Native capture produces compact
+level, peak, and frequency-band snapshots; raw PCM is not saved, sent over the
+localhost API, or exposed through the WebView bridge. This path only sends
+ordinary RGB streaming frames and cannot flash firmware, enter a bootloader, or
+perform raw writes.
+
+The capture backends, analysis, and bridge boundaries have automated coverage.
+Linux system-output capture was additionally exercised on 2026-09-02 with a
+125 Hz tone played through PipeWire; the monitor snapshot was nonzero and its
+125 Hz band was dominant. Windows and macOS output capture still need physical
+validation, independently of the already-verified wired RGB transport.
+
 ## Desktop tray and login startup
 
 In the native application, **Settings → Desktop integration** controls whether
@@ -131,8 +177,8 @@ LaunchAgent `.plist`.
 This service and its launcher are background components that continue without
 the GUI. The service itself has no tray icon and requires no additional desktop
 toolkit; the tray belongs only to the native GUI described above. Audio-reactive
-effects remain in the GUI because the service does not request microphone access
-silently.
+effects remain in the GUI because the service does not silently request system-
+audio or microphone access.
 
 ## Key tester
 

@@ -11,15 +11,29 @@ from PyInstaller.utils.hooks import collect_data_files
 ROOT = Path(SPECPATH).parent
 TARGET_ARCH = os.environ.get("SPADE65_TARGET_ARCH") or None
 DESKTOP_HIDDEN_IMPORTS = {
-    "linux": ["webview.platforms.qt"],
+    "linux": [
+        "webview.platforms.qt",
+        "soundcard",
+        "soundcard.pulseaudio",
+    ],
     "win32": [
         "hid",
         "webview.platforms.winforms",
         "webview.platforms.edgechromium",
         "clr",
+        "pysysaudio",
+        "pysysaudio._pysysaudio_native",
     ],
-    "darwin": ["hid", "webview.platforms.cocoa"],
+    "darwin": [
+        "hid",
+        "webview.platforms.cocoa",
+        "pysysaudio",
+        "pysysaudio._pysysaudio_native",
+    ],
 }.get(sys.platform, [])
+AUDIO_DATA_FILES = (
+    collect_data_files("soundcard") if sys.platform.startswith("linux") else []
+)
 PLATFORM_EXCLUDES = {
     # QtPy imports this compatibility module from a suppressed optional block.
     # It is unrelated to the QtWebEngine widgets backend and pulls GPL-only Qt
@@ -39,6 +53,7 @@ LINUX_HOST_RUNTIME_LIBRARIES = {
     "libX11.so.6",
     "libX11-xcb.so.1",
     "libasound.so.2",
+    "libpulse.so.0",
     # Driver-facing graphics dispatch libraries are normally excluded by
     # PyInstaller already. Listing their common sonames here makes that policy
     # explicit if upstream collection behavior changes.
@@ -70,7 +85,7 @@ analysis = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=collect_data_files("spade65.web"),
+    datas=[*collect_data_files("spade65.web"), *AUDIO_DATA_FILES],
     hiddenimports=["webview", *DESKTOP_HIDDEN_IMPORTS],
     hookspath=[str(ROOT / "packaging" / "hooks")],
     hooksconfig={},
@@ -157,6 +172,10 @@ if sys.platform == "darwin":
             "NSMicrophoneUsageDescription": (
                 "Spade65 uses microphone input only when you enable an "
                 "audio-reactive lighting effect."
+            ),
+            "NSAudioCaptureUsageDescription": (
+                "Spade65 captures system audio only when you select system "
+                "output for an audio-reactive lighting effect."
             ),
         },
     )

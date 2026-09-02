@@ -4,6 +4,7 @@ const layoutState = window.Spade65LayoutState;
 const keyEvents = window.Spade65KeyEvents;
 const usagePicker = window.Spade65UsagePicker;
 const externalLinks = window.Spade65ExternalLinks;
+const liveEffects = window.Spade65LiveEffects;
 const copyText = window.Spade65Clipboard.createCopier(
   () => window.pywebview?.api,
   () => navigator.clipboard,
@@ -24,6 +25,15 @@ let meta = null,
   audioContext = null,
   audioAnalyser = null,
   audioStream = null,
+  audioSourceEntries = [],
+  audioSystemError = null,
+  audioNativeRunning = false,
+  audioRawSnapshot = null,
+  audioFrame = liveEffects.emptyAudioFrame(),
+  audioGeneration = 0,
+  audioStartPromise = null,
+  animationStarting = false,
+  animationGeneration = 0,
   layoutVariant = layoutState.DEFAULT_LAYOUT,
   testerPressed = new Set(),
   testerSeen = new Set(),
@@ -57,6 +67,14 @@ const DEFAULT_LIGHTING = Object.freeze({
   multicolor: true
 });
 const DEFAULT_DEBOUNCE_MS = 5;
+const DEFAULT_LIVE_SETTINGS = Object.freeze({
+  master_brightness: 100,
+  audio_source: '',
+  audio_mode: 'spectrum',
+  audio_sensitivity: 1000,
+  audio_noise_gate: 2,
+  audio_smoothing: 65
+});
 const LAYOUT_STORAGE_KEY = 'spade65-device-layouts-v1',
   LEGACY_LAYOUT_STORAGE_KEY = 'spade65-layout';
 const defaultLanguages = [{
@@ -205,6 +223,8 @@ function renderLocalizedDynamic() {
   renderMacros();
   renderKeyboard();
   renderAppLayers();
+  renderAudioSources();
+  refreshLivePreview();
   renderTimeline();
   renderConnectionStatus();
   renderDiagnostics();
@@ -913,7 +933,7 @@ function chooseLightingMode(mode) {
 function setLightingMode(mode) {
   if (!['preset', 'per-key', 'live'].includes(mode)) mode = 'preset';
   if (lightingMode === 'live' && mode !== 'live') {
-    if (animationTimer) stopAnimation();
+    if (animationTimer || animationStarting) stopAnimation();
     if (timelineTimer) stopTimeline()
   }
   lightingMode = mode;
@@ -931,8 +951,8 @@ function renderLightingConnectionStatus(forceOffline = false) {
   if (!target) return;
   const configurable = !forceOffline && configurationReady(),
     streamable = !forceOffline && streamingReady();
-  if (!streamable && (animationTimer || timelineTimer)) {
-    if (animationTimer) stopAnimation();
+  if (!streamable && (animationTimer || animationStarting || timelineTimer)) {
+    if (animationTimer || animationStarting) stopAnimation();
     if (timelineTimer) stopTimeline()
   }
   target.textContent = t(!configurable ? 'lighting.connectionOffline' : streamable ? 'lighting.connectionReady' : 'lighting.connectionDongle');
@@ -1242,6 +1262,14 @@ function buildKeyboard(container, mode) {
       sw.style.background = Array.isArray(c) ? `rgb(${c.join(',')})` : c;
       b.append(sw)
     }
+    if (mode === 'live') {
+      const color = livePreviewColors?.[key] || '#000000';
+      b.style.setProperty('--live-color', color);
+      b.setAttribute('aria-label', t('lighting.liveKeyPreview', {
+        key: keyLabel(key),
+        color
+      }))
+    }
     if (mode === 'assign') {
       b.setAttribute('aria-pressed', String(selectedKey === key));
       b.setAttribute('aria-label', t(customized ? 'keymap.keyCustomizedAria' : 'keymap.keyAria', {
@@ -1249,7 +1277,7 @@ function buildKeyboard(container, mode) {
       }))
     }
     if (mode === 'color') b.setAttribute('aria-pressed', String(colorKeys.has(key)));
-    if (mode === 'tester') b.disabled = true;
+    if (mode === 'tester' || mode === 'live') b.disabled = true;
     else {
       b.tabIndex = key === focusKey ? 0 : -1;
       b.onkeydown = event => {
@@ -1272,7 +1300,7 @@ function buildKeyboard(container, mode) {
     }
     container.append(b)
   });
-  if (mode !== 'tester' && !container.querySelector('.key[tabindex="0"]')) container.querySelector('.key')?.setAttribute('tabindex', '0')
+  if (mode !== 'tester' && mode !== 'live' && !container.querySelector('.key[tabindex="0"]')) container.querySelector('.key')?.setAttribute('tabindex', '0')
 }
 
 function profileSettings() {
@@ -1283,6 +1311,23 @@ function profileSettings() {
   };
   if (!Number.isInteger(profile.settings.debounce_ms) || profile.settings.debounce_ms < 1 || profile.settings.debounce_ms > 255) profile.settings.debounce_ms = DEFAULT_DEBOUNCE_MS;
   return profile.settings
+}
+
+function liveSettings() {
+  const settings = profileSettings();
+  if (!settings.live_effects || typeof settings.live_effects !== 'object' || Array.isArray(settings.live_effects)) settings.live_effects = {};
+  const live = settings.live_effects,
+    bounded = (value, fallback, minimum, maximum) => {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? Math.max(minimum, Math.min(maximum, numeric)) : fallback
+    };
+  live.master_brightness = bounded(live.master_brightness, DEFAULT_LIVE_SETTINGS.master_brightness, 0, 100);
+  live.audio_source = typeof live.audio_source === 'string' ? live.audio_source : DEFAULT_LIVE_SETTINGS.audio_source;
+  live.audio_mode = ['spectrum', 'bass', 'loudness'].includes(live.audio_mode) ? live.audio_mode : DEFAULT_LIVE_SETTINGS.audio_mode;
+  live.audio_sensitivity = bounded(live.audio_sensitivity, DEFAULT_LIVE_SETTINGS.audio_sensitivity, 200, 8000);
+  live.audio_noise_gate = bounded(live.audio_noise_gate, DEFAULT_LIVE_SETTINGS.audio_noise_gate, 0, 30);
+  live.audio_smoothing = bounded(live.audio_smoothing, DEFAULT_LIVE_SETTINGS.audio_smoothing, 0, 95);
+  return live
 }
 
 function renderDebounceControl() {
@@ -1432,6 +1477,11 @@ function renderColorKeyboard() {
   $('setColorBtn').disabled = selected === 0;
   $('clearColorsBtn').disabled = colored === 0;
   $('applyColorsBtn').disabled = colored === 0 || !configurationReady()
+}
+
+function renderLiveKeyboard() {
+  const container = $('liveKeyboard');
+  if (container && profile) buildKeyboard(container, 'live')
 }
 
 function setWorkflowStep(id, active, complete) {
@@ -1677,10 +1727,11 @@ function appLayers() {
   const settings = profileSettings();
   if (!Array.isArray(settings.app_effects) || !settings.app_effects.length) settings.app_effects = [newAppLayer()];
   settings.app_effects = settings.app_effects.slice(0, 10).map(value => {
-    const layer = value && typeof value === 'object' && !Array.isArray(value) ? {
-      ...newAppLayer(),
-      ...value
-    } : newAppLayer();
+    const layer = value && typeof value === 'object' && !Array.isArray(value) ? value : newAppLayer(),
+      defaults = newAppLayer();
+    for (const [key, fallback] of Object.entries(defaults)) {
+      if (!hasOwn(layer, key)) layer[key] = Array.isArray(fallback) ? [...fallback] : fallback
+    }
     layer.keys = Array.isArray(layer.keys) ? layer.keys.filter(key => meta?.buttons.includes(key)) : [];
     layer.colors = Array.isArray(layer.colors) ? layer.colors.slice(0, 20).filter(color => /^#[0-9a-f]{6}$/i.test(color)) : [];
     if (!layer.colors.length) layer.colors = newAppLayer().colors;
@@ -1709,7 +1760,17 @@ function renderAppLayers() {
     enabled.checked = layer.enabled !== false;
     enabled.title = t('lighting.toggleLayer');
     enabled.onclick = event => event.stopPropagation();
-    enabled.onchange = () => layer.enabled = enabled.checked;
+    enabled.onchange = () => {
+      const current = appLayers()[index];
+      if (!current) return;
+      current.enabled = enabled.checked;
+      refreshLivePreview();
+      if (animationTimer) {
+        const needsAudio = appLayers().some(item => item.enabled !== false && item.audio);
+        if (!needsAudio) stopAudio();
+        else if (!audioAnalyser && !audioNativeRunning) restartAudioForLivePreview()
+      }
+    };
     const name = document.createElement('button');
     name.textContent = `${index+1} · ${t(`animation.${animationKey(layer.mode||'wave')}`)}`;
     name.onclick = () => {
@@ -1745,11 +1806,22 @@ function loadAppLayer() {
   $('appBump').checked = !!layer.bump;
   $('appBidirectional').checked = !!layer.bidirectional;
   $('audioSync').checked = !!layer.audio;
+  const settings = liveSettings();
+  $('liveBrightness').value = settings.master_brightness;
+  $('liveBrightnessOut').value = settings.master_brightness;
+  $('audioMode').value = settings.audio_mode;
+  $('audioSensitivity').value = settings.audio_sensitivity;
+  $('audioSensitivityOut').value = settings.audio_sensitivity;
+  $('audioNoiseGate').value = settings.audio_noise_gate;
+  $('audioNoiseGateOut').value = settings.audio_noise_gate;
+  $('audioSmoothing').value = settings.audio_smoothing;
+  $('audioSmoothingOut').value = settings.audio_smoothing;
   document.querySelectorAll('.app-color').forEach((input, index) => input.value = layer.colors?.[index] || '#000000');
-  renderAppRangeSummary()
+  renderAppRangeSummary();
+  renderAudioControlState()
 }
 
-function saveAppLayer() {
+function saveAppLayer(refreshLayerList = false) {
   const layer = appLayer();
   layer.mode = $('animation').value;
   layer.speed = Number($('appSpeed').value);
@@ -1767,7 +1839,45 @@ function saveAppLayer() {
   layer.bidirectional = $('appBidirectional').checked;
   layer.audio = $('audioSync').checked;
   layer.colors = [...document.querySelectorAll('.app-color')].map(input => input.value);
-  renderAppLayers()
+  if (refreshLayerList) renderAppLayers();
+  else {
+    renderAppRangeSummary();
+    refreshLivePreview()
+  }
+}
+
+function saveLiveSettings(persistSource = false) {
+  const settings = liveSettings();
+  settings.master_brightness = Number($('liveBrightness').value);
+  if (persistSource === true) settings.audio_source = $('audioSource').value;
+  settings.audio_mode = $('audioMode').value;
+  settings.audio_sensitivity = Number($('audioSensitivity').value);
+  settings.audio_noise_gate = Number($('audioNoiseGate').value);
+  settings.audio_smoothing = Number($('audioSmoothing').value);
+  audioFrame = liveEffects.emptyAudioFrame();
+  refreshLivePreview()
+}
+
+async function restartAudioForLivePreview() {
+  if (!animationTimer || !appLayers().some(layer => layer.enabled !== false && layer.audio)) return;
+  stopAudio();
+  try {
+    await startAudio()
+  } catch (error) {
+    stopAnimation();
+    toast(t('lighting.audioUnavailable', {
+      error: error.message || String(error)
+    }), true)
+  }
+}
+
+async function audioReactiveChanged() {
+  saveAppLayer();
+  renderAudioControlState();
+  if (!animationTimer) return;
+  if (appLayers().some(layer => layer.enabled !== false && layer.audio)) {
+    if (!audioAnalyser && !audioNativeRunning) await restartAudioForLivePreview()
+  } else stopAudio()
 }
 
 function addAppLayer() {
@@ -2378,7 +2488,7 @@ async function exportProfile() {
 }
 
 function renderAllEditors() {
-  if (animationTimer) stopAnimation();
+  if (animationTimer || animationStarting) stopAnimation();
   if (timelineTimer) stopTimeline();
   stopMacroRecording({
     notify: false,
@@ -2400,6 +2510,8 @@ function renderAllEditors() {
   renderKeyboard();
   renderColorKeyboard();
   renderAppLayers();
+  renderAudioSources();
+  refreshLivePreview();
   renderTimeline()
 }
 
@@ -2489,7 +2601,7 @@ function restoreLibrary(file) {
       if (!confirm(t('profile.confirmRestore', {
           count: Object.keys(data.profiles).length
         }))) return;
-      if (animationTimer) stopAnimation();
+      if (animationTimer || animationStarting) stopAnimation();
       if (timelineTimer) stopTimeline();
       localStorage.setItem('spade65-profiles', JSON.stringify(data.profiles));
       restoreLayoutPreferences(data);
@@ -2554,30 +2666,257 @@ async function streamFrame(colors = profile.colors) {
   }
 }
 
-function audioLevel() {
-  if (!audioAnalyser) return 0;
+function audioControls() {
+  const settings = liveSettings();
+  return {
+    sensitivity: settings.audio_sensitivity,
+    noiseGate: settings.audio_noise_gate,
+    smoothing: settings.audio_smoothing
+  }
+}
+
+function browserAudioSnapshot() {
+  if (!audioAnalyser) return null;
   const data = new Uint8Array(audioAnalyser.frequencyBinCount);
   audioAnalyser.getByteFrequencyData(data);
-  return data.reduce((sum, n) => sum + n, 0) / (data.length * 255)
+  const nyquist = (audioContext?.sampleRate || 48000) / 2,
+    minimumFrequency = 40,
+    maximumFrequency = Math.min(16000, nyquist),
+    bands = Array.from({
+      length: liveEffects.DEFAULT_BAND_COUNT
+    }, (_, index) => {
+      const ratio = index / Math.max(1, liveEffects.DEFAULT_BAND_COUNT - 1),
+        frequency = minimumFrequency * Math.pow(maximumFrequency / minimumFrequency, ratio),
+        bin = Math.max(1, Math.min(data.length - 1, Math.round(frequency / nyquist * data.length)));
+      return Math.max(data[bin - 1] || 0, data[bin] || 0, data[bin + 1] || 0) / 255
+    }),
+    level = bands.reduce((sum, value) => sum + value, 0) / Math.max(1, bands.length);
+  return {
+    scale: 'perceptual',
+    level,
+    peak: Math.max(0, ...bands),
+    bands
+  }
 }
-async function startAudio() {
-  if (audioAnalyser) return;
-  audioStream = await navigator.mediaDevices.getUserMedia({
-    audio: true
+
+function currentAudioFrame() {
+  const snapshot = browserAudioSnapshot() || audioRawSnapshot || {};
+  audioFrame = liveEffects.processAudioSnapshot(snapshot, audioControls(), audioFrame);
+  renderAudioMeter(audioFrame);
+  return audioFrame
+}
+
+function renderAudioMeter(frame = audioFrame) {
+  const level = Math.round(Math.max(0, Math.min(1, Number(frame?.peak || frame?.level || 0))) * 100),
+    fill = $('audioMeterFill'),
+    value = $('audioMeterValue');
+  if (fill) fill.style.width = `${level}%`;
+  if (value) value.textContent = `${level}%`;
+  $('audioMeter')?.setAttribute('aria-valuenow', String(level))
+}
+
+function renderAudioSources() {
+  const select = $('audioSource');
+  if (!select || !profile) return;
+  const settings = liveSettings(),
+    preferred = settings.audio_source;
+  select.innerHTML = '';
+  for (const source of audioSourceEntries) {
+    const option = document.createElement('option');
+    option.value = source.value;
+    option.textContent = source.kind === 'system' ? t('lighting.systemAudioSource', {
+      name: source.name
+    }) : source.id === 'default' ? t('lighting.defaultMicrophone') : t('lighting.microphoneSource', {
+      name: source.name
+    });
+    select.append(option)
+  }
+  const selected = liveEffects.preferredAudioSource(audioSourceEntries, preferred);
+  select.value = selected;
+  renderAudioControlState()
+}
+
+function renderAudioControlState() {
+  const enabled = Boolean($('audioSync')?.checked),
+    panel = $('audioControls'),
+    selected = audioSourceEntries.find(source => source.value === $('audioSource')?.value),
+    hint = $('audioSourceHint');
+  if (panel) panel.classList.toggle('disabled-controls', !enabled);
+  if (hint) {
+    const base = t(selected?.kind === 'system' ? 'lighting.systemAudioHint' : 'lighting.microphoneHint');
+    hint.textContent = selected?.kind === 'system' || !audioSystemError ? base : `${t('lighting.systemAudioFallback', {
+      error: audioSystemError
+    })} ${base}`
+  }
+  $('audioMeter')?.classList.toggle('active', enabled && Boolean(animationTimer || animationStarting))
+}
+
+async function withAudioTimeout(promise, milliseconds) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => timer = setTimeout(() => reject(new Error(t('lighting.audioEnumerationTimeout'))), milliseconds))
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function refreshAudioSources() {
+  const entries = [],
+    native = window.pywebview?.api;
+  audioSystemError = null;
+  if (native?.audio_capture_sources) {
+    try {
+      const result = await withAudioTimeout(native.audio_capture_sources(), 2000);
+      if (result?.error) audioSystemError = String(result.error);
+      for (const source of result?.sources || []) {
+        if (!source || typeof source.id !== 'string' || typeof source.name !== 'string') continue;
+        entries.push({
+          value: `native:${source.id}`,
+          id: source.id,
+          name: source.name,
+          kind: 'system',
+          default: source.default === true
+        })
+      }
+    } catch (error) {
+      audioSystemError = error.message || String(error);
+      console.warn('Unable to enumerate native audio sources', error)
+    }
+  } else audioSystemError = t('lighting.systemAudioNativeRequired');
+  entries.push({
+    value: 'microphone:default',
+    id: 'default',
+    name: t('lighting.defaultMicrophone'),
+    kind: 'microphone'
   });
-  audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(audioStream);
+  audioSourceEntries = entries;
+  renderAudioSources();
+  if (navigator.mediaDevices?.enumerateDevices) {
+    try {
+      const devices = await withAudioTimeout(navigator.mediaDevices.enumerateDevices(), 1000);
+      for (const device of devices.filter(item => item.kind === 'audioinput' && item.deviceId && item.deviceId !== 'default')) {
+        entries.push({
+          value: `microphone:${device.deviceId}`,
+          id: device.deviceId,
+          name: device.label || t('lighting.microphoneNumber', {
+            number: entries.filter(item => item.kind === 'microphone').length + 1
+          }),
+          kind: 'microphone'
+        })
+      }
+    } catch (error) {
+      console.warn('Unable to enumerate microphone inputs', error)
+    }
+  }
+  audioSourceEntries = entries;
+  renderAudioSources()
+}
+
+async function pollNativeAudio(generation) {
+  const native = window.pywebview?.api;
+  while (audioNativeRunning && generation === audioGeneration) {
+    try {
+      const snapshot = await native.audio_snapshot();
+      if (generation !== audioGeneration) return;
+      if (snapshot && typeof snapshot === 'object') audioRawSnapshot = snapshot;
+      if (snapshot?.error) throw new Error(snapshot.error)
+    } catch (error) {
+      if (generation !== audioGeneration) return;
+      stopAudio();
+      if (animationTimer) stopAnimation();
+      toast(t('lighting.audioUnavailable', {
+        error: error.message || String(error)
+      }), true);
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, 30))
+  }
+}
+
+async function beginAudioCapture() {
+  if (!audioSourceEntries.length) await refreshAudioSources();
+  const settings = liveSettings(),
+    selected = $('audioSource')?.value || settings.audio_source,
+    source = audioSourceEntries.find(item => item.value === selected) || audioSourceEntries[0];
+  if (!source) throw new Error(t('lighting.noAudioSources'));
+  const generation = ++audioGeneration;
+  audioRawSnapshot = null;
+  audioFrame = liveEffects.emptyAudioFrame();
+  if (source.kind === 'system') {
+    const native = window.pywebview?.api;
+    if (!native?.start_audio_capture || !native?.audio_snapshot) throw new Error(t('lighting.systemAudioNativeRequired'));
+    await native.start_audio_capture(source.id);
+    if (generation !== audioGeneration) {
+      await native.stop_audio_capture?.();
+      return
+    }
+    audioNativeRunning = true;
+    pollNativeAudio(generation);
+    return
+  }
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('lighting.microphoneUnsupported'));
+  const constraints = source.id === 'default' ? true : {
+    deviceId: {
+      exact: source.id
+    },
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false
+  };
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: constraints
+  });
+  if (generation !== audioGeneration) {
+    stream.getTracks().forEach(track => track.stop());
+    return
+  }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    stream.getTracks().forEach(track => track.stop());
+    throw new Error(t('lighting.microphoneUnsupported'))
+  }
+  audioStream = stream;
+  audioContext = new AudioContextClass();
+  await audioContext.resume();
+  const mediaSource = audioContext.createMediaStreamSource(stream);
   audioAnalyser = audioContext.createAnalyser();
-  audioAnalyser.fftSize = 256;
-  source.connect(audioAnalyser)
+  audioAnalyser.fftSize = 2048;
+  audioAnalyser.smoothingTimeConstant = 0;
+  mediaSource.connect(audioAnalyser);
+  for (const track of stream.getTracks()) track.onended = () => {
+    if (generation !== audioGeneration) return;
+    stopAudio();
+    if (animationTimer) stopAnimation();
+    toast(t('lighting.audioSourceEnded'), true)
+  }
+}
+
+async function startAudio() {
+  if (audioAnalyser || audioNativeRunning) return;
+  if (!audioStartPromise) audioStartPromise = beginAudioCapture().finally(() => audioStartPromise = null);
+  return audioStartPromise
 }
 
 function stopAudio() {
-  if (audioStream) audioStream.getTracks().forEach(track => track.stop());
-  if (audioContext) audioContext.close();
+  audioGeneration += 1;
+  const nativeWasRunning = audioNativeRunning;
+  audioNativeRunning = false;
+  if (nativeWasRunning) window.pywebview?.api?.stop_audio_capture?.().catch(error => console.warn('Unable to stop native audio capture', error));
+  if (audioStream) audioStream.getTracks().forEach(track => {
+    track.onended = null;
+    track.stop()
+  });
+  if (audioContext) audioContext.close().catch(() => {});
   audioStream = null;
   audioContext = null;
-  audioAnalyser = null
+  audioAnalyser = null;
+  audioRawSnapshot = null;
+  audioFrame = liveEffects.emptyAudioFrame();
+  renderAudioMeter(audioFrame);
+  renderAudioControlState()
 }
 
 function hexRgb(value) {
@@ -2595,11 +2934,7 @@ function paletteRgb(colors, position, gradient = true) {
   return palette[index].map((value, channel) => Math.round(value + (palette[next][channel] - value) * amount))
 }
 
-function blendRgb(base, top, alpha) {
-  return base.map((value, index) => Math.round(value * (1 - alpha) + top[index] * alpha))
-}
-
-function layerPixel(layer, key, x, y, index, level) {
+function layerPixel(layer, key, x, y, index, audioAmount) {
   if (layer.enabled === false || (layer.keys?.length && !layer.keys.includes(key))) return null;
   const speed = Number(layer.speed || 1),
     phase = animationPhase * speed,
@@ -2633,7 +2968,7 @@ function layerPixel(layer, key, x, y, index, level) {
     light = ((index * 31 + phase * 3) % 97) > 90 ? 1 : .08
   }
   if (layer.bump) light *= 1 - Math.abs((((position % 1) + 1) % 1) * 2 - 1);
-  if (layer.audio) light *= Math.min(1, level * 4);
+  if (layer.audio) light *= Math.max(0, Math.min(1, audioAmount));
   const color = paletteRgb(layer.colors, position, layer.gradient !== false),
     alpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100 * light));
   return {
@@ -2642,22 +2977,37 @@ function layerPixel(layer, key, x, y, index, level) {
   }
 }
 
-function animateColors() {
-  const level = audioLevel(),
+function composeAnimationColors(advance = false) {
+  const audio = currentAudioFrame(),
+    settings = liveSettings(),
     layers = appLayers(),
     frameColors = {};
   let index = 0;
   rows.forEach((row, y) => row.forEach((key, x) => {
-    let output = [0, 0, 0];
+    const pixels = [];
     for (const layer of layers) {
-      const pixel = layerPixel(layer, key, x, y, index, level);
-      if (pixel) output = blendRgb(output, pixel.color, pixel.alpha)
+      const influence = layer.audio ? liveEffects.audioInfluence(audio, settings.audio_mode, x / 14, y / 4) : 1,
+        pixel = layerPixel(layer, key, x, y, index, influence);
+      if (pixel) pixels.push(pixel)
     }
+    const output = liveEffects.compositePixels(pixels);
     frameColors[key] = '#' + output.map(value => value.toString(16).padStart(2, '0')).join('');
     index++
   }));
+  if (advance) animationPhase += 1;
+  return liveEffects.applyMasterBrightness(frameColors, settings.master_brightness)
+}
+
+function refreshLivePreview() {
+  if (!profile || !$('liveKeyboard')) return;
+  livePreviewColors = composeAnimationColors(false);
+  renderLiveKeyboard()
+}
+
+function animateColors() {
+  const frameColors = composeAnimationColors(true);
   livePreviewColors = frameColors;
-  animationPhase += 1;
+  renderLiveKeyboard();
   return streamFrame(frameColors)
 }
 
@@ -2671,27 +3021,37 @@ function hsl(h, s, l) {
 }
 async function toggleAnimation() {
   if (animationTimer) return stopAnimation();
+  if (animationStarting) return stopAnimation();
+  const generation = ++animationGeneration;
+  animationStarting = true;
+  renderAudioControlState();
   try {
     stopTimeline();
     saveAppLayer();
     if (appLayers().some(layer => layer.enabled !== false && layer.audio)) await startAudio();
+    if (generation !== animationGeneration || lightingMode !== 'live') return;
     $('animationBtn').textContent = t('action.stopLivePreview');
     animationTimer = setInterval(animateColors, 1000 / Number($('fps').value));
     animateColors();
     renderLiveEffectStatus()
   } catch (error) {
+    if (generation !== animationGeneration) return;
     stopAudio();
     toast(t('lighting.audioUnavailable', {
       error: error.message
     }), true)
+  } finally {
+    animationStarting = false;
+    renderAudioControlState()
   }
 }
 
 function stopAnimation() {
+  animationGeneration += 1;
   clearInterval(animationTimer);
   animationTimer = null;
-  livePreviewColors = null;
   stopAudio();
+  refreshLivePreview();
   $('animationBtn').textContent = t('action.startLivePreview');
   renderLiveEffectStatus()
 }
@@ -2775,6 +3135,7 @@ function playTimelineFrame() {
   }
   const frame = data.frames[timelineIndex++];
   livePreviewColors = cloneJson(frame.colors || {});
+  renderLiveKeyboard();
   streamFrame(livePreviewColors);
   renderLiveEffectStatus();
   timelineTimer = setTimeout(playTimelineFrame, Math.max(20, Math.min(60000, Number(frame.duration_ms || 100))))
@@ -2795,7 +3156,7 @@ function stopTimeline() {
   if (timelineTimer !== true) clearTimeout(timelineTimer);
   timelineTimer = null;
   timelineIndex = 0;
-  livePreviewColors = null;
+  refreshLivePreview();
   if ($('playTimelineBtn')) renderTimeline();
   renderLiveEffectStatus()
 }
@@ -3085,9 +3446,32 @@ $('appAngle').oninput = e => {
   $('appAngleOut').value = e.target.value;
   saveAppLayer()
 };
-$('animation').onchange = saveAppLayer;
-for (const id of ['appNumber', 'appGap', 'appFire', 'appCenterX', 'appCenterY', 'appGradient', 'appReverse', 'appBump', 'appBidirectional', 'audioSync']) $(id).onchange = saveAppLayer;
-document.querySelectorAll('.app-color').forEach(input => input.oninput = saveAppLayer);
+$('animation').onchange = () => saveAppLayer(true);
+for (const id of ['appNumber', 'appGap', 'appFire', 'appCenterX', 'appCenterY', 'appGradient', 'appReverse', 'appBump', 'appBidirectional']) $(id).onchange = () => saveAppLayer();
+document.querySelectorAll('.app-color').forEach(input => input.oninput = () => saveAppLayer());
+$('audioSync').onchange = audioReactiveChanged;
+$('liveBrightness').oninput = event => {
+  $('liveBrightnessOut').value = event.target.value;
+  saveLiveSettings()
+};
+$('audioSensitivity').oninput = event => {
+  $('audioSensitivityOut').value = event.target.value;
+  saveLiveSettings()
+};
+$('audioNoiseGate').oninput = event => {
+  $('audioNoiseGateOut').value = event.target.value;
+  saveLiveSettings()
+};
+$('audioSmoothing').oninput = event => {
+  $('audioSmoothingOut').value = event.target.value;
+  saveLiveSettings()
+};
+$('audioMode').onchange = saveLiveSettings;
+$('audioSource').onchange = async () => {
+  saveLiveSettings(true);
+  renderAudioControlState();
+  await restartAudioForLivePreview()
+};
 $('addAppLayerBtn').onclick = addAppLayer;
 $('removeAppLayerBtn').onclick = removeAppLayer;
 $('setAppRangeBtn').onclick = setAppRange;
@@ -3119,7 +3503,21 @@ $('applyColorsBtn').onclick = () => {
 };
 $('streamOnceBtn').onclick = async () => {
   saveAppLayer();
-  if (await animateColors()) $('liveEffectStatus').textContent = t('lighting.framePreviewed')
+  const needsAudio = appLayers().some(layer => layer.enabled !== false && layer.audio),
+    temporaryAudio = needsAudio && !audioAnalyser && !audioNativeRunning;
+  try {
+    if (temporaryAudio) {
+      await startAudio();
+      await new Promise(resolve => setTimeout(resolve, 80))
+    }
+    if (await animateColors()) $('liveEffectStatus').textContent = t('lighting.framePreviewed')
+  } catch (error) {
+    toast(t('lighting.audioUnavailable', {
+      error: error.message || String(error)
+    }), true)
+  } finally {
+    if (temporaryAudio) stopAudio()
+  }
 };
 $('animationBtn').onclick = toggleAnimation;
 $('captureFrameBtn').onclick = captureTimelineFrame;
@@ -3179,11 +3577,16 @@ async function initialize() {
   await refresh();
   const initialPage = location.hash.slice(1);
   activatePage(hasOwn(PAGE_HEADERS, initialPage) ? initialPage : 'device', false);
+  refreshAudioSources().catch(error => console.warn('Unable to refresh audio sources', error));
   setInterval(pollDeviceChanges, 2000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && recordingMacro) stopMacroRecording();
     if (!document.hidden) pollDeviceChanges()
   })
 }
-window.addEventListener('pywebviewready', refreshDesktopIntegration);
+window.addEventListener('pywebviewready', async () => {
+  await refreshDesktopIntegration();
+  await refreshAudioSources()
+});
+window.addEventListener('beforeunload', stopAudio);
 initialize().catch(error => toast(error.message, true));

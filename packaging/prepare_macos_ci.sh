@@ -8,11 +8,11 @@ fi
 
 mode=${1:?usage: prepare_macos_ci.sh download|install|verify|venv}
 runner_temp=${RUNNER_TEMP:?RUNNER_TEMP is required}
-installer_pkg="$runner_temp/python-3.13.15-macos11.pkg"
-installer_url=https://www.python.org/ftp/python/3.13.15/python-3.13.15-macos11.pkg
-installer_sha256=3b7eaf7f29825f796e8267024435540ddf1f17fc9a97ad58095daa7a75bfdcd3
-framework_python=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
-framework_library=/Library/Frameworks/Python.framework/Versions/3.13/Python
+installer_pkg="$runner_temp/python-3.12.10-macos11.pkg"
+installer_url=https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+installer_sha256=8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4
+framework_python=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
+framework_library=/Library/Frameworks/Python.framework/Versions/3.12/Python
 venv_dir="$runner_temp/spade65-build-venv"
 
 verify_installer() {

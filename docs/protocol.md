@@ -268,6 +268,22 @@ frame, ten AP-mode animation patterns, and audio-reactive modulation. Streaming
 remains restricted to the USB PID and a 64-byte output report `0x06` confirmed
 by the descriptor.
 
+Audio capture does not introduce another keyboard opcode. In the packaged
+desktop GUI, a PipeWire/PulseAudio monitor (Linux), WASAPI loopback (Windows),
+or CoreAudio tap on macOS 14.2+ is analyzed on the host; microphone input is an
+explicit fallback. Sensitivity 200–8000 (default 1000), noise gate, smoothing,
+and spectrum/bass/loudness mode are applied before the same five RGB chunks are
+built. Layer opacity is applied during compositing and master brightness to the
+final frame. Only compact level and band measurements cross the desktop bridge;
+raw PCM is not stored or passed to the local interface.
+
+Continuous audio-reactive streaming requires the GUI and Live preview to stay
+active and is not persisted to keyboard memory or delegated to the background
+service. The native paths have automated coverage; Linux monitor capture also
+identified a system-played 125 Hz tone on 2026-09-02, while Windows and macOS
+still require physical audio validation. None of this expands the firmware,
+bootloader, raw-write, or arbitrary-HID safety boundary.
+
 ## Data still required
 
 Retain from each hardware session:
@@ -278,6 +294,10 @@ Retain from each hardware session:
 3. The success or failure of each command together with the wired/dongle mode.
 4. If the keymap is written again, the profile that was applied and the profile
    used to restore it, so the change can be reversed without a readback.
+5. For audio-reactive validation, the selected system-output source, operating
+   system/audio server, response mode, control values, and whether the keyboard
+   followed a known music or video signal. Keep this separate from transport-
+   only streaming evidence.
 
 There is no need to begin with a firmware dump. The HID descriptor and a
 single-delta capture are far safer and sufficient to validate the configuration

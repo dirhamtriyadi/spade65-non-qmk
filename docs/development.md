@@ -15,6 +15,7 @@ spade65ctl.py
         ├── spade65.instance   # localhost instance identity/activation
         ├── spade65.gui        # loopback HTTP API + web assets
         ├── spade65.desktop    # PyWebView window + native bridge lifecycle
+        ├── spade65.system_audio # host capture + compact PCM analysis
         ├── spade65.tray       # Qt/WinForms/Cocoa system tray adapters
         ├── spade65.desktop_preferences # native-shell preferences
         ├── spade65.startup    # GUI login + background-service launchers
@@ -40,6 +41,10 @@ This separation is intentional:
 - `desktop.py` manages PyWebView, persistent storage, server/window lifecycle,
   downloads, activation of an existing instance, and the narrow JavaScript API
   for desktop integration.
+- `system_audio.py` lazily opens a packaged system-output backend—SoundCard
+  monitors on Linux or `pysysaudio` on Windows/macOS—and publishes only compact
+  level/peak/band snapshots. Raw PCM never crosses the `DesktopApi` bridge or
+  reaches disk.
 - `tray.py` attaches to the toolkit already selected by PyWebView: Qt on Linux,
   WinForms on Windows, and Cocoa on macOS. It does not add a second tray toolkit.
 - `desktop_preferences.py` persists close-to-tray independently of WebView
@@ -63,7 +68,12 @@ logic remain HTML/CSS/JavaScript rendered in a native PyWebView shell. The
 pythonnet/Edge WebView2 on Windows, and PyObjC/Cocoa/WebKit on macOS. The
 `cross-platform` extra still installs `hidapi` for Windows and macOS; do not add
 a write fallback when HIDAPI cannot read a descriptor. Windows requires Edge
-WebView2 Runtime on the host.
+WebView2 Runtime on the host. The same `desktop` extra supplies SoundCard for a
+PipeWire/PulseAudio monitor on Linux and, on Python 3.10–3.12, `pysysaudio` for
+WASAPI loopback on Windows or a CoreAudio tap on macOS 14.2+. The official
+Windows/macOS package jobs use Python 3.12.10 for that native wheel. Browser
+mode, and Windows/macOS source interpreters newer than 3.12, retain microphone-
+only Web Audio fallback because they have no usable native capture bridge.
 
 The desktop uses `private_mode=False` and an application-specific storage
 directory so `localStorage` is not lost when the window closes.
@@ -131,12 +141,14 @@ node --check spade65/web/key-events.js
 node --check spade65/web/usage-picker.js
 node --check spade65/web/external-links.js
 node --check spade65/web/clipboard.js
+node --check spade65/web/live-effects.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
 node tests/usage_picker.test.js
 node tests/external_links.test.js
 node tests/clipboard.test.js
+node tests/live_effects.test.js
 python spade65ctl.py rgb fixed --dry-run
 python spade65ctl.py sleep --light-off 10 --hibernate 30 --dry-run
 ```
@@ -152,10 +164,13 @@ renderers.
 Desktop-packaging changes must be tested on the target operating system. Every
 executable must pass `--smoke-test` without creating a window, opening a browser,
 enumerating devices, or writing HID before it is packaged. The smoke test imports
-the platform WebView backend and checks localhost assets and routes; lifecycle
-unit tests use a mock WebView so they do not require a display. Continue to test
-window close, **Quit application**, second-launch activation, import, and export
-downloads manually on the target operating system.
+the platform WebView backend, verifies the packaged audio runtime without
+opening a source, and checks localhost assets and routes; lifecycle unit tests
+use a mock WebView so they do not require a display. Continue to test window
+close, **Quit application**, second-launch activation, import, export downloads,
+system-output capture, microphone fallback, and audio-source termination
+manually on the target operating system. Automated audio coverage must not be
+reported as physical capture validation.
 
 The test workflow for every push to `main` runs a native Windows, Linux, and
 macOS packaging preflight without publishing. The tag workflow then installs the
@@ -182,6 +197,9 @@ See [`releasing.md`](releasing.md).
    foreign `Host` values and mismatched browser `Origin` values, and may expose
    only an allowlist of configuration actions with validated builders.
 9. JSON profiles are declarative data; never accept raw report bytes or packets.
+10. Audio capture may expose only bounded level, peak, and frequency-band values
+    to JavaScript. Never bridge, persist, log, or upload raw PCM, and never let
+    an audio source weaken the wired `0603:0351` streaming descriptor gate.
 
 ## Official-style keymap transaction
 

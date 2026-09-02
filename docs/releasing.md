@@ -97,8 +97,9 @@ Before publishing any assets, the pipeline:
   platform renderer backend in the bundle;
 - runs the executable smoke test without creating a window, opening a browser,
   enumerating devices, or writing HID reports; the test imports the WebView
-  backend and, on Windows and macOS, still loads the native HID extension so
-  broken binary dependencies are detected;
+  backend, verifies the packaged platform-audio backend without opening an
+  audio source, and, on Windows and macOS, still loads the native HID extension
+  so broken binary dependencies are detected;
 - tests an HTTP locale route from the bundle so missing PyInstaller data is
   detected;
 - builds and smoke-tests the x86_64 AppImage on an Ubuntu 22.04 runner (glibc
@@ -109,7 +110,8 @@ Before publishing any assets, the pipeline:
   console executable, including validation of the Edge WebView2 renderer;
 - builds a universal macOS application and checks every Mach-O file for both
   `x86_64` and `arm64` slices; the bundle uses Cocoa/WebKit and declares local
-  networking and microphone use for audio-reactive features;
+  networking, system-audio capture, and microphone fallback use for
+  audio-reactive features;
 - verifies and mounts the DMG read-only before the final smoke test;
 - refuses to publish if any of the three output files is missing or empty.
 
@@ -117,9 +119,16 @@ The packaging smoke test covers startup, desktop-runtime imports, resources,
 and application routes only. It does not open the interactive GUI, replace
 physical-keyboard testing, or send HID reports. Manual testing on every OS must
 still cover second-launch activation, close and quit behavior, browser fallback,
-the file picker, and export downloads.
+the file picker, export downloads, native system-output capture, and microphone
+fallback.
 
 ## Local builds
+
+Use Python 3.12.10 for Windows and macOS desktop artifacts so the pinned
+`pysysaudio` 0.1.3 native wheel is included; its published wheels do not support
+Python 3.13. The official Linux artifact continues to use Python 3.13 and
+SoundCard. This package-build choice is separate from the project's Python 3.10
+minimum for the core application.
 
 Install the project dependencies and build tools:
 
@@ -157,9 +166,11 @@ fails if it finds a single-architecture Mach-O file. A thin `hidapi` wheel is
 not sufficient. Use `bash packaging/build_macos_hidapi.sh`, the pinned
 universal2 helper documented in the packaging guide; it exports `ARCHFLAGS`,
 forces a source build with `--no-binary=:all:`, hash-checks the pinned `hidapi`
-sdist, and rejects a thin result. macOS uses Cocoa/WebKit through PyObjC, and the bundle
-metadata permits localhost traffic and explains the microphone prompt for
-audio-reactive features.
+sdist, and rejects a thin result. macOS uses Cocoa/WebKit through PyObjC, and the
+bundle metadata permits localhost traffic and explains the separate system-audio
+and microphone prompts for audio-reactive features. The CoreAudio tap requires
+macOS 14.2 or later; microphone fallback remains available on older supported
+macOS versions.
 
 The Windows build and its smoke test require the Edge WebView2 Runtime on the
 host. The Linux build requires an EGL loader, `curl`, and `sha256sum`. On

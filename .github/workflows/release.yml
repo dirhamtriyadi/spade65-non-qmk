@@ -61,12 +61,14 @@ jobs:
           node --check spade65/web/usage-picker.js
           node --check spade65/web/external-links.js
           node --check spade65/web/clipboard.js
+          node --check spade65/web/live-effects.js
           node --check spade65/web/app.js
           node tests/layout_state.test.js
           node tests/key_events.test.js
           node tests/usage_picker.test.js
           node tests/external_links.test.js
           node tests/clipboard.test.js
+          node tests/live_effects.test.js
 
   windows:
     needs: validate
@@ -77,7 +79,7 @@ jobs:
           ref: ${{ needs.validate.outputs.commit }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.13"
+          python-version: "3.12.10"
           architecture: x64
           cache: pip
       - name: Install build dependencies
@@ -114,7 +116,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes \
             libstdc++6 libgcc-s1 libgbm1 libfontconfig1 libfreetype6 \
-            libexpat1 libx11-6 libx11-xcb1 libasound2 libegl1 libgl1 \
+            libexpat1 libx11-6 libx11-xcb1 libasound2 libpulse0 libegl1 libgl1 \
             libxcb-shape0 libxcb-image0 libxcb-xkb1 \
             libxcb-icccm4 libxkbcommon-x11-0 libxcb-util1 libxcb-cursor0 \
             libxcb-keysyms1 libxcb-render-util0
