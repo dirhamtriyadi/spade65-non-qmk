@@ -1,6 +1,13 @@
+import json
+import re
+import shutil
+import subprocess
 import unittest
+from pathlib import Path
 
 from spade65.keymap import (
+    parse_usage,
+    HID_USAGES,
     BUTTON_TO_SLOT,
     DEFAULT_USAGES,
     MATRIX_KEY_NAMES,
@@ -211,6 +218,56 @@ class KeymapTests(unittest.TestCase):
         profile["layers"]["normal"]["a"] = {"macro": 4}
         with self.assertRaisesRegex(ValueError, "undefined macros"):
             compile_profile(profile)
+
+
+class WebUsageNameTests(unittest.TestCase):
+    """The recorder writes these names straight into a profile."""
+
+    def _producible(self) -> set[str]:
+        """Ask the mapper itself what it can emit.
+
+        Deriving the generated families here instead would only restate an
+        assumption: the leak that made profiles unappliable was in the function
+        key pattern, not in the table, so a hardcoded f1..f12 would have missed
+        it entirely.
+        """
+
+        if shutil.which("node") is None:
+            self.skipTest("node is required to enumerate the web usage mapper")
+        module = (
+            Path(__file__).resolve().parents[1] / "spade65" / "web" / "key-events.js"
+        )
+        script = f"""
+        const keys = require({str(module)!r});
+        const codes = [];
+        for (let c = 65; c <= 90; c += 1) codes.push("Key" + String.fromCharCode(c));
+        for (let d = 0; d <= 9; d += 1) codes.push("Digit" + d);
+        for (let f = 1; f <= 24; f += 1) codes.push("F" + f);
+        codes.push(...Object.keys(keys.USAGES));
+        const out = new Set();
+        for (const code of codes) {{
+          const usage = keys.usageForCode(code);
+          if (usage !== null) out.add(usage);
+        }}
+        console.log(JSON.stringify([...out]));
+        """
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, timeout=60
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return set(json.loads(result.stdout))
+
+    def test_every_name_the_recorder_can_emit_compiles(self) -> None:
+        # A browser code that produced a name HID_USAGES does not know made the
+        # recorded profile unappliable. F13..F24, which this keyboard
+        # advertises, used to leak through as "f13".
+        unknown = sorted(name for name in self._producible() if name not in HID_USAGES)
+        self.assertEqual(unknown, [])
+
+    def test_each_name_survives_the_profile_compiler(self) -> None:
+        for name in sorted(self._producible()):
+            with self.subTest(usage=name):
+                self.assertIsInstance(parse_usage(name), int)
 
 
 if __name__ == "__main__":

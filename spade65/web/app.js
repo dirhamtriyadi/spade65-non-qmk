@@ -2208,52 +2208,6 @@ function addEvent() {
   renderMacros()
 }
 
-function eventUsage(event) {
-  if (event.code.startsWith('Key')) return event.code.slice(3).toLowerCase();
-  if (event.code.startsWith('Digit')) return event.code.slice(5);
-  if (/^F\d+$/.test(event.code)) return event.code.toLowerCase();
-  return {
-    Enter: 'enter',
-    Escape: 'esc',
-    Backspace: 'backspace',
-    Tab: 'tab',
-    Space: 'space',
-    Minus: 'minus',
-    Equal: 'equal',
-    BracketLeft: 'left-bracket',
-    BracketRight: 'right-bracket',
-    Backslash: 'backslash',
-    Semicolon: 'semicolon',
-    Quote: 'quote',
-    Backquote: 'grave',
-    Comma: 'comma',
-    Period: 'dot',
-    Slash: 'slash',
-    CapsLock: 'caps-lock',
-    PrintScreen: 'print-screen',
-    ScrollLock: 'scroll-lock',
-    Pause: 'pause',
-    Insert: 'insert',
-    Home: 'home',
-    PageUp: 'page-up',
-    Delete: 'delete',
-    End: 'end',
-    PageDown: 'page-down',
-    ArrowRight: 'right',
-    ArrowLeft: 'left',
-    ArrowDown: 'down',
-    ArrowUp: 'up',
-    ControlLeft: 'left-ctrl',
-    ShiftLeft: 'left-shift',
-    AltLeft: 'left-alt',
-    MetaLeft: 'left-gui',
-    ControlRight: 'right-ctrl',
-    ShiftRight: 'right-shift',
-    AltRight: 'right-alt',
-    MetaRight: 'right-gui'
-  } [event.code] || null
-}
-
 function recordMacroEvent(event) {
   if (!recordingMacro || event.repeat) return;
   if (event.type === 'keydown' && event.key === 'Escape') {
@@ -2262,7 +2216,7 @@ function recordMacroEvent(event) {
     stopMacroRecording();
     return
   }
-  const usage = eventUsage(event);
+  const usage = keyEvents.usageForCode(event.code);
   if (!usage) return;
   const isDown = event.type === 'keydown';
   if (isDown && recordPressed.has(event.code) || !isDown && !recordPressed.has(event.code)) return;
@@ -2316,9 +2270,7 @@ function startMacroRecording() {
 
 function closeRecordedKeyPresses(macro) {
   for (const code of recordPressed) {
-    const usage = eventUsage({
-      code
-    });
+    const usage = keyEvents.usageForCode(code);
     if (!usage) continue;
     if (macro.events.length < 84) {
       macro.events.push({

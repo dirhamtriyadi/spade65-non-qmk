@@ -49,6 +49,65 @@
 
   const SPACE_BUTTONS = Object.freeze(["lspace", "mspace", "rspace"]);
 
+  // Browser code to the HID usage name compile_profile accepts. The macro
+  // recorder writes these straight into a profile, so a name the compiler does
+  // not know makes the whole profile unappliable.
+  const USAGES = Object.freeze({
+    Enter: "enter",
+    Escape: "esc",
+    Backspace: "backspace",
+    Tab: "tab",
+    Space: "space",
+    Minus: "minus",
+    Equal: "equal",
+    BracketLeft: "left-bracket",
+    BracketRight: "right-bracket",
+    Backslash: "backslash",
+    Semicolon: "semicolon",
+    Quote: "quote",
+    Backquote: "grave",
+    Comma: "comma",
+    Period: "dot",
+    Slash: "slash",
+    CapsLock: "caps-lock",
+    PrintScreen: "print-screen",
+    ScrollLock: "scroll-lock",
+    Pause: "pause",
+    Insert: "insert",
+    Home: "home",
+    PageUp: "page-up",
+    Delete: "delete",
+    End: "end",
+    PageDown: "page-down",
+    ArrowRight: "right",
+    ArrowLeft: "left",
+    ArrowDown: "down",
+    ArrowUp: "up",
+    ControlLeft: "left-ctrl",
+    ShiftLeft: "left-shift",
+    AltLeft: "left-alt",
+    MetaLeft: "left-gui",
+    ControlRight: "right-ctrl",
+    ShiftRight: "right-shift",
+    AltRight: "right-alt",
+    MetaRight: "right-gui",
+  });
+
+  function usageForCode(code) {
+    const name = String(code == null ? "" : code);
+    if (!name) return null;
+    if (/^Key[A-Z]$/.test(name)) return name.slice(3).toLowerCase();
+    if (/^Digit[0-9]$/.test(name)) return name.slice(5);
+    // The protocol defines f1 through f12 only. This keyboard advertises
+    // KEY_F13..KEY_F24, and passing "f13" through produced a profile the
+    // compiler rejected, so anything above f12 is left unmapped instead.
+    const fkey = /^F([1-9]|1[0-2])$/.exec(name);
+    if (fkey) return "f" + fkey[1];
+    return Object.prototype.hasOwnProperty.call(USAGES, name) ?
+      USAGES[name] :
+      null;
+  }
+
   function isIso(variant) {
     return String(variant || "").startsWith("iso");
   }
@@ -80,8 +139,10 @@
     HOST_RESERVED,
     SPACE_BUTTONS,
     UNOBSERVABLE,
+    USAGES,
     buttonsForCode,
     isHostReserved,
     isUnobservable,
+    usageForCode,
   });
 });
