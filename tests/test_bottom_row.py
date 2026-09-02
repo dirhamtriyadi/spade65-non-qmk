@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 from spade65.effects import KEY_ROWS
-from spade65.keymap import BUTTON_TO_SLOT, DEFAULT_USAGES
+from spade65.keymap import BUTTON_TO_SLOT, DEFAULT_USAGES, MATRIX_KEY_NAMES
 
 APP_JS = Path(__file__).resolve().parents[1] / "spade65" / "web" / "app.js"
 
@@ -118,10 +118,50 @@ class BottomRowTests(unittest.TestCase):
 
     def test_the_spacebar_this_board_has_types_a_space(self) -> None:
         # Only mspace is drawn on a standard board, and it is the one key of the
-        # three that this hardware could confirm. lspace/rspace belong to split
-        # boards; "rspace" names two matrix slots whose defaults disagree
-        # (92 is 0x00, 94 is 0x2c), which no hardware here can settle.
+        # three that this hardware could confirm. lspace and rspace belong to
+        # split boards; see the rspace ambiguity pinned below.
         self.assertEqual(DEFAULT_USAGES[BUTTON_TO_SLOT["mspace"]], 0x2C)
+
+    def test_the_unresolved_rspace_slot_ambiguity_is_recorded(self) -> None:
+        """Pin a known ambiguity so it is a decision, not an accident.
+
+        Two matrix slots are named ``rspace``. ``BUTTON_TO_SLOT`` builds from
+        ``MATRIX_KEY_NAMES.index``, so the name resolves to whichever comes
+        first, and nobody chose that. Their factory defaults disagree: slot 92
+        is 0x00, which is what unused slot 90 also holds, while slot 94 is
+        0x2c, the space a key called "right space" should type. That makes
+        slot 94 the likelier candidate, but likelier is not verified.
+
+        Only a split spacebar can settle it, and this hardware has one solid
+        bar, so there is no right-hand segment to press. The same shape of
+        argument -- a default usage that matches an observed function -- is
+        what wrongly suggested slot 93 drove the volume knob, and a write test
+        refuted that. So the table stays as transcribed.
+
+        rspace is drawn only by the split layouts, so nothing on a standard
+        board reaches this slot. If this test fails, the naming changed:
+        establish which slot the hardware uses before adjusting the mapping.
+        """
+
+        duplicates = [
+            index
+            for index, name in enumerate(MATRIX_KEY_NAMES)
+            if name == "rspace"
+        ]
+        self.assertEqual(duplicates, [92, 94])
+        self.assertEqual(BUTTON_TO_SLOT["rspace"], 92)
+        self.assertEqual(DEFAULT_USAGES[92], 0x00)
+        self.assertEqual(DEFAULT_USAGES[94], 0x2C)
+        # Slot 90 is unnamed and also 0x00, the pattern slot 92 follows.
+        self.assertEqual(MATRIX_KEY_NAMES[90], "")
+        self.assertEqual(DEFAULT_USAGES[90], 0x00)
+
+        for variant in ("ansi-standard", "iso-standard"):
+            with self.subTest(variant=variant):
+                self.assertNotIn("rspace", visible_bottom_row(variant))
+        for variant in ("ansi-split", "iso-split"):
+            with self.subTest(variant=variant):
+                self.assertIn("rspace", visible_bottom_row(variant))
 
 
 if __name__ == "__main__":

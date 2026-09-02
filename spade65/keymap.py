@@ -94,6 +94,17 @@ _ui_key_names[_VENDOR_RALT_INDEX], _ui_key_names[_VENDOR_RCTRL_INDEX] = (
 )
 UI_KEY_NAMES = tuple(_ui_key_names)
 
+# ``.index()`` takes the first match, which matters for exactly one name:
+# "rspace" appears at both slot 92 and slot 94, so it resolves to 92 by
+# ordering rather than by decision. Their factory defaults disagree -- 92 is
+# 0x00, the value unused slot 90 also holds, while 94 is 0x2c, the space a key
+# called "right space" should type -- which makes 94 the likelier candidate.
+# Likelier is not verified: only a split spacebar can settle it and this
+# project has never had one, since rspace is drawn by the split layouts alone.
+# Slot 93 next door carried the same shape of argument, a default matching an
+# observed function, and a write test proved it inert. So the mapping stays as
+# transcribed. tests/test_bottom_row.py pins this; read it before changing a
+# name in the tables above.
 BUTTON_TO_SLOT = {name: MATRIX_KEY_NAMES.index(name) for name in UI_KEY_NAMES}
 
 LAYER_NAMES = ("normal", "fn1", "fn2")
