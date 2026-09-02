@@ -19,6 +19,10 @@
   box-sizing: border-box
 }
 
+[hidden] {
+  display: none !important
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -193,9 +197,22 @@ h1 {
   white-space: nowrap
 }
 
-.profile-apply-bar > .hint {
+.profile-apply-bar > .apply-help {
   min-width: 0;
-  margin: 0 !important;
+  margin: 0
+}
+
+.apply-help summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px
+}
+
+.apply-help[open] summary {
+  color: var(--text)
+}
+
+.apply-help .hint {
   line-height: 1.45
 }
 
@@ -224,6 +241,10 @@ h1 {
   margin-top: 0
 }
 
+.card-heading > .pill {
+  align-self: flex-start
+}
+
 .page {
   display: none
 }
@@ -239,6 +260,406 @@ h1 {
   border-radius: 11px;
   padding: 20px;
   box-shadow: 0 16px 35px rgba(0, 0, 0, .12)
+}
+
+.workflow-card {
+  background: linear-gradient(135deg, rgba(42, 57, 47, .98), rgba(23, 33, 27, .98))
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none
+}
+
+.workflow-steps.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr))
+}
+
+.workflow-steps li {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(10, 16, 12, .42);
+  border: 1px solid var(--line);
+  border-radius: 8px
+}
+
+.workflow-steps li > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0
+}
+
+.workflow-steps strong {
+  color: var(--text);
+  font-size: 12px
+}
+
+.workflow-steps small {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis
+}
+
+.workflow-steps li.active {
+  background: rgba(226, 173, 85, .09);
+  border-color: var(--accent)
+}
+
+.workflow-steps li.complete .step-number {
+  color: #0d1a12;
+  background: var(--ok);
+  border-color: var(--ok)
+}
+
+.step-number {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--accent);
+  background: #111914;
+  border: 1px solid #586a5e;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800
+}
+
+.workflow-steps.compact {
+  margin-bottom: 18px
+}
+
+.empty-state {
+  display: grid;
+  gap: 7px;
+  place-items: center;
+  min-height: 170px;
+  padding: 28px;
+  color: var(--muted);
+  background: rgba(10, 16, 12, .34);
+  border: 1px dashed #4b5f52;
+  border-radius: 9px;
+  text-align: center
+}
+
+.empty-state strong {
+  color: var(--text);
+  font-size: 14px
+}
+
+.empty-state p {
+  max-width: 480px;
+  line-height: 1.5
+}
+
+.empty-state.compact {
+  min-height: 110px;
+  padding: 20px
+}
+
+.editor-fieldset {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0
+}
+
+.toolbar-group {
+  display: grid;
+  gap: 7px
+}
+
+.control-label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px
+}
+
+.keyboard-stage {
+  display: grid;
+  gap: 14px
+}
+
+.keyboard-stage-heading,
+.keyboard-legend,
+.color-editor-bar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between
+}
+
+.keyboard-stage-heading p {
+  color: var(--text)
+}
+
+.keyboard-legend {
+  justify-content: flex-end;
+  color: var(--muted);
+  font-size: 10px
+}
+
+.keyboard-legend > span {
+  display: flex;
+  gap: 6px;
+  align-items: center
+}
+
+.keyboard-legend .legend-dot {
+  width: 8px;
+  height: 8px;
+  background: #89958d;
+  border-radius: 50%
+}
+
+.keyboard-legend .legend-dot.selected {
+  background: var(--accent)
+}
+
+.keyboard-legend .legend-dot.assigned {
+  background: #d9d5c9;
+  box-shadow: 0 0 0 2px var(--accent)
+}
+
+.keyboard-scroll {
+  max-width: 100%;
+  padding: 3px 3px 18px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain
+}
+
+.key-assignment-card .selected-key {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  margin: 0;
+  background: #111914;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 16px
+}
+
+.draft-status {
+  padding: 10px 12px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  background: #111914;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 1.45
+}
+
+/* Card paragraphs reset their margins above. Keep status callouts separated
+   from the controls, grids, or empty states they summarize. */
+.card .draft-status {
+  margin: 14px 0 0
+}
+
+.draft-status.changed {
+  color: #ffe2aa;
+  border-color: #80632f
+}
+
+.inline-callout {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: var(--muted);
+  background: rgba(226, 173, 85, .07);
+  border: 1px solid #665332;
+  border-radius: 7px;
+  font-size: 11px
+}
+
+.feature-details {
+  margin-top: 16px;
+  background: rgba(10, 16, 12, .3);
+  border: 1px solid var(--line);
+  border-radius: 8px
+}
+
+.feature-details > summary {
+  padding: 13px 14px;
+  cursor: pointer;
+  list-style-position: inside
+}
+
+.feature-details > summary > span {
+  display: inline-grid;
+  gap: 3px;
+  margin-left: 5px
+}
+
+.feature-details > summary strong {
+  color: var(--text);
+  font-size: 12px
+}
+
+.feature-details > summary small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4
+}
+
+.feature-details[open] > summary {
+  border-bottom: 1px solid var(--line)
+}
+
+.details-body {
+  padding: 4px 14px 15px
+}
+
+.details-body h4 {
+  margin: 16px 0 6px
+}
+
+.mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px
+}
+
+.mode-switcher button {
+  display: grid;
+  gap: 5px;
+  min-height: 76px;
+  padding: 13px 15px;
+  color: var(--muted);
+  text-align: left
+}
+
+.mode-switcher button strong {
+  color: var(--text);
+  font-size: 13px
+}
+
+.mode-switcher button small {
+  line-height: 1.35
+}
+
+.mode-switcher button.active {
+  background: rgba(226, 173, 85, .11);
+  border-color: var(--accent)
+}
+
+.lighting-panel {
+  display: grid;
+  gap: 18px
+}
+
+.lighting-basic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px
+}
+
+.pill.success {
+  color: #bdf4d1;
+  border-color: #3f7654
+}
+
+.pill.live {
+  color: #ffd993;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(226, 173, 85, .08)
+}
+
+.live-effect-card h4 {
+  margin: 0 0 8px
+}
+
+.color-editor-bar {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #111914;
+  border: 1px solid var(--line);
+  border-radius: 8px
+}
+
+.color-editor-bar .selection-status {
+  line-height: 1.45
+}
+
+.macro-library,
+.macro-editor {
+  min-height: 420px
+}
+
+.macro-list button {
+  display: grid;
+  gap: 4px
+}
+
+.macro-list button strong {
+  color: inherit
+}
+
+.macro-list button small {
+  color: var(--muted);
+  font-size: 10px
+}
+
+.recording-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  color: #ffd7db;
+  background: rgba(116, 39, 48, .35);
+  border: 1px solid #87414b;
+  border-radius: 8px
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--danger);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(227, 93, 106, .13)
+}
+
+.recording-banner > span:not(.recording-dot) {
+  display: grid;
+  gap: 3px
+}
+
+.recording-banner small {
+  color: #efb8bd;
+  font-size: 10px;
+  line-height: 1.35
+}
+
+.next-step-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  margin-top: 16px;
+  background: rgba(226, 173, 85, .07);
+  border: 1px solid #665332;
+  border-radius: 8px
+}
+
+.next-step-card p {
+  margin-top: 5px
+}
+
+.next-step-card > .button-row {
+  justify-content: flex-end
 }
 
 .hero {
@@ -263,6 +684,7 @@ h1 {
 
 .badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 22px
 }
@@ -273,7 +695,8 @@ h1 {
   border: 1px solid #435448;
   padding: 6px 10px;
   border-radius: 99px;
-  font-size: 11px
+  font-size: 11px;
+  line-height: 1.35
 }
 
 .keyboard-art {
@@ -451,6 +874,10 @@ button.danger,
 .button-row {
   margin-top: 16px;
   flex-wrap: wrap
+}
+
+.button-row.flush {
+  margin-top: 0
 }
 
 .status-list {
@@ -898,7 +1325,18 @@ button.danger,
 }
 
 .disabled-card {
+  display: grid;
+  gap: 12px;
   opacity: .75
+}
+
+.disabled-card > h3,
+.disabled-card > p {
+  margin: 0
+}
+
+.disabled-card > .pill {
+  justify-self: start
 }
 
 .disabled-card .pill {
@@ -992,7 +1430,7 @@ th {
     align-items: start
   }
 
-  .profile-apply-bar > .hint {
+  .profile-apply-bar > .apply-help {
     grid-column: 1 / -1
   }
 }
@@ -1079,6 +1517,15 @@ th {
   .header-actions {
     flex-wrap: wrap;
     justify-content: flex-start
+  }
+
+  .workflow-steps.four {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  .macro-library,
+  .macro-editor {
+    min-height: 0
   }
 
 }
@@ -1212,6 +1659,21 @@ th {
     padding: 14px
   }
 
+  .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible
+  }
+
+  .sidebar nav button {
+    min-width: 0;
+    padding: 10px 5px;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: normal
+  }
+
   main {
     padding: 18px 14px 40px
   }
@@ -1237,7 +1699,7 @@ th {
     padding: 12px
   }
 
-  .profile-apply-bar > .hint {
+  .profile-apply-bar > .apply-help {
     grid-column: 2
   }
 
@@ -1298,6 +1760,43 @@ th {
     width: 100%
   }
 
+  .workflow-steps,
+  .workflow-steps.four,
+  .mode-switcher,
+  .lighting-basic-grid {
+    grid-template-columns: 1fr
+  }
+
+  .workflow-steps li {
+    min-height: 58px
+  }
+
+  .keyboard-stage-heading,
+  .color-editor-bar,
+  .next-step-card {
+    align-items: stretch;
+    flex-direction: column
+  }
+
+  .keyboard-legend {
+    flex-wrap: wrap;
+    justify-content: flex-start
+  }
+
+  .inline-callout {
+    align-items: stretch;
+    flex-direction: column
+  }
+
+  .recording-banner {
+    grid-template-columns: auto 1fr
+  }
+
+  .recording-banner button {
+    grid-column: 1 / -1;
+    width: 100%
+  }
+
   #toast {
     right: 14px;
     bottom: 14px;
@@ -1325,7 +1824,7 @@ th {
     grid-template-columns: 1fr
   }
 
-  .profile-apply-bar > .hint {
+  .profile-apply-bar > .apply-help {
     grid-column: auto
   }
 
@@ -1334,7 +1833,14 @@ th {
   }
 
   .apply-scopes {
-    align-items: stretch;
-    flex-direction: column
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px
+  }
+
+  .apply-scopes label {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 5px
   }
 }

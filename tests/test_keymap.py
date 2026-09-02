@@ -93,6 +93,75 @@ class KeymapTests(unittest.TestCase):
         self.assertEqual(len(compiled["macros"]), 1)
         self.assertEqual(compiled["matrix_colors"][17], (0x12, 0x34, 0x56))
 
+    def test_balanced_macro_allows_modifier_around_another_usage(self) -> None:
+        profile = profile_template()
+        profile["macros"] = [
+            {
+                "index": 0,
+                "repeat": 1,
+                "events": [
+                    {"delay_ms": 20, "usage": "left-ctrl", "pressed": True},
+                    {"delay_ms": 20, "usage": "c", "pressed": True},
+                    {"delay_ms": 20, "usage": "c", "pressed": False},
+                    {"delay_ms": 20, "usage": "left-ctrl", "pressed": False},
+                ],
+            }
+        ]
+
+        compiled = compile_profile(profile)
+
+        self.assertEqual(len(compiled["macros"]), 1)
+
+    def test_macro_rejects_key_up_before_key_down(self) -> None:
+        profile = profile_template()
+        profile["macros"] = [
+            {
+                "index": 0,
+                "events": [
+                    {"delay_ms": 20, "usage": "a", "pressed": False},
+                ],
+            }
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError, r"macro 0 event 1 has key-up before key-down.*0x04"
+        ):
+            compile_profile(profile)
+
+    def test_macro_rejects_duplicate_key_down(self) -> None:
+        profile = profile_template()
+        profile["macros"] = [
+            {
+                "index": 0,
+                "events": [
+                    {"delay_ms": 20, "usage": "a", "pressed": True},
+                    {"delay_ms": 20, "usage": "a", "pressed": True},
+                    {"delay_ms": 20, "usage": "a", "pressed": False},
+                ],
+            }
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError, r"macro 0 event 2 has duplicate key-down.*0x04"
+        ):
+            compile_profile(profile)
+
+    def test_macro_rejects_usage_still_held_at_end(self) -> None:
+        profile = profile_template()
+        profile["macros"] = [
+            {
+                "index": 0,
+                "events": [
+                    {"delay_ms": 20, "usage": "a", "pressed": True},
+                ],
+            }
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError, r"macro 0 ends with usages still held: 0x04"
+        ):
+            compile_profile(profile)
+
     def test_profile_template_compiles_the_vendor_tail_debounce(self) -> None:
         profile = profile_template()
 

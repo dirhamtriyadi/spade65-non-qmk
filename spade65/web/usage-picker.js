@@ -53,7 +53,13 @@
     return null;
   }
 
-  function filterGroups(groups, usages, query, labelForGroup = String) {
+  function filterGroups(
+    groups,
+    usages,
+    query,
+    labelForGroup = String,
+    labelForItem = String,
+  ) {
     const tokens = normalizeSearch(query).split(" ").filter(Boolean);
     const results = [];
     for (const [group, names] of Object.entries(groups || {})) {
@@ -66,8 +72,9 @@
         if (!Object.prototype.hasOwnProperty.call(usages || {}, name)) continue;
         const usage = Number(usages[name]);
         const hex = usageHex(usage);
+        const itemLabel = String(labelForItem(name));
         const itemSearch = normalizeSearch(
-          `${name} ${group} ${label} ${hex} ${usage}`,
+          `${name} ${itemLabel} ${group} ${label} ${hex} ${usage}`,
         );
         if (
           !tokens.length ||

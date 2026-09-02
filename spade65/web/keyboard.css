@@ -167,6 +167,16 @@
   width: min(100%, 900px);
 }
 
+.keyboard-scroll .keyboard {
+  min-width: 720px;
+}
+
+.keyboard .key:focus-visible {
+  z-index: 5;
+  outline: 3px solid #101612;
+  box-shadow: 0 0 0 5px var(--accent), inset 0 -3px rgb(46 43 39 / 38%);
+}
+
 @media (max-width: 900px) {
   .toolbar {
     align-items: stretch;

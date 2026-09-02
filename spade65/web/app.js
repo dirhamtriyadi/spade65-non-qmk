@@ -33,13 +33,20 @@ let meta = null,
   devicePollBusy = false,
   recordingMacro = false,
   recordingMacroTarget = null,
+  pendingMacroAssignment = null,
   recordLast = 0,
   recordPressed = new Set(),
   usagePickerItems = [],
   usagePickerActive = -1,
   desktopIntegration = null,
   lightingDraft = null,
-  lightingDraftProfile = null;
+  lightingDraftProfile = null,
+  lightingMode = null,
+  keymapDraftDirty = false,
+  assignmentEditorKey = null,
+  assignmentEditorDirty = false,
+  appliedMacroSnapshot = null,
+  livePreviewColors = null;
 const I18N_STORAGE_KEY = 'spade65-language',
   DEFAULT_LANGUAGE = 'en';
 const DEFAULT_LIGHTING = Object.freeze({
@@ -195,13 +202,14 @@ function renderLocalizedDynamic() {
   renderEffects();
   renderLightingControls();
   renderUsageList();
-  renderKeyboard();
   renderMacros();
+  renderKeyboard();
   renderAppLayers();
   renderTimeline();
   renderConnectionStatus();
   renderDiagnostics();
-  $('animationBtn').textContent = t(animationTimer ? 'action.stopAnimation' : 'action.startAnimation')
+  renderLiveEffectStatus();
+  $('animationBtn').textContent = t(animationTimer ? 'action.stopLivePreview' : 'action.startLivePreview')
 }
 async function initI18n() {
   seedEnglishCatalog();
@@ -417,11 +425,18 @@ const splitPositions = {
   }
 };
 
-function keyPosition(index) {
-  const family = layoutVariant.startsWith('iso') ? 'iso' : 'ansi',
+function keyPosition(index, variant = layoutVariant) {
+  const family = variant.startsWith('iso') ? 'iso' : 'ansi',
     positions = family === 'iso' ? isoPositions : ansiPositions;
-  if (layoutVariant.endsWith('split') && splitPositions[family][index]) return splitPositions[family][index];
+  if (variant.endsWith('split') && splitPositions[family][index]) return splitPositions[family][index];
   return positions[index]
+}
+
+function keyVisibleInLayout(key, variant = layoutVariant) {
+  const index = rows.flat().indexOf(key);
+  if (index < 0) return false;
+  const [, , width, height] = keyPosition(index, variant);
+  return Boolean(width && height)
 }
 
 async function api(action, data = {}, method = 'POST') {
@@ -477,6 +492,21 @@ function selectedLayoutDevice() {
   return path && meta ? meta.devices.find(item => item.path === path && item.usages.includes(layoutState.CONFIG_USAGE)) || null : null
 }
 
+function selectedDevice() {
+  const path = device();
+  return path && meta ? meta.devices.find(item => item.path === path) || null : null
+}
+
+function configurationReady() {
+  const selected = selectedDevice();
+  return Boolean(selected && selected.configuration_status === 'descriptor-gated' && selected.usages.includes(layoutState.CONFIG_USAGE))
+}
+
+function streamingReady() {
+  const selected = selectedDevice();
+  return Boolean(selected && selected.pid === '0351' && selected.usages.includes('ff55:0202'))
+}
+
 function storedDeviceLayouts() {
   return layoutState.parseDeviceLayouts(localStorage.getItem(LAYOUT_STORAGE_KEY))
 }
@@ -486,7 +516,23 @@ function saveDeviceLayouts(layouts) {
 }
 
 function applyLayoutDisplay(layout, connected, render = true) {
-  layoutVariant = layoutState.isValidLayout(layout) ? layout : layoutState.DEFAULT_LAYOUT;
+  const previousLayout = layoutVariant,
+    nextLayout = layoutState.isValidLayout(layout) ? layout : layoutState.DEFAULT_LAYOUT,
+    selectionHidden = selectedKey && !keyVisibleInLayout(selectedKey, nextLayout);
+  if (render && selectionHidden && assignmentEditorDirty && previousLayout !== nextLayout && !confirm(t('keymap.confirmLayoutDiscard', {
+      key: keyLabel(selectedKey)
+    }))) {
+    for (const id of ['layoutVariant', 'lightingLayoutVariant']) $(id).value = previousLayout;
+    return false
+  }
+  layoutVariant = nextLayout;
+  if (selectionHidden) {
+    if (assignmentEditorDirty && previousLayout !== nextLayout) toast(t('keymap.hiddenDraftDiscarded'), true);
+    selectedKey = null;
+    assignmentEditorKey = null;
+    assignmentEditorDirty = false
+  }
+  colorKeys = new Set([...colorKeys].filter(key => keyVisibleInLayout(key, nextLayout)));
   for (const id of ['layoutVariant', 'lightingLayoutVariant']) {
     const select = $(id);
     select.value = layoutVariant;
@@ -503,17 +549,19 @@ function applyLayoutDisplay(layout, connected, render = true) {
     renderColorKeyboard()
   }
   // Which keys exist to test depends on the selected layout.
-  if (render) renderTester()
+  if (render) renderTester();
+  return true
 }
 
 function syncLayoutFromSelectedDevice(render = true) {
   const result = layoutState.resolveLayout(selectedLayoutDevice(), storedDeviceLayouts(), localStorage.getItem(LEGACY_LAYOUT_STORAGE_KEY));
   activeLayoutKey = result.key;
+  if (!applyLayoutDisplay(result.layout, result.connected, render)) return false;
   if (result.connected) {
     if (result.changed) saveDeviceLayouts(result.layouts);
     localStorage.removeItem(LEGACY_LAYOUT_STORAGE_KEY)
   }
-  applyLayoutDisplay(result.layout, result.connected, render)
+  return true
 }
 
 function chooseLayout(value) {
@@ -522,9 +570,9 @@ function chooseLayout(value) {
     return
   }
   const layouts = storedDeviceLayouts();
+  if (!applyLayoutDisplay(value, true)) return;
   layouts[activeLayoutKey] = value;
   saveDeviceLayouts(layouts);
-  applyLayoutDisplay(value, true)
 }
 
 function restoreLayoutPreferences(data) {
@@ -587,19 +635,14 @@ async function loadSavedProfile(name) {
     await api('validate', {
       profile: item
     });
+    if (!mayLeaveAssignmentEditor(currentLayer, null)) {
+      renderSavedProfiles($('profileName').value);
+      return
+    }
     profile = item;
     $('profileName').value = name;
-    selectedKey = null;
-    activeMacro = 0;
-    activeAppLayer = 0;
-    renderLightingControls();
-    renderDebounceControl();
-    renderKeyboard();
+    renderAllEditors();
     renderTester();
-    renderColorKeyboard();
-    renderMacros();
-    renderAppLayers();
-    renderTimeline();
     toast(t('profile.loaded', {
       name
     }))
@@ -609,6 +652,7 @@ async function loadSavedProfile(name) {
   }
 }
 async function saveProfile() {
+  if (!requireCommittedAssignment()) return;
   try {
     await api('validate', {
       profile
@@ -665,6 +709,8 @@ async function refresh() {
     renderServiceSetup();
     renderConnectionStatus()
   } catch (error) {
+    renderLightingConnectionStatus(true);
+    $('applyProfileBtn').disabled = true;
     toast(error.message, true)
   }
 }
@@ -701,7 +747,9 @@ function renderConnectionStatus() {
     name: primary.name
   }) : t('status.noDevice');
   $('transportBadge').textContent = connected ? `${primary.transport} ${primary.vid}:${primary.pid}` : t('status.notConnected');
-  $('descriptorBadge').textContent = readOnlyReceiver ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable')
+  $('descriptorBadge').textContent = readOnlyReceiver ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable');
+  renderLightingConnectionStatus();
+  setProfileControlsRecordingLocked()
 }
 
 function renderDevices() {
@@ -724,7 +772,7 @@ function builtInEffects() {
 function renderEffects() {
   const select = $('effectSelect'),
     selected = select.value || DEFAULT_LIGHTING.effect,
-    effects = meta.effects;
+    effects = builtInEffects();
   select.innerHTML = '';
   for (const effect of effects) {
     const o = document.createElement('option'),
@@ -793,24 +841,26 @@ function ensureLightingDraft() {
 }
 
 function lightingForProfileApply() {
-  const controls = lightingFromControls(),
-    draft = ensureLightingDraft();
-  if (draft.effect === 'custom') return {
-    ...controls,
-    effect: 'custom',
-    colors: cloneJson(draft.colors)
-  };
-  return controls
+  // The visible mode owns the draft. Controls from another, currently hidden
+  // mode may contain newer values and must never leak into a scoped apply.
+  return cloneJson(ensureLightingDraft())
 }
 
 function selectBuiltInLightingDraft() {
   lightingDraft = lightingFromControls();
   lightingDraftProfile = profile;
+  setLightingMode('preset');
   renderLightingIntent()
 }
 
 function selectCustomLightingDraft() {
-  $('effectSelect').value = 'custom';
+  setLightingMode('per-key');
+  if (!Object.keys(profile.colors).length) {
+    lightingDraft = cloneJson(savedLighting() || DEFAULT_LIGHTING);
+    lightingDraftProfile = profile;
+    renderLightingIntent();
+    return false
+  }
   const controls = lightingFromControls();
   lightingDraft = {
     ...controls,
@@ -818,13 +868,14 @@ function selectCustomLightingDraft() {
     colors: cloneJson(profile.colors)
   };
   lightingDraftProfile = profile;
-  renderLightingIntent()
+  renderLightingIntent();
+  return true
 }
 
 function updateLightingDraftParameters() {
   const controls = lightingFromControls(),
     draft = ensureLightingDraft();
-  lightingDraft = draft.effect === 'custom' ? {
+  lightingDraft = lightingMode === 'per-key' || (draft.effect === 'custom' && lightingMode !== 'preset') ? {
     ...controls,
     effect: 'custom',
     colors: cloneJson(draft.colors)
@@ -833,16 +884,75 @@ function updateLightingDraftParameters() {
   renderLightingIntent()
 }
 
+function lightingValuesMatch(left, right) {
+  return Boolean(left && right && JSON.stringify(left) === JSON.stringify(right))
+}
+
 function renderLightingIntent() {
   const lighting = normalizedLighting(lightingDraft) || savedLighting() || DEFAULT_LIGHTING,
+    changed = !lightingValuesMatch(lighting, savedLighting()),
     effectKey = `effect.${lighting.effect}`,
-    translatedEffect = t(effectKey);
-  $('lightingSnapshotStatus').textContent = lighting.effect === 'custom' ?
+    translatedEffect = t(effectKey),
+    intent = lighting.effect === 'custom' ?
     t('lighting.snapshotCustom') :
     t('lighting.snapshotBuiltIn', {
       effect: translatedEffect === effectKey ? lighting.effect.replaceAll('-', ' ') : translatedEffect
     });
-  $('applyEffectBtn').disabled = lighting.effect === 'custom'
+  $('lightingSnapshotStatus').textContent = `${intent} · ${t(changed?'lighting.draftChanged':'lighting.draftMatches')}`;
+  $('lightingSnapshotStatus').classList.toggle('changed', changed);
+  renderPresetOptionState();
+  renderLightingConnectionStatus()
+}
+
+function chooseLightingMode(mode) {
+  if (mode === 'preset') return selectBuiltInLightingDraft();
+  if (mode === 'per-key') return selectCustomLightingDraft();
+  setLightingMode('live')
+}
+
+function setLightingMode(mode) {
+  if (!['preset', 'per-key', 'live'].includes(mode)) mode = 'preset';
+  if (lightingMode === 'live' && mode !== 'live') {
+    if (animationTimer) stopAnimation();
+    if (timelineTimer) stopTimeline()
+  }
+  lightingMode = mode;
+  document.querySelectorAll('[data-lighting-mode]').forEach(button => {
+    const active = button.dataset.lightingMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+    button.tabIndex = active ? 0 : -1
+  });
+  document.querySelectorAll('[data-lighting-panel]').forEach(panel => panel.hidden = panel.dataset.lightingPanel !== mode)
+}
+
+function renderLightingConnectionStatus(forceOffline = false) {
+  const target = $('lightingConnectionStatus');
+  if (!target) return;
+  const configurable = !forceOffline && configurationReady(),
+    streamable = !forceOffline && streamingReady();
+  if (!streamable && (animationTimer || timelineTimer)) {
+    if (animationTimer) stopAnimation();
+    if (timelineTimer) stopTimeline()
+  }
+  target.textContent = t(!configurable ? 'lighting.connectionOffline' : streamable ? 'lighting.connectionReady' : 'lighting.connectionDongle');
+  target.classList.toggle('success', configurable);
+  $('applyEffectBtn').disabled = !configurable;
+  $('applyColorsBtn').disabled = !configurable || !profile || Object.keys(profile.colors).length === 0;
+  $('streamOnceBtn').disabled = !streamable;
+  $('animationBtn').disabled = !streamable && !animationTimer;
+  $('playTimelineBtn').disabled = !profile || !timeline().frames.length || (!streamable && !timelineTimer)
+}
+
+function renderLiveEffectStatus() {
+  const target = $('liveEffectStatus');
+  if (!target) return;
+  target.classList.toggle('live', Boolean(animationTimer || timelineTimer));
+  if (animationTimer) target.textContent = t('lighting.liveRunning', {
+    fps: $('fps').value
+  });
+  else if (timelineTimer) target.textContent = t('lighting.timelineRunning');
+  else target.textContent = t('lighting.liveStopped')
 }
 
 function rememberLighting(value, target) {
@@ -884,16 +994,26 @@ function lightingFromControls() {
   return lighting
 }
 
+function renderPresetOptionState() {
+  const fixed = $('effectSelect').value === 'fixed',
+    multicolor = $('multicolor').checked;
+  $('multicolor').disabled = fixed;
+  $('colorIndex').disabled = !fixed && multicolor;
+  const hint = $('presetColorHint');
+  if (hint) hint.textContent = t(fixed ? 'lighting.fixedColorHint' : multicolor ? 'lighting.multicolorHint' : 'lighting.singleColorHint')
+}
+
 function renderLightingControls() {
   migrateProfileLighting(profile);
   const lighting = ensureLightingDraft();
-  $('effectSelect').value = meta.effects.includes(lighting.effect) ? lighting.effect : DEFAULT_LIGHTING.effect;
+  $('effectSelect').value = builtInEffects().includes(lighting.effect) ? lighting.effect : DEFAULT_LIGHTING.effect;
   $('brightness').value = lighting.brightness;
   $('brightnessOut').value = lighting.brightness;
   $('speed').value = lighting.speed;
   $('speedOut').value = lighting.speed;
   $('colorIndex').value = lighting.color_index;
   $('multicolor').checked = lighting.multicolor;
+  if (!lightingMode) setLightingMode(lighting.effect === 'custom' ? 'per-key' : 'preset');
   renderLightingIntent()
 }
 
@@ -920,11 +1040,18 @@ function selectedUsage() {
   return usagePicker.resolveUsage(meta.usages, $('usageInput').value)
 }
 
+function friendlyUsageName(value) {
+  const key = `usage.${value}`,
+    translated = t(key);
+  if (translated !== key) return translated;
+  return String(value).split('-').map(word => word.length === 1 ? word.toUpperCase() : word[0].toUpperCase() + word.slice(1)).join(' ')
+}
+
 function syncUsageSelection(preserveAdvanced = false) {
   if (!meta) return;
   const raw = $('usageInput').value.trim(),
     selected = selectedUsage(),
-    label = selected ? usagePicker.optionLabel(selected) : raw ? t('keymap.customUsageValue', {
+    label = selected ? `${friendlyUsageName(selected.name)} · ${selected.hex}` : raw ? t('keymap.customUsageValue', {
       value: raw
     }) : '';
   $('usageSearch').value = label;
@@ -944,7 +1071,8 @@ function renderUsageOptions(query = '') {
       meta?.usage_groups,
       meta?.usages,
       query,
-      usageGroupLabel
+      usageGroupLabel,
+      friendlyUsageName
     );
   options.innerHTML = '';
   usagePickerItems = [];
@@ -976,7 +1104,7 @@ function renderUsageOptions(query = '') {
       button.className = 'search-select-option';
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', String(item.name === selected?.name));
-      name.textContent = item.name;
+      name.textContent = friendlyUsageName(item.name);
       code.textContent = item.hex;
       button.append(name, code);
       button.onmouseenter = () => setUsagePickerActive(index, false);
@@ -1023,7 +1151,8 @@ function chooseUsage(index) {
   if (!item) return;
   $('usageInput').value = item.name;
   syncUsageSelection();
-  closeUsagePicker()
+  closeUsagePicker();
+  markAssignmentEditorDirty()
 }
 
 function usageSearchKeydown(event) {
@@ -1061,12 +1190,38 @@ function keyLabel(key) {
   return titles[key] || key.replace(/^n(?=\d)/, '')
 }
 
+function moveKeyboardFocus(container, current, direction) {
+  const origin = current.getBoundingClientRect(),
+    originX = origin.left + origin.width / 2,
+    originY = origin.top + origin.height / 2,
+    candidates = [...container.querySelectorAll('.key')].filter(button => button !== current).map(button => {
+      const bounds = button.getBoundingClientRect(),
+        deltaX = bounds.left + bounds.width / 2 - originX,
+        deltaY = bounds.top + bounds.height / 2 - originY,
+        inDirection = direction === 'left' ? deltaX < -1 : direction === 'right' ? deltaX > 1 : direction === 'up' ? deltaY < -1 : deltaY > 1,
+        primary = direction === 'left' || direction === 'right' ? Math.abs(deltaX) : Math.abs(deltaY),
+        secondary = direction === 'left' || direction === 'right' ? Math.abs(deltaY) : Math.abs(deltaX);
+      return {
+        button,
+        inDirection,
+        score: primary + secondary * 3
+      }
+    }).filter(item => item.inDirection).sort((a, b) => a.score - b.score);
+  if (!candidates.length) return;
+  current.tabIndex = -1;
+  candidates[0].button.tabIndex = 0;
+  candidates[0].button.focus()
+}
+
 function buildKeyboard(container, mode) {
   container.innerHTML = '';
+  const focusKey = mode === 'assign' ? selectedKey : mode === 'color' ? colorKeys.values().next().value : null;
   rows.flat().forEach((key, index) => {
     const [x, y, w, h] = keyPosition(index);
     if (!w || !h) return;
-    const b = document.createElement('button');
+    const b = document.createElement('button'),
+      customized = mode === 'assign' && hasOwn(profile.layers[currentLayer], key);
+    b.type = 'button';
     b.className = 'key';
     b.dataset.key = key;
     b.style.cssText = `--x:${x/7.57}%;--y:${y/2.36}%;--w:${w/7.57}%;--h:${h/2.36}%`;
@@ -1077,7 +1232,7 @@ function buildKeyboard(container, mode) {
       if (keyEvents.isUnobservable(key)) b.classList.add('unobservable');
       else if (keyEvents.isHostReserved(key)) b.classList.add('host-reserved')
     }
-    if (mode === 'assign' && profile.layers[currentLayer][key]) b.classList.add('assigned');
+    if (customized) b.classList.add('assigned');
     if (mode === 'assign' && selectedKey === key) b.classList.add('selected');
     if (mode === 'color' && colorKeys.has(key)) b.classList.add('selected');
     if (mode === 'color' && profile.colors[key]) {
@@ -1087,10 +1242,37 @@ function buildKeyboard(container, mode) {
       sw.style.background = Array.isArray(c) ? `rgb(${c.join(',')})` : c;
       b.append(sw)
     }
+    if (mode === 'assign') {
+      b.setAttribute('aria-pressed', String(selectedKey === key));
+      b.setAttribute('aria-label', t(customized ? 'keymap.keyCustomizedAria' : 'keymap.keyAria', {
+        key: keyLabel(key)
+      }))
+    }
+    if (mode === 'color') b.setAttribute('aria-pressed', String(colorKeys.has(key)));
     if (mode === 'tester') b.disabled = true;
-    else b.onclick = () => mode === 'assign' ? selectKey(key) : toggleColorKey(key);
+    else {
+      b.tabIndex = key === focusKey ? 0 : -1;
+      b.onkeydown = event => {
+        const direction = {
+          ArrowLeft: 'left',
+          ArrowRight: 'right',
+          ArrowUp: 'up',
+          ArrowDown: 'down'
+        } [event.key];
+        if (!direction) return;
+        event.preventDefault();
+        moveKeyboardFocus(container, b, direction)
+      };
+      b.onclick = () => {
+        mode === 'assign' ? selectKey(key) : toggleColorKey(key);
+        requestAnimationFrame(() => container.querySelector(`[data-key="${key}"]`)?.focus({
+          preventScroll: true
+        }))
+      }
+    }
     container.append(b)
-  })
+  });
+  if (mode !== 'tester' && !container.querySelector('.key[tabindex="0"]')) container.querySelector('.key')?.setAttribute('tabindex', '0')
 }
 
 function profileSettings() {
@@ -1129,13 +1311,59 @@ function rememberDebounce(value, target) {
   }
 }
 
+function assignmentIdentity(layer = currentLayer, key = selectedKey) {
+  return key ? `${layer}:${key}` : null
+}
+
+function markAssignmentEditorDirty() {
+  if (!selectedKey) return;
+  assignmentEditorKey = assignmentIdentity();
+  assignmentEditorDirty = true;
+  $('discardAssignmentBtn').disabled = false;
+  renderKeymapDraftStatus();
+  setProfileControlsRecordingLocked()
+}
+
+function mayLeaveAssignmentEditor(nextLayer = currentLayer, nextKey = selectedKey) {
+  if (!assignmentEditorDirty || assignmentEditorKey === assignmentIdentity(nextLayer, nextKey)) return true;
+  if (!confirm(t('keymap.confirmDiscardAssignment', {
+      key: keyLabel(selectedKey)
+    }))) return false;
+  assignmentEditorDirty = false;
+  return true
+}
+
+function requireCommittedAssignment() {
+  if (!assignmentEditorDirty) return true;
+  activatePage('keymap');
+  $('keyAssignmentEditor').scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  });
+  toast(t('keymap.saveBeforeApply'), true);
+  return false
+}
+
 function renderKeyboard() {
   buildKeyboard($('keyboard'), 'assign');
   renderLayerSummary();
-  $('selectedKey').textContent = selectedKey ? keyLabel(selectedKey) : t('common.none');
+  const hasSelection = Boolean(selectedKey),
+    layerName = currentLayer === 'normal' ? t('layer.normal') : currentLayer === 'fn1' ? 'Fn 1' : 'Fn 2';
+  $('selectedKey').textContent = hasSelection ? `${keyLabel(selectedKey)} · ${layerName}` : t('common.none');
+  $('keymapActiveLayer').textContent = layerName;
+  $('keymapEmptyState').hidden = hasSelection;
+  $('keyAssignmentEditor').hidden = !hasSelection;
+  $('keyAssignmentEditor').disabled = !hasSelection;
+  $('keymapStepKey').classList.toggle('active', !hasSelection);
+  $('keymapStepKey').classList.toggle('complete', hasSelection);
+  $('keymapStepAction').classList.toggle('active', hasSelection);
+  document.querySelectorAll('#layerTabs button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layer === currentLayer)));
   $('winLock').checked = !!profileSettings().win_lock;
   $('wasdArrows').checked = !!profileSettings().wasd_arrows;
-  if (selectedKey) loadAssignment()
+  if (hasSelection && (!assignmentEditorDirty || assignmentEditorKey !== assignmentIdentity())) loadAssignment();
+  $('discardAssignmentBtn').disabled = !assignmentEditorDirty;
+  renderKeymapDraftStatus();
+  setProfileControlsRecordingLocked()
 }
 
 function testerButtons() {
@@ -1190,13 +1418,48 @@ function resetTester() {
 
 function renderColorKeyboard() {
   buildKeyboard($('colorKeyboard'), 'color');
-  renderAppRangeSummary()
+  renderAppRangeSummary();
+  const selected = colorKeys.size,
+    colored = Object.keys(profile.colors).length;
+  $('colorSelectionStatus').textContent = t('lighting.colorSelectionStatus', {
+    selected,
+    colored
+  });
+  const selectionColored = selected > 0 && [...colorKeys].every(key => hasOwn(profile.colors, key));
+  setWorkflowStep('colorStepSelect', selected === 0 && colored === 0, selected > 0 || colored > 0);
+  setWorkflowStep('colorStepChoose', selected > 0 && !selectionColored, selectionColored);
+  setWorkflowStep('colorStepApply', colored > 0 && !(selected > 0 && !selectionColored), false);
+  $('setColorBtn').disabled = selected === 0;
+  $('clearColorsBtn').disabled = colored === 0;
+  $('applyColorsBtn').disabled = colored === 0 || !configurationReady()
+}
+
+function setWorkflowStep(id, active, complete) {
+  const step = $(id);
+  if (!step) return;
+  step.classList.toggle('active', active);
+  step.classList.toggle('complete', complete)
 }
 
 function selectKey(key) {
+  if (!mayLeaveAssignmentEditor(currentLayer, key)) return;
   selectedKey = key;
-  $('selectedKey').textContent = keyLabel(key);
-  renderKeyboard()
+  renderKeyboard();
+  if (pendingMacroAssignment !== null && profile.macros.some(macro => macro.index === pendingMacroAssignment)) {
+    $('assignmentType').value = 'macro';
+    $('macroAssign').value = pendingMacroAssignment;
+    pendingMacroAssignment = null;
+    assignmentTypeChanged();
+    markAssignmentEditorDirty();
+    $('keyAssignmentEditor').scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest'
+    })
+  }
+  if (window.matchMedia('(max-width: 640px)').matches) requestAnimationFrame(() => $('keyAssignmentEditor').scrollIntoView({
+    behavior: 'smooth',
+    block: 'start'
+  }))
 }
 
 function toggleColorKey(key) {
@@ -1207,6 +1470,7 @@ function toggleColorKey(key) {
 function loadAssignment() {
   const value = profile.layers[currentLayer][selectedKey];
   document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = false);
+  $('modifierDetails').open = false;
   if (value === undefined) {
     $('assignmentType').value = 'default';
     $('usageInput').value = ''
@@ -1218,17 +1482,41 @@ function loadAssignment() {
     $('assignmentType').value = 'usage';
     $('usageInput').value = typeof value === 'object' ? value.usage : value;
     const mods = typeof value === 'object' ? (value.modifiers || 0) : 0;
-    document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = !!(mods & Number(x.value)))
+    document.querySelectorAll('#modifierWrap input').forEach(x => x.checked = !!(mods & Number(x.value)));
+    $('modifierDetails').open = Boolean(mods)
   }
   assignmentTypeChanged();
-  syncUsageSelection()
+  syncUsageSelection();
+  assignmentEditorKey = assignmentIdentity();
+  assignmentEditorDirty = false
 }
 
 function assignmentTypeChanged() {
   const type = $('assignmentType').value;
   $('usageWrap').hidden = type !== 'usage';
-  $('modifierWrap').hidden = type !== 'usage';
-  $('macroWrap').hidden = type !== 'macro'
+  $('macroWrap').hidden = type !== 'macro';
+  $('macroAssignEmpty').hidden = type !== 'macro' || Boolean(profile.macros.length);
+  $('macroAssign').disabled = type === 'macro' && !profile.macros.length;
+  $('assignBtn').disabled = type === 'macro' && !profile.macros.length
+}
+
+function discardAssignmentEditorChange() {
+  if (!selectedKey || !assignmentEditorDirty) return;
+  loadAssignment();
+  renderKeyboard();
+  toast(t('keymap.editorDiscarded'))
+}
+
+function renderKeymapDraftStatus() {
+  const target = $('keymapDraftStatus');
+  if (!target) return;
+  target.textContent = t(assignmentEditorDirty ? 'keymap.editorUnsaved' : keymapDraftDirty ? 'keymap.draftChanged' : 'keymap.draftReady');
+  target.classList.toggle('changed', assignmentEditorDirty || keymapDraftDirty)
+}
+
+function markKeymapDraftChanged() {
+  keymapDraftDirty = true;
+  renderKeymapDraftStatus()
 }
 
 function saveAssignment() {
@@ -1256,6 +1544,10 @@ function saveAssignment() {
     $('usageInput').value = usage;
     syncUsageSelection()
   }
+  markKeymapDraftChanged();
+  assignmentEditorKey = assignmentIdentity();
+  assignmentEditorDirty = false;
+  renderMacros();
   renderKeyboard();
   toast(t('keymap.assignmentSaved', {
     key: keyLabel(selectedKey),
@@ -1269,16 +1561,11 @@ function renderLayerSummary() {
   for (const layer of ['normal', 'fn1', 'fn2']) {
     const div = document.createElement('div');
     div.textContent = t('keymap.assignments', {
-      layer: layer.toUpperCase(),
+      layer: layer === 'normal' ? t('layer.normal') : layer === 'fn1' ? 'Fn 1' : 'Fn 2',
       count: Object.keys(profile.layers[layer]).length
     });
     box.append(div)
   }
-  const div = document.createElement('div');
-  div.textContent = t('keymap.colors', {
-    count: Object.keys(profile.colors).length
-  });
-  box.append(div)
 }
 
 function backupKeys(name, keys) {
@@ -1306,6 +1593,7 @@ function toggleWinLock(enabled) {
     profile.layers.normal.win = 'disabled'
   } else if (!enabled && settings.win_lock) restoreKeys('win_lock_backup');
   settings.win_lock = enabled;
+  markKeymapDraftChanged();
   renderKeyboard();
   toast(t(enabled ? 'keymap.winDisabled' : 'keymap.winRestored'))
 }
@@ -1327,6 +1615,7 @@ function toggleWasdArrows(enabled) {
     })
   } else if (!enabled && settings.wasd_arrows) restoreKeys('wasd_arrows_backup');
   settings.wasd_arrows = enabled;
+  markKeymapDraftChanged();
   renderKeyboard();
   toast(t(enabled ? 'keymap.wasdSwapped' : 'keymap.wasdRestored'))
 }
@@ -1339,7 +1628,11 @@ function disableGroup(group) {
     controls: ['esc', 'bksp', 'tab', 'caps', 'enter', 'delete', 'pageup', 'pagedown', 'lshift', 'rshift', 'lctrl', 'rctrl', 'lalt', 'ralt', 'win', 'fn', 'up', 'down', 'left', 'right', 'lspace', 'mspace', 'rspace'],
     all: meta.buttons
   };
+  if (group === 'all' && !confirm(t('keymap.confirmDisableAll', {
+      layer: currentLayer === 'normal' ? t('layer.normal') : currentLayer === 'fn1' ? 'Fn 1' : 'Fn 2'
+    }))) return;
   for (const key of groups[group]) profile.layers[currentLayer][key] = 'disabled';
+  markKeymapDraftChanged();
   renderKeyboard();
   toast(t('keymap.groupDisabled', {
     group: t(group === 'all' ? 'group.allKeys' : `group.${group}`),
@@ -1350,6 +1643,7 @@ function disableGroup(group) {
 function undoDisabled() {
   for (const [key, value] of Object.entries(profile.layers[currentLayer]))
     if (value === 'disabled' || value === 0) delete profile.layers[currentLayer][key];
+  markKeymapDraftChanged();
   renderKeyboard();
   toast(t('keymap.disabledRemoved', {
     layer: currentLayer
@@ -1509,15 +1803,92 @@ function clearAppRange() {
 function renderAppRangeSummary() {
   const target = $('appRangeSummary');
   if (!target || !profile) return;
-  const keys = appLayer().keys || [];
+  const keys = appLayer().keys || [],
+    selected = colorKeys.size;
   target.textContent = keys.length ? t('lighting.currentRangeSelected', {
     count: keys.length
   }) : t('lighting.currentRangeAll')
+  $('setAppRangeBtn').disabled = selected === 0;
+  $('setAppRangeBtn').textContent = t('action.useSelectedRangeCount', {
+    count: selected
+  })
 }
 
 function macroDisplayName(macro) {
   return macro.name || t('macro.defaultName', {
     index: macro.index
+  })
+}
+
+function macroBindings(index) {
+  const bindings = [];
+  for (const [layer, assignments] of Object.entries(profile.layers))
+    for (const [key, value] of Object.entries(assignments))
+      if (typeof value === 'object' && value.macro === index) bindings.push({
+        layer,
+        key
+      });
+  return bindings
+}
+
+function macroUsageIdentity(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (hasOwn(meta?.usages || {}, normalized)) return String(meta.usages[normalized]);
+  const numeric = /^(?:0x[0-9a-f]+|0b[01]+|0o[0-7]+|\d+)$/.test(normalized) ? Number(normalized) : NaN;
+  return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255 ? String(numeric) : null
+}
+
+function macroSequenceIssue(macro) {
+  const held = new Set();
+  for (let index = 0; index < (macro?.events || []).length; index++) {
+    const event = macro.events[index],
+      usage = macroUsageIdentity(event.usage);
+    if (usage === null) return {
+      kind: 'unknown',
+      number: index + 1,
+      usage: String(event.usage || '—')
+    };
+    if (event.pressed) {
+      if (held.has(usage)) return {
+        kind: 'duplicate',
+        number: index + 1,
+        usage: event.usage
+      };
+      held.add(usage)
+    } else {
+      if (!held.has(usage)) return {
+        kind: 'release',
+        number: index + 1,
+        usage: event.usage
+      };
+      held.delete(usage)
+    }
+  }
+  if (held.size) {
+    const usage = [...held][0],
+      event = [...(macro?.events || [])].reverse().find(item => macroUsageIdentity(item.usage) === usage);
+    return {
+      kind: 'held',
+      usage: event?.usage ?? usage
+    }
+  }
+  return null
+}
+
+function macroIssueMessage(issue) {
+  if (!issue) return '';
+  return t(`macro.sequence.${issue.kind}`, issue)
+}
+
+function macroStateSnapshot(source = profile) {
+  const bindings = {};
+  for (const [layer, assignments] of Object.entries(source.layers)) {
+    bindings[layer] = Object.fromEntries(Object.entries(assignments).filter(([, value]) => typeof value === 'object' && value !== null && hasOwn(value, 'macro')))
+  }
+  return JSON.stringify({
+    macros: source.macros,
+    bindings
   })
 }
 
@@ -1527,7 +1898,15 @@ function renderMacros() {
   profile.macros.forEach((macro, i) => {
     const b = document.createElement('button');
     b.className = i === activeMacro ? 'active' : '';
-    b.textContent = `M${macro.index} · ${macroDisplayName(macro)} (${macro.events.length})`;
+    const name = document.createElement('strong'),
+      meta = document.createElement('small');
+    name.textContent = macroDisplayName(macro);
+    meta.textContent = t('macro.listMeta', {
+      index: macro.index,
+      count: macro.events.length,
+      bindings: macroBindings(macro.index).length
+    });
+    b.append(name, meta);
     b.disabled = recordingMacro;
     b.onclick = () => {
       activeMacro = i;
@@ -1536,11 +1915,39 @@ function renderMacros() {
     list.append(b)
   });
   const macro = profile.macros[activeMacro];
+  $('macroListEmpty').hidden = Boolean(profile.macros.length);
+  $('macroEditorEmpty').hidden = Boolean(macro);
+  $('macroEditorContent').hidden = !macro;
   $('macroTitle').textContent = macro ? `M${macro.index} · ${macroDisplayName(macro)}` : t('macro.editor');
   $('macroName').value = macro?.name ?? '';
   $('macroRepeat').value = macro?.repeat ?? 1;
   $('eventList').innerHTML = '';
   if (macro) macro.events.forEach((event, i) => renderEvent(event, i));
+  const eventCount = macro?.events.length ?? 0,
+    bindings = macro ? macroBindings(macro.index) : [],
+    sequenceIssue = macroSequenceIssue(macro),
+    sequenceValid = eventCount > 0 && !sequenceIssue,
+    applyReady = sequenceValid && bindings.length > 0,
+    applied = applyReady && appliedMacroSnapshot?.device === device() && appliedMacroSnapshot.state === macroStateSnapshot();
+  $('macroEventCount').textContent = t('macro.eventCount', {
+    count: eventCount
+  });
+  $('macroNoEvents').hidden = !macro || eventCount > 0 || recordingMacro;
+  $('macroSequenceStatus').hidden = !sequenceIssue;
+  $('macroSequenceStatus').textContent = macroIssueMessage(sequenceIssue);
+  $('macroRecordingBanner').hidden = !recordingMacro;
+  $('macroRecordingStatus').textContent = macro ? t('macro.recordingStatus', {
+    name: macroDisplayName(macro),
+    count: eventCount
+  }) : '';
+  $('macroBindingStatus').textContent = macro ? t(bindings.length ? 'macro.assignedStatus' : 'macro.unassignedStatus', {
+    count: bindings.length
+  }) : '';
+  $('macroNextStepTitle').textContent = t(eventCount === 0 ? 'macro.nextStepRecord' : sequenceIssue ? 'macro.nextStepFix' : bindings.length ? 'macro.nextStepAssigned' : 'macro.nextStep');
+  setWorkflowStep('macroStepCreate', !macro, Boolean(macro));
+  setWorkflowStep('macroStepRecord', Boolean(macro) && !sequenceValid, sequenceValid);
+  setWorkflowStep('macroStepAssign', sequenceValid && bindings.length === 0, sequenceValid && bindings.length > 0);
+  setWorkflowStep('macroStepApply', applyReady && !applied, applied);
   $('addMacroBtn').disabled = recordingMacro;
   $('deleteMacroBtn').disabled = !macro || recordingMacro;
   $('addEventBtn').disabled = !macro || recordingMacro;
@@ -1548,13 +1955,24 @@ function renderMacros() {
   $('macroRepeat').disabled = !macro || recordingMacro;
   $('recordMacroBtn').disabled = !macro;
   $('recordMacroBtn').hidden = recordingMacro;
-  $('stopMacroBtn').hidden = !recordingMacro;
   $('stopMacroBtn').disabled = !recordingMacro;
+  $('assignMacroToKeyBtn').disabled = !macro || !sequenceValid || recordingMacro;
+  $('prepareMacroApplyBtn').hidden = !macro || !sequenceValid || bindings.length === 0;
+  $('prepareMacroApplyBtn').disabled = recordingMacro;
+  setProfileControlsRecordingLocked();
   renderMacroAssign()
 }
 
+function setProfileControlsRecordingLocked() {
+  for (const id of ['applyProfileBtn', 'newProfileBtn', 'saveProfileBtn', 'deleteProfileBtn', 'importProfileBtn', 'vendorImportBtn', 'exportProfileBtn', 'backupLibraryBtn', 'restoreLibraryBtn', 'savedProfile', 'profileName']) {
+    const control = $(id);
+    if (control) control.disabled = recordingMacro || id === 'applyProfileBtn' && !configurationReady()
+  }
+}
+
 function renderMacroAssign() {
-  const s = $('macroAssign');
+  const s = $('macroAssign'),
+    selected = s.value;
   s.innerHTML = '';
   for (const macro of profile.macros) {
     const o = document.createElement('option');
@@ -1562,6 +1980,7 @@ function renderMacroAssign() {
     o.textContent = `M${macro.index} · ${macroDisplayName(macro)}`;
     s.append(o)
   }
+  if ([...s.options].some(option => option.value === selected)) s.value = selected
 }
 
 function renderEvent(event, index) {
@@ -1576,7 +1995,10 @@ function renderEvent(event, index) {
     number: index + 1
   }));
   delay.disabled = recordingMacro;
-  delay.onchange = () => event.delay_ms = Number(delay.value);
+  delay.onchange = () => {
+    event.delay_ms = Math.max(0, Math.min(32767, Number(delay.value) || 0));
+    renderMacros()
+  };
   const usage = document.createElement('input');
   usage.value = event.usage;
   usage.setAttribute('aria-label', t('macro.functionAria', {
@@ -1584,7 +2006,10 @@ function renderEvent(event, index) {
   }));
   usage.disabled = recordingMacro;
   usage.setAttribute('list', 'macroUsageList');
-  usage.onchange = () => event.usage = usage.value;
+  usage.onchange = () => {
+    event.usage = usage.value;
+    renderMacros()
+  };
   const state = document.createElement('select');
   for (const [value, key] of [
       ['true', 'macro.keyDown'],
@@ -1600,7 +2025,10 @@ function renderEvent(event, index) {
     number: index + 1
   }));
   state.disabled = recordingMacro;
-  state.onchange = () => event.pressed = state.value === 'true';
+  state.onchange = () => {
+    event.pressed = state.value === 'true';
+    renderMacros()
+  };
   const del = document.createElement('button');
   del.textContent = '×';
   del.className = 'danger';
@@ -1630,16 +2058,25 @@ function addMacro() {
     events: []
   });
   activeMacro = profile.macros.length - 1;
-  renderMacros()
+  renderMacros();
+  $('macroName').focus();
+  $('macroName').select()
 }
 
 function deleteMacro() {
   const macro = profile.macros[activeMacro];
   if (!macro) return;
+  const bindings = macroBindings(macro.index);
+  if (!confirm(t('macro.confirmDelete', {
+      name: macroDisplayName(macro),
+      count: bindings.length
+    }))) return;
   for (const layer of Object.values(profile.layers))
     for (const [key, value] of Object.entries(layer))
       if (typeof value === 'object' && value.macro === macro.index) delete layer[key];
+  if (pendingMacroAssignment === macro.index) pendingMacroAssignment = null;
   profile.macros.splice(activeMacro, 1);
+  if (bindings.length) markKeymapDraftChanged();
   activeMacro = Math.max(0, activeMacro - 1);
   renderMacros();
   renderKeyboard()
@@ -1648,11 +2085,15 @@ function deleteMacro() {
 function addEvent() {
   const macro = profile.macros[activeMacro];
   if (!macro) return;
-  if (macro.events.length >= 84) return toast(t('macro.maximumEvents'), true);
+  if (macro.events.length > 82) return toast(t('macro.maximumEvents'), true);
   macro.events.push({
     delay_ms: 20,
     usage: 'a',
-    pressed: macro.events.length % 2 === 0
+    pressed: true
+  }, {
+    delay_ms: 20,
+    usage: 'a',
+    pressed: false
   });
   renderMacros()
 }
@@ -1705,17 +2146,25 @@ function eventUsage(event) {
 
 function recordMacroEvent(event) {
   if (!recordingMacro || event.repeat) return;
+  if (event.type === 'keydown' && event.key === 'Escape') {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    stopMacroRecording();
+    return
+  }
   const usage = eventUsage(event);
   if (!usage) return;
   const isDown = event.type === 'keydown';
   if (isDown && recordPressed.has(event.code) || !isDown && !recordPressed.has(event.code)) return;
-  isDown ? recordPressed.add(event.code) : recordPressed.delete(event.code);
   const macro = recordingMacroTarget;
   if (!macro) {
     stopMacroRecording();
     return
   }
-  if (macro.events.length >= 84) {
+  const pressedAfter = recordPressed.size + (isDown ? 1 : -1);
+  // Reserve one release slot for every key that will still be held after this
+  // event. That guarantees Stop can never leave a key-down without a key-up.
+  if (macro.events.length + 1 + pressedAfter > 84) {
     stopMacroRecording({
       notify: false
     });
@@ -1723,13 +2172,20 @@ function recordMacroEvent(event) {
   }
   const now = performance.now();
   macro.events.push({
-    delay_ms: Math.max(0, Math.round(now - recordLast)),
+    delay_ms: macro.events.length ? Math.min(32767, Math.max(0, Math.round(now - recordLast))) : 0,
     usage,
     pressed: isDown
   });
+  isDown ? recordPressed.add(event.code) : recordPressed.delete(event.code);
   recordLast = now;
   event.preventDefault();
-  renderMacros()
+  renderMacros();
+  if (macro.events.length === 84 && recordPressed.size === 0) {
+    stopMacroRecording({
+      notify: false
+    });
+    toast(t('macro.maximumReached'))
+  }
 }
 
 function startMacroRecording() {
@@ -1748,11 +2204,31 @@ function startMacroRecording() {
   toast(t('macro.recording'))
 }
 
+function closeRecordedKeyPresses(macro) {
+  for (const code of recordPressed) {
+    const usage = eventUsage({
+      code
+    });
+    if (!usage) continue;
+    if (macro.events.length < 84) {
+      macro.events.push({
+        delay_ms: 0,
+        usage,
+        pressed: false
+      });
+    } else {
+      console.error('Macro recorder exhausted its reserved release slots');
+      break
+    }
+  }
+}
+
 function stopMacroRecording({
   notify = true,
   render = true
 } = {}) {
   if (!recordingMacro) return false;
+  if (recordingMacroTarget) closeRecordedKeyPresses(recordingMacroTarget);
   recordingMacro = false;
   recordingMacroTarget = null;
   recordPressed.clear();
@@ -1761,6 +2237,39 @@ function stopMacroRecording({
   if (render) renderMacros();
   if (notify) toast(t('macro.stopped'));
   return true
+}
+
+function assignActiveMacroToKey() {
+  const macro = profile.macros[activeMacro];
+  if (!macro) return;
+  if (!mayLeaveAssignmentEditor(currentLayer, null)) return;
+  pendingMacroAssignment = macro.index;
+  selectedKey = null;
+  activatePage('keymap');
+  renderKeyboard();
+  $('keyboard').scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  });
+  toast(t('macro.chooseKeyForAssignment', {
+    name: macroDisplayName(macro)
+  }))
+}
+
+function prepareMacroApply() {
+  const macro = profile.macros[activeMacro];
+  if (!macro) return;
+  const issue = macroSequenceIssue(macro);
+  if (issue) return toast(macroIssueMessage(issue), true);
+  if (!macro.events.length || !macroBindings(macro.index).length) return;
+  $('scopeKeymap').checked = true;
+  $('scopeMacros').checked = true;
+  $('applyProfileBtn').scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  });
+  $('applyProfileBtn').focus();
+  toast(t('macro.applyPrepared'))
 }
 
 async function doAction(action, payload, success, onSuccess = null) {
@@ -1784,8 +2293,19 @@ function selectedScopes() {
 }
 
 async function applyProfile() {
+  if (recordingMacro) stopMacroRecording();
+  if (!requireCommittedAssignment()) return;
   const scopes = selectedScopes();
   if (!scopes.length) return toast(t('profile.scopeEmpty'), true);
+  if (scopes.includes('macros')) {
+    const invalidMacro = profile.macros.find(macro => macroSequenceIssue(macro));
+    if (invalidMacro) {
+      activeMacro = profile.macros.indexOf(invalidMacro);
+      activatePage('macros');
+      renderMacros();
+      return toast(macroIssueMessage(macroSequenceIssue(invalidMacro)), true)
+    }
+  }
   if (!confirm(t('profile.confirmApply'))) return;
   const requestProfile = cloneJson(profile),
     writesLighting = scopes.includes('keymap') || scopes.includes('colors'),
@@ -1799,6 +2319,10 @@ async function applyProfile() {
     if (!requestProfile.settings || typeof requestProfile.settings !== 'object') requestProfile.settings = {};
     requestProfile.settings.debounce_ms = debounceMs
   }
+  const appliedMacroCandidate = scopes.includes('keymap') && scopes.includes('macros') ? {
+    device: device(),
+    state: macroStateSnapshot(requestProfile)
+  } : null;
   const payload = {
     profile: requestProfile,
     confirmed: true,
@@ -1807,7 +2331,15 @@ async function applyProfile() {
   if (writesLighting && previousLighting) payload.recovery_lighting = cloneJson(previousLighting);
   await doAction('profile', payload, t('profile.applied'), () => {
     if (appliedLighting) rememberLighting(appliedLighting, target);
-    if (writesKeymap) rememberDebounce(debounceMs, target)
+    if (writesKeymap) {
+      rememberDebounce(debounceMs, target);
+      keymapDraftDirty = false;
+      renderKeymapDraftStatus()
+    }
+    if (appliedMacroCandidate) {
+      appliedMacroSnapshot = appliedMacroCandidate;
+      renderMacros()
+    }
   })
 }
 async function downloadJson(data, name) {
@@ -1837,6 +2369,7 @@ async function downloadJson(data, name) {
   }
 }
 async function exportProfile() {
+  if (!requireCommittedAssignment()) return;
   try {
     await downloadJson(profile, `${$('profileName').value||'spade65-profile'}.json`)
   } catch (error) {
@@ -1845,18 +2378,27 @@ async function exportProfile() {
 }
 
 function renderAllEditors() {
+  if (animationTimer) stopAnimation();
+  if (timelineTimer) stopTimeline();
   stopMacroRecording({
     notify: false,
     render: false
   });
   selectedKey = null;
+  assignmentEditorKey = null;
+  assignmentEditorDirty = false;
+  pendingMacroAssignment = null;
   activeMacro = 0;
   activeAppLayer = 0;
+  keymapDraftDirty = false;
+  appliedMacroSnapshot = null;
+  lightingMode = null;
+  livePreviewColors = null;
   renderLightingControls();
   renderDebounceControl();
+  renderMacros();
   renderKeyboard();
   renderColorKeyboard();
-  renderMacros();
   renderAppLayers();
   renderTimeline()
 }
@@ -1869,6 +2411,10 @@ function importProfile(file) {
       await api('validate', {
         profile: data
       });
+      if (!mayLeaveAssignmentEditor(currentLayer, null)) {
+        $('profileFile').value = '';
+        return
+      }
       profile = data;
       renderSavedProfiles();
       renderAllEditors();
@@ -1889,6 +2435,10 @@ function importVendor(file) {
           document,
           profile
         });
+      if (!mayLeaveAssignmentEditor(currentLayer, null)) {
+        $('vendorFile').value = '';
+        return
+      }
       profile = migrateProfileLighting(result.profile);
       renderSavedProfiles();
       renderAllEditors();
@@ -1902,6 +2452,7 @@ function importVendor(file) {
   reader.readAsText(file)
 }
 async function backupLibrary() {
+  if (!requireCommittedAssignment()) return;
   try {
     await downloadJson({
       format: 'spade65-library-v1',
@@ -1938,6 +2489,8 @@ function restoreLibrary(file) {
       if (!confirm(t('profile.confirmRestore', {
           count: Object.keys(data.profiles).length
         }))) return;
+      if (animationTimer) stopAnimation();
+      if (timelineTimer) stopTimeline();
       localStorage.setItem('spade65-profiles', JSON.stringify(data.profiles));
       restoreLayoutPreferences(data);
       if (data.current_profile) profile = data.current_profile;
@@ -1974,23 +2527,28 @@ function setSelectedColor() {
 }
 
 function clearColors() {
+  if (Object.keys(profile.colors).length && !confirm(t('lighting.confirmClearColors'))) return;
   profile.colors = {};
   colorKeys.clear();
   selectCustomLightingDraft();
   renderColorKeyboard();
   renderLayerSummary()
 }
-async function streamFrame() {
-  if (streamBusy) return;
+async function streamFrame(colors = profile.colors) {
+  if (streamBusy) return false;
   streamBusy = true;
   try {
+    const requestProfile = cloneJson(profile);
+    requestProfile.colors = cloneJson(colors);
     await api('stream', actionPayload({
-      profile
-    }))
+      profile: requestProfile
+    }));
+    return true
   } catch (error) {
     stopAnimation();
     stopTimeline();
-    toast(error.message, true)
+    toast(error.message, true);
+    return false
   } finally {
     streamBusy = false
   }
@@ -2086,7 +2644,8 @@ function layerPixel(layer, key, x, y, index, level) {
 
 function animateColors() {
   const level = audioLevel(),
-    layers = appLayers();
+    layers = appLayers(),
+    frameColors = {};
   let index = 0;
   rows.forEach((row, y) => row.forEach((key, x) => {
     let output = [0, 0, 0];
@@ -2094,12 +2653,12 @@ function animateColors() {
       const pixel = layerPixel(layer, key, x, y, index, level);
       if (pixel) output = blendRgb(output, pixel.color, pixel.alpha)
     }
-    profile.colors[key] = '#' + output.map(value => value.toString(16).padStart(2, '0')).join('');
+    frameColors[key] = '#' + output.map(value => value.toString(16).padStart(2, '0')).join('');
     index++
   }));
+  livePreviewColors = frameColors;
   animationPhase += 1;
-  renderColorKeyboard();
-  streamFrame()
+  return streamFrame(frameColors)
 }
 
 function hsl(h, s, l) {
@@ -2116,9 +2675,10 @@ async function toggleAnimation() {
     stopTimeline();
     saveAppLayer();
     if (appLayers().some(layer => layer.enabled !== false && layer.audio)) await startAudio();
-    $('animationBtn').textContent = t('action.stopAnimation');
+    $('animationBtn').textContent = t('action.stopLivePreview');
     animationTimer = setInterval(animateColors, 1000 / Number($('fps').value));
-    animateColors()
+    animateColors();
+    renderLiveEffectStatus()
   } catch (error) {
     stopAudio();
     toast(t('lighting.audioUnavailable', {
@@ -2130,8 +2690,10 @@ async function toggleAnimation() {
 function stopAnimation() {
   clearInterval(animationTimer);
   animationTimer = null;
+  livePreviewColors = null;
   stopAudio();
-  $('animationBtn').textContent = t('action.startAnimation')
+  $('animationBtn').textContent = t('action.startLivePreview');
+  renderLiveEffectStatus()
 }
 
 function timeline() {
@@ -2187,8 +2749,9 @@ function renderTimeline() {
     row.append(label, duration, del);
     list.append(row)
   });
+  $('timelineEmpty').hidden = Boolean(data.frames.length);
   $('timelineLoop').checked = data.loop !== false;
-  $('playTimelineBtn').disabled = !data.frames.length;
+  $('playTimelineBtn').disabled = !data.frames.length || (!streamingReady() && !timelineTimer);
   $('playTimelineBtn').textContent = t(timelineTimer ? 'action.stopTimeline' : 'action.playTimeline')
 }
 
@@ -2211,9 +2774,9 @@ function playTimelineFrame() {
     else return stopTimeline()
   }
   const frame = data.frames[timelineIndex++];
-  profile.colors = cloneJson(frame.colors || {});
-  renderColorKeyboard();
-  streamFrame();
+  livePreviewColors = cloneJson(frame.colors || {});
+  streamFrame(livePreviewColors);
+  renderLiveEffectStatus();
   timelineTimer = setTimeout(playTimelineFrame, Math.max(20, Math.min(60000, Number(frame.duration_ms || 100))))
 }
 
@@ -2224,6 +2787,7 @@ function toggleTimeline() {
   timelineIndex = 0;
   timelineTimer = true;
   renderTimeline();
+  renderLiveEffectStatus();
   playTimelineFrame()
 }
 
@@ -2231,7 +2795,9 @@ function stopTimeline() {
   if (timelineTimer !== true) clearTimeout(timelineTimer);
   timelineTimer = null;
   timelineIndex = 0;
-  if ($('playTimelineBtn')) renderTimeline()
+  livePreviewColors = null;
+  if ($('playTimelineBtn')) renderTimeline();
+  renderLiveEffectStatus()
 }
 
 function renderDiagnostics() {
@@ -2360,6 +2926,7 @@ function activatePage(page, updateHash = true) {
     section = $(`page-${page}`);
   if (!header || !button || !section) return false;
   if (recordingMacro && page !== 'macros') stopMacroRecording();
+  if (pendingMacroAssignment !== null && page !== 'keymap') pendingMacroAssignment = null;
   document.querySelectorAll('#nav button').forEach(item => {
     const active = item === button;
     item.classList.toggle('active', active);
@@ -2368,6 +2935,12 @@ function activatePage(page, updateHash = true) {
   });
   document.querySelectorAll('.page').forEach(item => item.classList.toggle('active', item === section));
   updatePageHeader(page);
+  if (window.matchMedia('(min-width: 641px) and (max-width: 900px)').matches) {
+    const navigation = $('nav'),
+      navigationBounds = navigation.getBoundingClientRect(),
+      buttonBounds = button.getBoundingClientRect();
+    navigation.scrollLeft += buttonBounds.left - navigationBounds.left - (navigationBounds.width - buttonBounds.width) / 2
+  }
   if (page === 'tester') {
     // Leaving a key held while switching pages would strand it lit.
     testerPressed.clear();
@@ -2393,16 +2966,40 @@ externalLinks.bind(document, openExternalLink);
 $('closeToTray').onchange = event => setDesktopIntegration('set_close_to_tray', event.target.checked, 'desktop.closeToTraySaved');
 $('autoStartGui').onchange = event => setDesktopIntegration('set_auto_start', event.target.checked, event.target.checked ? 'desktop.autoStartEnabledSaved' : 'desktop.autoStartDisabledSaved');
 document.querySelectorAll('#layerTabs button').forEach(button => button.onclick = () => {
+  if (!mayLeaveAssignmentEditor(button.dataset.layer, selectedKey)) return;
   currentLayer = button.dataset.layer;
   document.querySelectorAll('#layerTabs button').forEach(x => x.classList.toggle('active', x === button));
   renderKeyboard()
 });
+document.querySelectorAll('[data-lighting-mode]').forEach(button => {
+  button.onclick = () => chooseLightingMode(button.dataset.lightingMode);
+  button.onkeydown = event => {
+    const tabs = [...document.querySelectorAll('[data-lighting-mode]')],
+      current = tabs.indexOf(button);
+    let next = null;
+    if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    chooseLightingMode(tabs[next].dataset.lightingMode);
+    tabs[next].focus()
+  }
+});
 $('languageSelect').onchange = event => setLanguage(event.target.value);
 $('quitBtn').onclick = quitApplication;
 for (const id of ['layoutVariant', 'lightingLayoutVariant']) $(id).onchange = e => chooseLayout(e.target.value);
-$('deviceSelect').onchange = () => syncLayoutFromSelectedDevice();
+$('deviceSelect').onchange = () => {
+  syncLayoutFromSelectedDevice();
+  renderConnectionStatus();
+  renderMacros()
+};
 $('refreshBtn').onclick = refresh;
-$('assignmentType').onchange = assignmentTypeChanged;
+$('assignmentType').onchange = () => {
+  assignmentTypeChanged();
+  markAssignmentEditorDirty()
+};
 $('usageSearch').onfocus = event => {
   event.target.select();
   if ($('usageOptions').hidden) openUsagePicker('')
@@ -2421,7 +3018,8 @@ $('usageToggle').onclick = () => {
 };
 $('customUsageInput').oninput = event => {
   $('usageInput').value = event.target.value;
-  syncUsageSelection(true)
+  syncUsageSelection(true);
+  markAssignmentEditorDirty()
 };
 $('customUsageDetails').ontoggle = event => {
   if (!event.target.open) return;
@@ -2433,6 +3031,10 @@ document.addEventListener('pointerdown', event => {
   closeUsagePicker()
 });
 $('assignBtn').onclick = saveAssignment;
+$('discardAssignmentBtn').onclick = discardAssignmentEditorChange;
+$('macroAssign').onchange = markAssignmentEditorDirty;
+document.querySelectorAll('#modifierWrap input').forEach(input => input.onchange = markAssignmentEditorDirty);
+$('goToMacrosFromKeymap').onclick = () => activatePage('macros');
 $('winLock').onchange = e => toggleWinLock(e.target.checked);
 $('wasdArrows').onchange = e => toggleWasdArrows(e.target.checked);
 document.querySelectorAll('.disable-group').forEach(button => button.onclick = () => disableGroup(button.dataset.group));
@@ -2459,8 +3061,14 @@ $('speed').oninput = e => {
   $('speedOut').value = e.target.value;
   updateLightingDraftParameters()
 };
-$('colorIndex').oninput = updateLightingDraftParameters;
+$('colorIndex').onchange = updateLightingDraftParameters;
 $('multicolor').onchange = updateLightingDraftParameters;
+$('fps').onchange = () => {
+  if (!animationTimer) return renderLiveEffectStatus();
+  clearInterval(animationTimer);
+  animationTimer = setInterval(animateColors, 1000 / Number($('fps').value));
+  renderLiveEffectStatus()
+};
 $('appSpeed').oninput = e => {
   $('appSpeedOut').value = e.target.value;
   saveAppLayer()
@@ -2495,7 +3103,7 @@ $('applyEffectBtn').onclick = () => {
 $('setColorBtn').onclick = setSelectedColor;
 $('clearColorsBtn').onclick = clearColors;
 $('applyColorsBtn').onclick = () => {
-  selectCustomLightingDraft();
+  if (!selectCustomLightingDraft()) return toast(t('lighting.addColorFirst'), true);
   const lighting = cloneJson(lightingDraft),
     target = lightingTarget(),
     requestProfile = cloneJson(profile);
@@ -2509,9 +3117,9 @@ $('applyColorsBtn').onclick = () => {
     rememberLighting(lighting, target)
   })
 };
-$('streamOnceBtn').onclick = () => {
+$('streamOnceBtn').onclick = async () => {
   saveAppLayer();
-  animateColors()
+  if (await animateColors()) $('liveEffectStatus').textContent = t('lighting.framePreviewed')
 };
 $('animationBtn').onclick = toggleAnimation;
 $('captureFrameBtn').onclick = captureTimelineFrame;
@@ -2522,6 +3130,8 @@ $('deleteMacroBtn').onclick = deleteMacro;
 $('addEventBtn').onclick = addEvent;
 $('recordMacroBtn').onclick = startMacroRecording;
 $('stopMacroBtn').onclick = () => stopMacroRecording();
+$('assignMacroToKeyBtn').onclick = assignActiveMacroToKey;
+$('prepareMacroApplyBtn').onclick = prepareMacroApply;
 $('macroName').onchange = e => {
   if (profile.macros[activeMacro]) {
     profile.macros[activeMacro].name = e.target.value.trim() || t('macro.defaultName', {
@@ -2531,7 +3141,10 @@ $('macroName').onchange = e => {
   }
 };
 $('macroRepeat').onchange = e => {
-  if (profile.macros[activeMacro]) profile.macros[activeMacro].repeat = Number(e.target.value)
+  if (profile.macros[activeMacro]) {
+    profile.macros[activeMacro].repeat = Math.max(0, Math.min(65535, Number(e.target.value) || 0));
+    renderMacros()
+  }
 };
 $('debounceBtn').onclick = () => {
   const milliseconds = currentDebounce(),

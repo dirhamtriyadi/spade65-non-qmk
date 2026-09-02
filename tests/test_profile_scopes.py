@@ -64,7 +64,10 @@ def _profile(
             {
                 "index": 0,
                 "repeat": 1,
-                "events": [{"delay_ms": 20, "usage": "a", "pressed": True}],
+                "events": [
+                    {"delay_ms": 20, "usage": "a", "pressed": True},
+                    {"delay_ms": 20, "usage": "a", "pressed": False},
+                ],
             }
         ]
     if bound:
@@ -978,7 +981,8 @@ class ScopedApplyTests(unittest.TestCase):
         candidate = javascript.split("function lightingForProfileApply()", 1)[
             1
         ].split("function selectBuiltInLightingDraft", 1)[0]
-        self.assertIn("colors: cloneJson(draft.colors)", candidate)
+        self.assertIn("return cloneJson(ensureLightingDraft())", candidate)
+        self.assertNotIn("lightingFromControls()", candidate)
         self.assertNotIn("colors: cloneJson(profile.colors)", candidate)
         apply_body = javascript.split("async function applyProfile()", 1)[1].split(
             "async function downloadJson", 1
@@ -1019,7 +1023,7 @@ class ScopedApplyTests(unittest.TestCase):
         self.assertNotIn("effect: 'custom'", migration)
         self.assertNotIn("colors: cloneJson", migration)
 
-    def test_web_represents_custom_lighting_in_the_effect_selector(self) -> None:
+    def test_web_separates_custom_lighting_from_the_preset_selector(self) -> None:
         javascript = (
             files("spade65.web")
             .joinpath("app.js")
@@ -1034,9 +1038,12 @@ class ScopedApplyTests(unittest.TestCase):
         custom = javascript.split("function selectCustomLightingDraft()", 1)[
             1
         ].split("function updateLightingDraftParameters", 1)[0]
-        self.assertIn("effects = meta.effects", renderer)
+        self.assertIn("effects = builtInEffects()", renderer)
+        self.assertNotIn("effects = meta.effects", renderer)
         self.assertIn("lighting.effect", controls)
-        self.assertIn("$('effectSelect').value = 'custom'", custom)
+        self.assertIn("effect: 'custom'", custom)
+        self.assertIn("setLightingMode('per-key')", custom)
+        self.assertNotIn("$('effectSelect').value = 'custom'", custom)
 
     def test_the_web_ui_is_told_the_scope_names(self) -> None:
         from spade65.gui import gui_metadata

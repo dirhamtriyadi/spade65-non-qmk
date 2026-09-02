@@ -49,6 +49,23 @@ test("a translated group name returns the complete group", () => {
   ]);
 });
 
+test("a translated function label is searchable", () => {
+  const itemLabels = name => ({
+    "play-pause": "Putar atau jeda",
+    "volume-up": "Naikkan volume",
+  })[name] || name;
+  const result = picker.filterGroups(
+    groups,
+    usages,
+    "naikkan volume",
+    labels,
+    itemLabels,
+  );
+  assert.deepEqual(result.flatMap(item => item.items.map(entry => entry.name)), [
+    "volume-up",
+  ]);
+});
+
 test("hex and decimal HID values are searchable", () => {
   assert.equal(
     picker.filterGroups(groups, usages, "0xa3", labels)[0].items[0].name,

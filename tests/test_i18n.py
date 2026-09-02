@@ -52,6 +52,20 @@ class TranslationKeyParser(HTMLParser):
                 self.keys.add(value)
 
 
+class IdParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ids: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        del tag
+        identifier = dict(attrs).get("id")
+        if identifier:
+            self.ids.append(identifier)
+
+
 class ExternalLinkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -198,6 +212,12 @@ class I18nTests(unittest.TestCase):
                 "snake-up-down",
                 "custom",
             )),
+            *(f"macro.sequence.{name}" for name in (
+                "duplicate",
+                "release",
+                "held",
+                "unknown",
+            )),
             *(f"subtitle.{name}" for name in (
                 "device",
                 "keymap",
@@ -217,6 +237,7 @@ class I18nTests(unittest.TestCase):
             "keymap.winRestored",
             "keymap.wasdSwapped",
             "keymap.wasdRestored",
+            "macro.nextStepFix",
             *(f"service.platform.{name}" for name in (
                 "linux",
                 "windows",
@@ -286,6 +307,79 @@ class I18nTests(unittest.TestCase):
         self.assertNotRegex(app_css, r"(?m)^\.keyboard \{")
         self.assertIn(".keyboard .key:disabled", keyboard_css)
         self.assertIn(".keyboard .key.assigned::after", keyboard_css)
+
+    def test_guided_editors_keep_advanced_controls_out_of_the_main_path(self) -> None:
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        javascript = (WEB / "app.js").read_text(encoding="utf-8")
+        app_css = (WEB / "app.css").read_text(encoding="utf-8")
+        compact = without_source_whitespace(javascript)
+
+        for marker in (
+            'id="keymapEmptyState"',
+            'id="keyAssignmentEditor" class="editor-fieldset" disabled hidden',
+            'id="lightingPresetPanel"',
+            'id="lightingPerKeyPanel"',
+            'id="lightingLivePanel"',
+            'id="macroListEmpty"',
+            'id="macroEditorEmpty"',
+            'id="macroRecordingBanner"',
+            'id="macroSequenceStatus"',
+            'id="assignMacroToKeyBtn"',
+            'id="prepareMacroApplyBtn"',
+            'class="keyboard-scroll"><div id="testerKeyboard"',
+        ):
+            self.assertIn(marker, html)
+        self.assertGreaterEqual(html.count('class="feature-details"'), 4)
+        self.assertIn(".workflow-steps", app_css)
+        self.assertIn(".mode-switcher", app_css)
+        self.assertIn(".empty-state", app_css)
+        self.assertIn(".card .draft-status", app_css)
+        self.assertIn(".button-row.flush", app_css)
+        disabled_card = app_css.split(".disabled-card {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: grid", disabled_card)
+        self.assertIn("gap: 12px", disabled_card)
+        self.assertIn("chooseLightingMode(button.dataset.lightingMode)", compact)
+        self.assertIn("$('keyAssignmentEditor').disabled=!hasSelection", compact)
+        self.assertIn("pendingMacroAssignment=macro.index", compact)
+        self.assertIn("assignmentEditorKey!==assignmentIdentity()", compact)
+        self.assertIn("selected.pid==='0351'", compact)
+        self.assertIn("macro.events.length+1+pressedAfter>84", compact)
+        self.assertIn("functionmacroSequenceIssue(macro)", compact)
+        self.assertIn("macro.events.push({delay_ms:20,usage:'a',pressed:true},{delay_ms:20,usage:'a',pressed:false})", compact)
+        self.assertIn("appliedMacroSnapshot?.device===device()", compact)
+        self.assertIn("state:macroStateSnapshot(requestProfile)", compact)
+        self.assertIn("Math.min(32767", compact)
+        self.assertNotIn("macro.events.splice(index,1);break", compact)
+
+        animation = javascript.split("function animateColors()", 1)[1].split(
+            "function hsl", 1
+        )[0]
+        playback = javascript.split("function playTimelineFrame()", 1)[1].split(
+            "function toggleTimeline", 1
+        )[0]
+        self.assertIn("frameColors[key]", animation)
+        self.assertNotIn("profile.colors[key]", animation)
+        self.assertNotIn("profile.colors =", playback)
+
+        macro_assignment = compact.split(
+            "functionassignActiveMacroToKey()", 1
+        )[1].split("functionprepareMacroApply()", 1)[0]
+        leave_guard = "if(!mayLeaveAssignmentEditor(currentLayer,null))return"
+        self.assertIn(leave_guard, macro_assignment)
+        self.assertLess(
+            macro_assignment.index(leave_guard),
+            macro_assignment.index("pendingMacroAssignment=macro.index"),
+        )
+
+    def test_html_ids_remain_unique(self) -> None:
+        parser = IdParser()
+        parser.feed((WEB / "index.html").read_text(encoding="utf-8"))
+        duplicates = sorted(
+            identifier
+            for identifier in set(parser.ids)
+            if parser.ids.count(identifier) > 1
+        )
+        self.assertEqual(duplicates, [])
 
     def test_i18n_runtime_keeps_english_fallback_and_persists_choice(self) -> None:
         javascript = (WEB / "app.js").read_text(encoding="utf-8")

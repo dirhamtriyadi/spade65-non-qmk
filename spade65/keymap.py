@@ -396,6 +396,31 @@ def _profile_lighting(data: dict[str, Any]) -> object:
     return None
 
 
+def _validate_macro_sequence(index: int, events: Sequence[MacroEvent]) -> None:
+    """Reject macro event streams that can leave a HID usage held."""
+
+    held: set[int] = set()
+    for event_index, event in enumerate(events, start=1):
+        if event.pressed:
+            if event.usage in held:
+                raise ValueError(
+                    f"macro {index} event {event_index} has duplicate key-down "
+                    f"for usage 0x{event.usage:02x}"
+                )
+            held.add(event.usage)
+            continue
+        if event.usage not in held:
+            raise ValueError(
+                f"macro {index} event {event_index} has key-up before key-down "
+                f"for usage 0x{event.usage:02x}"
+            )
+        held.remove(event.usage)
+
+    if held:
+        usages = ", ".join(f"0x{usage:02x}" for usage in sorted(held))
+        raise ValueError(f"macro {index} ends with usages still held: {usages}")
+
+
 def compile_profile(data: dict[str, Any]) -> dict[str, object]:
     if data.get("format") != "spade65-profile-v1":
         raise ValueError("unsupported profile format")
@@ -450,6 +475,7 @@ def compile_profile(data: dict[str, Any]) -> dict[str, object]:
                     pressed=bool(event.get("pressed")),
                 )
             )
+        _validate_macro_sequence(index, events)
         report = macro_report(
             index, events, repeat=int(macro.get("repeat", 1))
         )
