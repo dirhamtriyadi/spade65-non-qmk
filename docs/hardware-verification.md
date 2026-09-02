@@ -212,6 +212,39 @@ and their default usages disagree — slot 92 is `0x00` and slot 94 is `0x2c`.
 split spacebar would be needed to establish which slot is the real right space,
 so the table is left as transcribed rather than corrected on a guess.
 
+## Volume knob
+
+The knob does not go through the keymap. Read with `evtest` on the wired unit's
+consumer node — `/dev/input/event4`, the one that advertises `KEY_MUTE`,
+`KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `REL_HWHEEL` and `ABS_VOLUME`, not the
+boot-keyboard node that carries the modifiers — it reports Consumer Control
+usages directly:
+
+| Action | `MSC_SCAN` | Usage |
+| --- | --- | --- |
+| Turn left | `0x000c00ea` | Consumer `0xEA` Volume Decrement |
+| Turn right | `0x000c00e9` | Consumer `0xE9` Volume Increment |
+| Press | `0x000c00e2` | Consumer `0xE2` Mute |
+
+Rotation was never a keymap question: no matrix slot defaults to the vendor's
+private code for volume up (`0xA3`) or volume down (`0xA4`).
+
+The press looked more promising. Matrix slot 93 is named `mute` and defaults to
+`0xA2`, the private code for the very function the press reports, and the board
+carries no separate Mute key. That correspondence was tested rather than
+trusted: slot 93 was assigned the letter `a` in all three layers (status `0x80`,
+usage `0x04`), the keymap frame was accepted as a complete 620-byte write, and
+the knob still reported Consumer `0xE2` Mute. The default frame was then
+re-sent to restore it.
+
+So the match between slot 93's default and the observed press is a coincidence
+of the default table, not a functional link. The knob is handled entirely in
+firmware — rotation and press alike — and cannot be remapped or given per-layer
+behaviour. This also explains why the vendor bundle contains no knob
+configuration code: there is nothing there to configure. Slot 93 is deliberately
+left out of `UI_KEY_NAMES`; exposing it would offer an assignment that silently
+does nothing.
+
 ## Tests not performed
 
 - Dongle timers were not sent because the observed physical receiver is PID

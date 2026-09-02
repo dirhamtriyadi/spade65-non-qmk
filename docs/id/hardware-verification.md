@@ -219,6 +219,40 @@ dengan spacebar terbelah untuk memastikan slot mana yang benar-benar space
 kanan, sehingga tabelnya dibiarkan apa adanya alih-alih dikoreksi berdasarkan
 tebakan.
 
+## Knob volume
+
+Knob tidak melewati keymap. Dibaca dengan `evtest` pada node consumer unit
+berkabel — `/dev/input/event4`, node yang mengiklankan `KEY_MUTE`,
+`KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `REL_HWHEEL`, dan `ABS_VOLUME`, bukan node
+boot-keyboard yang membawa modifier — knob melaporkan usage Consumer Control
+secara langsung:
+
+| Aksi | `MSC_SCAN` | Usage |
+| --- | --- | --- |
+| Putar kiri | `0x000c00ea` | Consumer `0xEA` Volume Decrement |
+| Putar kanan | `0x000c00e9` | Consumer `0xE9` Volume Increment |
+| Tekan | `0x000c00e2` | Consumer `0xE2` Mute |
+
+Putaran memang tidak pernah menjadi urusan keymap: tidak ada slot matrix yang
+defaultnya kode privat vendor untuk volume up (`0xA3`) maupun volume down
+(`0xA4`).
+
+Tekanannya tampak lebih menjanjikan. Slot matrix 93 bernama `mute` dan
+defaultnya `0xA2`, kode privat untuk fungsi yang persis dilaporkan tekanan
+knob, sedangkan papan ini tidak punya tombol Mute terpisah. Korespondensi itu
+diuji, bukan dipercaya begitu saja: slot 93 diberi huruf `a` pada ketiga layer
+(status `0x80`, usage `0x04`), frame keymap diterima sebagai write utuh 620
+byte, dan knob tetap melaporkan Consumer `0xE2` Mute. Frame default lalu
+dikirim ulang untuk memulihkannya.
+
+Jadi kecocokan antara default slot 93 dan tekanan yang teramati adalah
+kebetulan tabel default, bukan hubungan fungsional. Knob ditangani sepenuhnya
+di firmware — putaran maupun tekanan — dan tidak dapat diremap atau diberi
+perilaku per layer. Ini sekaligus menjelaskan mengapa bundel vendor tidak
+memuat kode konfigurasi knob sama sekali: memang tidak ada yang bisa
+dikonfigurasi. Slot 93 sengaja tidak dimasukkan ke `UI_KEY_NAMES`; mengeksposnya
+berarti menawarkan assignment yang diam-diam tidak berpengaruh.
+
 ## Tidak dijalankan
 
 - Timer dongle tidak dikirim karena receiver fisik yang diamati memakai PID
