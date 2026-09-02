@@ -60,6 +60,39 @@ test("bass and spectrum modes use frequency bands rather than global loudness", 
   assert.equal(effects.audioInfluence(frame, "spectrum", 0.5, 0), 1);
 });
 
+test("a spectrum bar can reach the top row of the keyboard", () => {
+  // Five discrete rows have to be rasterised as five bands, not as five points
+  // on 0..1. Dividing by rowCount-1 puts the top row exactly at 1.0, which
+  // shapeLevel only reaches on a clipping signal, so the top row stayed dark.
+  const rowCount = 5;
+  const thresholds = [0, 1, 2, 3, 4].map(
+    row => 1 - effects.bandRowPosition(row, rowCount)
+  );
+  assert.deepEqual(
+    thresholds.map(value => Number(value.toFixed(2))),
+    [0.8, 0.6, 0.4, 0.2, 0]
+  );
+
+  const lit = level => {
+    const frame = effects.emptyAudioFrame();
+    frame.bands.fill(level);
+    return [0, 1, 2, 3, 4].filter(row => effects.audioInfluence(
+      frame, "spectrum", 0.5, effects.bandRowPosition(row, rowCount)
+    ) === 1).length;
+  };
+  assert.equal(lit(0), 1);
+  assert.equal(lit(0.5), 3);
+  assert.equal(lit(0.85), 5);
+  assert.equal(lit(1), 5);
+});
+
+test("row positions stay inside the keyboard for odd input", () => {
+  assert.equal(effects.bandRowPosition(-3, 5), 1 / 5);
+  assert.equal(effects.bandRowPosition(99, 5), 1);
+  assert.equal(effects.bandRowPosition(0, 1), 1);
+  assert.equal(effects.bandRowPosition(0, 0), 1);
+});
+
 test("band resampling preserves the requested shape", () => {
   assert.deepEqual(effects.resampleBands([0, 1], 4), [0, 0, 1, 1]);
   assert.deepEqual(effects.resampleBands([], 3), [0, 0, 0]);

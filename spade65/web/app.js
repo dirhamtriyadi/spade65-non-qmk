@@ -2986,7 +2986,7 @@ function composeAnimationColors(advance = false) {
   rows.forEach((row, y) => row.forEach((key, x) => {
     const pixels = [];
     for (const layer of layers) {
-      const influence = layer.audio ? liveEffects.audioInfluence(audio, settings.audio_mode, x / 14, y / 4) : 1,
+      const influence = layer.audio ? liveEffects.audioInfluence(audio, settings.audio_mode, x / 14, liveEffects.bandRowPosition(y, rows.length)) : 1,
         pixel = layerPixel(layer, key, x, y, index, influence);
       if (pixel) pixels.push(pixel)
     }

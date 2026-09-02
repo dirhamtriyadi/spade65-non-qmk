@@ -106,6 +106,17 @@
     return clamp(audio.bands[index]) >= 1 - y ? 1 : 0;
   }
 
+  function bandRowPosition(rowIndex, rowCount) {
+    // Rasterise a spectrum bar onto a fixed number of key rows. Each row owns a
+    // band of the bar's height, so the bottom row lights as soon as the band is
+    // audible and the top row lights at (rowCount-1)/rowCount. Spreading the
+    // rows across 0..1 instead would put the top row at exactly 1.0, which
+    // shapeLevel only reaches when the signal clips.
+    const total = Math.max(1, Math.trunc(Number(rowCount)) || 1);
+    const index = clamp(Math.trunc(Number(rowIndex)) || 0, 0, total - 1);
+    return (index + 1) / total;
+  }
+
   function preferredAudioSource(entries, preferred = "") {
     const sources = Array.isArray(entries) ? entries : [];
     const exact = sources.find(source => source && source.value === preferred);
@@ -153,6 +164,7 @@
     DEFAULT_BAND_COUNT,
     applyMasterBrightness,
     audioInfluence,
+    bandRowPosition,
     blendRgb,
     compositePixels,
     emptyAudioFrame,
