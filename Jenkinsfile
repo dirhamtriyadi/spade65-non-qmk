@@ -393,6 +393,8 @@ build_python="$PWD/.jenkins-venv/bin/python"
 "$build_python" -m pip freeze
 SPADE65_BUILD_PYTHON="$build_python" \
   bash packaging/build_macos_hidapi.sh
+SPADE65_BUILD_PYTHON="$build_python" \
+  bash packaging/build_macos_pysysaudio.sh
 if [[ -n ${RELEASE_TAG} ]]; then
   export SPADE65_VERSION=${RELEASE_TAG#v}
 fi

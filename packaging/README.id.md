@@ -220,8 +220,19 @@ resolved_python=$(python -c \
   'import pathlib, sys; print(pathlib.Path(sys.executable).resolve())')
 lipo "$resolved_python" -verify_arch x86_64 arm64
 bash packaging/build_macos_hidapi.sh
+bash packaging/build_macos_pysysaudio.sh
 python packaging/build.py
 ```
+
+`build_macos_pysysaudio.sh` menyelesaikan masalah yang sama dari arah
+sebaliknya. `pysysaudio` menerbitkan wheel arm64, x86_64, dan universal2 pada
+tag yang sama, dan pip memilih arsitektur tunggal yang cocok dengan runner —
+yang kemudian ditolak PyInstaller dengan `IncompatibleBinaryArchError` saat
+merakit aplikasi universal2. Helper ini memasang wheel universal2 resmi lewat
+URL dan SHA-256 yang dipatok, lalu memverifikasi ekstensinya dengan `lipo`.
+Helper tidak membangun dari sdist, karena `setup.py` proyek itu sendiri
+memakai `-mmacosx-version-min=14.2` untuk API ScreenCaptureKit yang
+dibungkusnya, sehingga tidak ada build 11.0 yang bisa dibuat.
 
 GitHub Actions memasang paket Python.org yang dipatok setelah memverifikasi
 SHA-256. Untuk build manual, pasang distribusi universal2 Python.org terbaru

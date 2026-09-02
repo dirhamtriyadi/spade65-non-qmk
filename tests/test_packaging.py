@@ -1,6 +1,7 @@
 import hashlib
 import io
 import importlib.util
+import re
 import tempfile
 import unittest
 import urllib.request
@@ -831,6 +832,7 @@ class PackagingTests(unittest.TestCase):
                 f"bash packaging/prepare_macos_ci.sh {mode}", macos_job
             )
         self.assertIn("bash packaging/build_macos_hidapi.sh", macos_job)
+        self.assertIn("bash packaging/build_macos_pysysaudio.sh", macos_job)
         self.assertNotIn("actions/setup-python@", macos_job)
 
         prepare = (ROOT / "packaging" / "prepare_macos_ci.sh").read_text(
@@ -866,6 +868,52 @@ class PackagingTests(unittest.TestCase):
         self.assertGreaterEqual(
             hid_build.count("-verify_arch x86_64 arm64"), 2
         )
+
+    def test_macos_system_audio_extension_is_pinned_universal2(self) -> None:
+        # pysysaudio ships arm64, x86_64 and universal2 wheels under the same
+        # tag. pip prefers the runner's single architecture, which PyInstaller
+        # then refuses with IncompatibleBinaryArchError while assembling a
+        # universal2 app, so the universal2 wheel has to be installed by hand.
+        script = ROOT / "packaging" / "build_macos_pysysaudio.sh"
+        self.assertTrue(script.is_file())
+        build = script.read_text(encoding="utf-8")
+        self.assertIn("macosx_14_0_universal2.whl", build)
+        self.assertIn(
+            "471466ea7eb0309746fc1b3f3106e6a403f5aab265fdd6608e2d21553a4664a5",
+            build,
+        )
+        self.assertIn("shasum -a 256 -c -", build)
+        self.assertIn("--force-reinstall", build)
+        self.assertGreaterEqual(
+            build.count("-verify_arch x86_64 arm64"), 2
+        )
+        # A different interpreter must fail loudly rather than silently leaving
+        # the thin wheel pip already selected in place.
+        self.assertIn("cp312", build)
+
+        for name in ("test.yml", "release.yml"):
+            workflow = (ROOT / ".github" / "workflows" / name).read_text(
+                encoding="utf-8"
+            )
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    "bash packaging/build_macos_pysysaudio.sh", workflow
+                )
+        jenkins = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
+        self.assertIn("bash packaging/build_macos_pysysaudio.sh", jenkins)
+
+    def test_the_pinned_audio_wheel_matches_the_declared_dependency(self) -> None:
+        # The wheel URL is pinned by hash, so a version bump in pyproject that
+        # forgets the script would ship a mismatched extension.
+        build = (ROOT / "packaging" / "build_macos_pysysaudio.sh").read_text(
+            encoding="utf-8"
+        )
+        project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        declared = re.search(r'"pysysaudio==([0-9.]+)', project)
+        self.assertIsNotNone(declared)
+        version = declared.group(1)
+        self.assertIn(f"pysysaudio_version={version}", build)
+        self.assertIn(f"pysysaudio-{version}-cp312", build)
 
 
 if __name__ == "__main__":

@@ -164,6 +164,8 @@ jobs:
           python -m PyInstaller --version
       - name: Build and verify universal2 HID extension
         run: bash packaging/build_macos_hidapi.sh
+      - name: Install and verify universal2 system-audio extension
+        run: bash packaging/build_macos_pysysaudio.sh
       - name: Build universal macOS disk image
         run: |
           export SPADE65_VERSION="${RELEASE_TAG#v}"

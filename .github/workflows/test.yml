@@ -108,5 +108,7 @@ jobs:
           python -m pip freeze
       - name: Build and verify universal2 HID extension
         run: bash packaging/build_macos_hidapi.sh
+      - name: Install and verify universal2 system-audio extension
+        run: bash packaging/build_macos_pysysaudio.sh
       - name: Build and smoke-test universal macOS disk image
         run: python packaging/build.py
