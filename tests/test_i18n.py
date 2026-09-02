@@ -351,15 +351,26 @@ class I18nTests(unittest.TestCase):
         self.assertIn("Math.min(32767", compact)
         self.assertNotIn("macro.events.splice(index,1);break", compact)
 
-        composition = javascript.split("function composeAnimationColors", 1)[1].split(
+        # The composer moved into live-effects.js so it can be tested without a
+        # browser; the rule it has to keep is that a preview frame is built
+        # fresh and never reads or writes the saved per-key colours.
+        effects_source = (WEB / "live-effects.js").read_text(encoding="utf-8")
+        composition = effects_source.split("function composeFrame", 1)[1].split(
+            "\n  function ", 1
+        )[0]
+        self.assertIn("colors[key]", composition)
+        self.assertIn("applyMasterBrightness", composition)
+        self.assertNotIn("profile", composition)
+
+        wrapper = javascript.split("function composeAnimationColors", 1)[1].split(
             "function refreshLivePreview", 1
         )[0]
+        self.assertIn("liveEffects.composeFrame", wrapper)
+        self.assertNotIn("profile.colors", wrapper)
+
         playback = javascript.split("function playTimelineFrame()", 1)[1].split(
             "function toggleTimeline", 1
         )[0]
-        self.assertIn("frameColors[key]", composition)
-        self.assertNotIn("profile.colors[key]", composition)
-        self.assertIn("applyMasterBrightness", composition)
         self.assertNotIn("profile.colors =", playback)
 
         macro_assignment = compact.split(

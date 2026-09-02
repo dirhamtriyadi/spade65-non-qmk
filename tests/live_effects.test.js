@@ -107,3 +107,102 @@ test("system output is preferred without overwriting an unavailable preference",
   assert.equal(effects.preferredAudioSource(sources, "microphone:default"), "microphone:default");
   assert.equal(effects.preferredAudioSource(sources, "native:missing"), "native:system:default");
 });
+
+test("palette lookup interpolates and tolerates a single colour", () => {
+  assert.deepEqual(effects.hexRgb("#ff8000"), [255, 128, 0]);
+  assert.deepEqual(effects.paletteRgb(["#000000", "#ffffff"], 0.5), [128, 128, 128]);
+  assert.deepEqual(effects.paletteRgb(["#00ff00"], 0.7), [0, 255, 0]);
+  // No colours at all must still produce a pixel rather than throwing.
+  assert.deepEqual(effects.paletteRgb([], 0), [255, 0, 0]);
+  // Gradient off snaps to the first entry.
+  assert.deepEqual(effects.paletteRgb(["#000000", "#ffffff"], 0.9, false), [0, 0, 0]);
+});
+
+test("a layer pixel honours enable, key filter and opacity", () => {
+  const layer = { mode: "breathe", colors: ["#ffffff"], opacity: 100 };
+  assert.equal(effects.layerPixel({ ...layer, enabled: false }, "a", 0, 0, 0, 1, 0), null);
+  assert.equal(effects.layerPixel({ ...layer, keys: ["b"] }, "a", 0, 0, 0, 1, 0), null);
+  assert.ok(effects.layerPixel({ ...layer, keys: ["a"] }, "a", 0, 0, 0, 1, 0));
+  const dim = effects.layerPixel({ ...layer, opacity: 50 }, "a", 0, 0, 0, 1, 0);
+  const full = effects.layerPixel(layer, "a", 0, 0, 0, 1, 0);
+  assert.ok(dim.alpha < full.alpha);
+});
+
+test("phase is an argument, so the same inputs give the same pixel", () => {
+  // layerPixel used to read a module-level animationPhase, which made it
+  // impossible to exercise a specific frame.
+  const layer = { mode: "wave", colors: ["#000000", "#ffffff"], opacity: 100 };
+  const first = effects.layerPixel(layer, "a", 3, 1, 5, 1, 0);
+  const same = effects.layerPixel(layer, "a", 3, 1, 5, 1, 0);
+  const later = effects.layerPixel(layer, "a", 3, 1, 5, 1, 40);
+  assert.deepEqual(first, same);
+  assert.notDeepEqual(first, later);
+});
+
+test("an audio layer is dimmed by its influence, not switched off", () => {
+  const layer = { mode: "breathe", colors: ["#ffffff"], opacity: 100, audio: true };
+  const loud = effects.layerPixel(layer, "a", 0, 0, 0, 1, 0);
+  const quiet = effects.layerPixel(layer, "a", 0, 0, 0, 0.25, 0);
+  assert.ok(quiet.alpha < loud.alpha);
+  assert.equal(effects.layerPixel(layer, "a", 0, 0, 0, 0, 0).alpha, 0);
+});
+
+test("a composed frame covers every key and reaches the top row on loud audio", () => {
+  const rows = [
+    ["esc", "n1"],
+    ["tab", "q"],
+    ["caps", "a"],
+    ["lshift", "z"],
+    ["lctrl", "win"],
+  ];
+  const layer = { mode: "breathe", colors: ["#ffffff"], opacity: 100, audio: true };
+  const frame = effects.emptyAudioFrame();
+  frame.bands.fill(0.85);
+  const colors = effects.composeFrame(rows, [layer], frame, {
+    audio_mode: "spectrum",
+    master_brightness: 100,
+  }, 0);
+  assert.equal(Object.keys(colors).length, 10);
+  // Every row, top included, must be lit at this level.
+  for (const row of rows) {
+    for (const key of row) assert.notEqual(colors[key], "#000000");
+  }
+});
+
+test("a composed frame leaves the top row dark when the bar is short", () => {
+  const rows = [["esc"], ["tab"], ["caps"], ["lshift"], ["lctrl"]];
+  const layer = { mode: "breathe", colors: ["#ffffff"], opacity: 100, audio: true };
+  const frame = effects.emptyAudioFrame();
+  frame.bands.fill(0.3);
+  const colors = effects.composeFrame(rows, [layer], frame, {
+    audio_mode: "spectrum",
+    master_brightness: 100,
+  }, 0);
+  assert.equal(colors.esc, "#000000");
+  assert.notEqual(colors.lctrl, "#000000");
+});
+
+test("a composed frame advances with the phase it is given", () => {
+  // composeFrame must hand the phase down to each pixel. Dropping it froze the
+  // animation while every other assertion still passed.
+  const rows = [["esc", "n1"], ["tab", "q"]];
+  const layer = { mode: "wave", colors: ["#000000", "#ffffff"], opacity: 100, speed: 3 };
+  const at = phase => effects.composeFrame(rows, [layer], effects.emptyAudioFrame(), {
+    master_brightness: 100,
+  }, phase);
+  assert.deepEqual(at(0), at(0));
+  assert.notDeepEqual(at(0), at(25));
+});
+
+test("master brightness scales the whole composed frame", () => {
+  const rows = [["esc"]];
+  const layer = { mode: "breathe", colors: ["#ffffff"], opacity: 100 };
+  const frame = effects.emptyAudioFrame();
+  const full = effects.composeFrame(rows, [layer], frame, { master_brightness: 100 }, 0);
+  const half = effects.composeFrame(rows, [layer], frame, { master_brightness: 50 }, 0);
+  const dark = effects.composeFrame(rows, [layer], frame, { master_brightness: 0 }, 0);
+  const value = colors => parseInt(colors.esc.slice(1, 3), 16);
+  assert.ok(value(full) > value(half));
+  assert.ok(value(half) > value(dark));
+  assert.equal(dark.esc, "#000000");
+});

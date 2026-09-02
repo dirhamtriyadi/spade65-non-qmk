@@ -143,6 +143,88 @@
     return output;
   }
 
+  function hexRgb(value) {
+    const hex = value.replace('#', '');
+    return [0, 2, 4].map(offset => parseInt(hex.slice(offset, offset + 2), 16))
+  }
+
+  function paletteRgb(colors, position, gradient = true) {
+    const palette = (colors?.length ? colors : ['#ff0000']).map(hexRgb);
+    if (!gradient || palette.length === 1) return palette[0];
+    const scaled = ((position % 1) + 1) % 1 * (palette.length - 1),
+      index = Math.floor(scaled),
+      amount = scaled - index,
+      next = Math.min(index + 1, palette.length - 1);
+    return palette[index].map((value, channel) => Math.round(value + (palette[next][channel] - value) * amount))
+  }
+
+  function layerPixel(layer, key, x, y, index, audioAmount, animationPhase = 0) {
+    if (layer.enabled === false || (layer.keys?.length && !layer.keys.includes(key))) return null;
+    const speed = Number(layer.speed || 1),
+      phase = animationPhase * speed,
+      direction = (layer.reverse ? -1 : 1) * (layer.bidirectional && y % 2 ? -1 : 1),
+      dx = x - 6.5 - Number(layer.center_x || 0),
+      dy = y - 2 - Number(layer.center_y || 0),
+      angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360 + Number(layer.angle || 0)) % 360,
+      distance = Math.sqrt(dx * dx + dy * dy),
+      band = 200 / Math.max(50, Number(layer.bandwidth || 200)),
+      gap = Number(layer.gap || 0) / 100,
+      density = Math.max(1, Number(layer.number || 5));
+    let position = 0.95,
+      light = 1;
+    if (layer.mode === 'wave') position = (Math.sin((x * band + direction * phase / 8) + gap) + 1) / 2;
+    else if (layer.mode === 'conic') position = (angle + direction * phase * 2) % 360 / 360;
+    else if (layer.mode === 'spiral') position = (angle + distance * 35 * band + direction * phase * 2) % 360 / 360;
+    else if (layer.mode === 'cycle') position = (index / 70 + direction * phase / 120) % 1;
+    else if (layer.mode === 'linear-wave') position = (x * band / 8 + y / 14 + Number(layer.angle || 0) / 360 + direction * phase / 100 + gap) % 1;
+    else if (layer.mode === 'ripple') position = (distance * band / 5 - direction * phase / 80 + gap) % 1;
+    else if (layer.mode === 'breathe') {
+      position = 0;
+      light = .25 + .75 * (1 + Math.sin(phase / 18)) / 2
+    } else if (layer.mode === 'rain') {
+      position = .55;
+      light = ((x * 19 + y * 37 + direction * phase * density) % 100) > 100 - density * 6 ? 1 : .08
+    } else if (layer.mode === 'fire') {
+      position = Math.random() * .14;
+      light = .25 + Math.random() * .06 * Math.max(1, Number(layer.fire || 1))
+    } else if (layer.mode === 'trigger') {
+      position = .95;
+      light = ((index * 31 + phase * 3) % 97) > 90 ? 1 : .08
+    }
+    if (layer.bump) light *= 1 - Math.abs((((position % 1) + 1) % 1) * 2 - 1);
+    if (layer.audio) light *= Math.max(0, Math.min(1, audioAmount));
+    const color = paletteRgb(layer.colors, position, layer.gradient !== false),
+      alpha = Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100 * light));
+    return {
+      color,
+      alpha
+    }
+  }
+
+  function composeFrame(rows, layers, audio, settings = {}, phase = 0) {
+    // The row loop that rasterises every layer onto the keyboard. It lives
+    // here rather than beside the DOM because the spectrum gate below is the
+    // part that has been wrong before and the part worth testing.
+    const grid = Array.isArray(rows) ? rows : [];
+    const stack = Array.isArray(layers) ? layers : [];
+    const colors = {};
+    let index = 0;
+    grid.forEach((row, y) => (Array.isArray(row) ? row : []).forEach((key, x) => {
+      const pixels = [];
+      for (const layer of stack) {
+        const influence = layer && layer.audio ?
+          audioInfluence(audio, settings.audio_mode, x / 14, bandRowPosition(y, grid.length)) :
+          1;
+        const pixel = layerPixel(layer, key, x, y, index, influence, phase);
+        if (pixel) pixels.push(pixel);
+      }
+      const output = compositePixels(pixels);
+      colors[key] = "#" + output.map(value => value.toString(16).padStart(2, "0")).join("");
+      index += 1;
+    }));
+    return applyMasterBrightness(colors, settings.master_brightness);
+  }
+
   function blendRgb(base, top, alpha) {
     const amount = clamp(alpha);
     return [0, 1, 2].map(index => Math.round(
@@ -166,7 +248,11 @@
     audioInfluence,
     bandRowPosition,
     blendRgb,
+    composeFrame,
     compositePixels,
+    hexRgb,
+    layerPixel,
+    paletteRgb,
     emptyAudioFrame,
     preferredAudioSource,
     processAudioSnapshot,
