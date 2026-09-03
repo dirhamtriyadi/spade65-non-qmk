@@ -1,6 +1,7 @@
 const token = document.querySelector('meta[name="spade65-token"]').content;
 const $ = id => document.getElementById(id);
 const layoutState = window.Spade65LayoutState;
+const macroRules = window.Spade65MacroRules;
 const keyEvents = window.Spade65KeyEvents;
 const usagePicker = window.Spade65UsagePicker;
 const externalLinks = window.Spade65ExternalLinks;
@@ -1940,62 +1941,6 @@ function macroDisplayName(macro) {
   })
 }
 
-function macroBindings(index) {
-  const bindings = [];
-  for (const [layer, assignments] of Object.entries(profile.layers))
-    for (const [key, value] of Object.entries(assignments))
-      if (typeof value === 'object' && value.macro === index) bindings.push({
-        layer,
-        key
-      });
-  return bindings
-}
-
-function macroUsageIdentity(value) {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  if (!normalized) return null;
-  if (hasOwn(meta?.usages || {}, normalized)) return String(meta.usages[normalized]);
-  const numeric = /^(?:0x[0-9a-f]+|0b[01]+|0o[0-7]+|\d+)$/.test(normalized) ? Number(normalized) : NaN;
-  return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255 ? String(numeric) : null
-}
-
-function macroSequenceIssue(macro) {
-  const held = new Set();
-  for (let index = 0; index < (macro?.events || []).length; index++) {
-    const event = macro.events[index],
-      usage = macroUsageIdentity(event.usage);
-    if (usage === null) return {
-      kind: 'unknown',
-      number: index + 1,
-      usage: String(event.usage || '—')
-    };
-    if (event.pressed) {
-      if (held.has(usage)) return {
-        kind: 'duplicate',
-        number: index + 1,
-        usage: event.usage
-      };
-      held.add(usage)
-    } else {
-      if (!held.has(usage)) return {
-        kind: 'release',
-        number: index + 1,
-        usage: event.usage
-      };
-      held.delete(usage)
-    }
-  }
-  if (held.size) {
-    const usage = [...held][0],
-      event = [...(macro?.events || [])].reverse().find(item => macroUsageIdentity(item.usage) === usage);
-    return {
-      kind: 'held',
-      usage: event?.usage ?? usage
-    }
-  }
-  return null
-}
-
 function macroIssueMessage(issue) {
   if (!issue) return '';
   return t(`macro.sequence.${issue.kind}`, issue)
@@ -2024,7 +1969,7 @@ function renderMacros() {
     meta.textContent = t('macro.listMeta', {
       index: macro.index,
       count: macro.events.length,
-      bindings: macroBindings(macro.index).length
+      bindings: macroRules.bindings(profile.layers, macro.index).length
     });
     b.append(name, meta);
     b.disabled = recordingMacro;
@@ -2044,8 +1989,8 @@ function renderMacros() {
   $('eventList').innerHTML = '';
   if (macro) macro.events.forEach((event, i) => renderEvent(event, i));
   const eventCount = macro?.events.length ?? 0,
-    bindings = macro ? macroBindings(macro.index) : [],
-    sequenceIssue = macroSequenceIssue(macro),
+    bindings = macro ? macroRules.bindings(profile.layers, macro.index) : [],
+    sequenceIssue = macroRules.sequenceIssue(macro, meta?.usages),
     sequenceValid = eventCount > 0 && !sequenceIssue,
     applyReady = sequenceValid && bindings.length > 0,
     applied = applyReady && appliedMacroSnapshot?.device === device() && appliedMacroSnapshot.state === macroStateSnapshot();
@@ -2186,7 +2131,7 @@ function addMacro() {
 function deleteMacro() {
   const macro = profile.macros[activeMacro];
   if (!macro) return;
-  const bindings = macroBindings(macro.index);
+  const bindings = macroRules.bindings(profile.layers, macro.index);
   if (!confirm(t('macro.confirmDelete', {
       name: macroDisplayName(macro),
       count: bindings.length
@@ -2331,9 +2276,9 @@ function assignActiveMacroToKey() {
 function prepareMacroApply() {
   const macro = profile.macros[activeMacro];
   if (!macro) return;
-  const issue = macroSequenceIssue(macro);
+  const issue = macroRules.sequenceIssue(macro, meta?.usages);
   if (issue) return toast(macroIssueMessage(issue), true);
-  if (!macro.events.length || !macroBindings(macro.index).length) return;
+  if (!macro.events.length || !macroRules.bindings(profile.layers, macro.index).length) return;
   $('scopeKeymap').checked = true;
   $('scopeMacros').checked = true;
   $('applyProfileBtn').scrollIntoView({
@@ -2370,12 +2315,12 @@ async function applyProfile() {
   const scopes = selectedScopes();
   if (!scopes.length) return toast(t('profile.scopeEmpty'), true);
   if (scopes.includes('macros')) {
-    const invalidMacro = profile.macros.find(macro => macroSequenceIssue(macro));
+    const invalidMacro = profile.macros.find(macro => macroRules.sequenceIssue(macro, meta?.usages));
     if (invalidMacro) {
       activeMacro = profile.macros.indexOf(invalidMacro);
       activatePage('macros');
       renderMacros();
-      return toast(macroIssueMessage(macroSequenceIssue(invalidMacro)), true)
+      return toast(macroIssueMessage(macroRules.sequenceIssue(invalidMacro, meta?.usages)), true)
     }
   }
   if (!confirm(t('profile.confirmApply'))) return;

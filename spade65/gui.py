@@ -477,6 +477,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "external-links.js",
             "clipboard.js",
             "live-effects.js",
+            "macro-rules.js",
             "app.js",
         } and not re.fullmatch(r"locales/[A-Za-z0-9_-]+\.json", asset):
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -499,6 +500,7 @@ class GuiHandler(BaseHTTPRequestHandler):
             "external-links.js": "text/javascript; charset=utf-8",
             "clipboard.js": "text/javascript; charset=utf-8",
             "live-effects.js": "text/javascript; charset=utf-8",
+            "macro-rules.js": "text/javascript; charset=utf-8",
             "app.js": "text/javascript; charset=utf-8",
         }.get(asset, "application/json; charset=utf-8")
         self.send_response(HTTPStatus.OK)

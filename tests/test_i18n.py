@@ -344,7 +344,13 @@ class I18nTests(unittest.TestCase):
         self.assertIn("assignmentEditorKey!==assignmentIdentity()", compact)
         self.assertIn("selected.pid==='0351'", compact)
         self.assertIn("macro.events.length+1+pressedAfter>84", compact)
-        self.assertIn("functionmacroSequenceIssue(macro)", compact)
+        # Macro validation moved into macro-rules.js so it can be tested
+        # without a browser; the rule the editor keeps is that it consults
+        # the shared validator instead of judging a sequence itself.
+        self.assertIn("macroRules.sequenceIssue(macro,meta?.usages)", compact)
+        rules_source = (WEB / "macro-rules.js").read_text(encoding="utf-8")
+        self.assertIn("function sequenceIssue(macro, usages)", rules_source)
+        self.assertNotIn("document", rules_source)
         self.assertIn("macro.events.push({delay_ms:20,usage:'a',pressed:true},{delay_ms:20,usage:'a',pressed:false})", compact)
         self.assertIn("appliedMacroSnapshot?.device===device()", compact)
         self.assertIn("state:macroStateSnapshot(requestProfile)", compact)
@@ -444,6 +450,10 @@ class I18nTests(unittest.TestCase):
         )
         self.assertLess(
             html.index('<script src="/live-effects.js"></script>'),
+            html.index('<script src="/app.js"></script>'),
+        )
+        self.assertLess(
+            html.index('<script src="/macro-rules.js"></script>'),
             html.index('<script src="/app.js"></script>'),
         )
 

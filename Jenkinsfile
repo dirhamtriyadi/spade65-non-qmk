@@ -185,6 +185,7 @@ node --check spade65/web/usage-picker.js
 node --check spade65/web/external-links.js
 node --check spade65/web/clipboard.js
 node --check spade65/web/live-effects.js
+node --check spade65/web/macro-rules.js
 node --check spade65/web/app.js
 node tests/layout_state.test.js
 node tests/key_events.test.js
@@ -225,6 +226,7 @@ if errorlevel 1 exit /b 1
 node --check spade65\web\clipboard.js
 if errorlevel 1 exit /b 1
 node --check spade65\web\live-effects.js
+node --check spade65\web\macro-rules.js
 if errorlevel 1 exit /b 1
 node --check spade65\web\app.js
 if errorlevel 1 exit /b 1

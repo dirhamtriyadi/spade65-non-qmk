@@ -29,6 +29,7 @@ jobs:
       - run: node --check spade65/web/external-links.js
       - run: node --check spade65/web/clipboard.js
       - run: node --check spade65/web/live-effects.js
+      - run: node --check spade65/web/macro-rules.js
       - run: node --check spade65/web/app.js
       - run: node tests/layout_state.test.js
       - run: node tests/key_events.test.js
