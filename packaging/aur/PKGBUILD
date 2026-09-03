@@ -1,0 +1,61 @@
+# Maintainer: dirhamtriyadi <dirhamtriyadi@gmail.com>
+
+pkgname=spade65-appimage
+_appname=spade65
+pkgver=0.8.9
+pkgrel=1
+pkgdesc="Configuration utility for the non-QMK Noir Spade65 keyboard (AppImage)"
+arch=('x86_64')
+url="https://github.com/dirhamtriyadi/spade65-non-qmk"
+license=('MIT')
+# The AppImage runtime mounts itself through libfuse2. hicolor-icon-theme owns
+# the directory the launcher icon is installed into.
+depends=('fuse2' 'hicolor-icon-theme')
+provides=('spade65')
+conflicts=('spade65')
+install="$pkgname.install"
+options=('!strip' '!debug')
+
+_repo="https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v$pkgver"
+source=(
+  "$_appname-$pkgver.AppImage::$url/releases/download/v$pkgver/Spade65-Linux-x86_64.AppImage"
+  "$_appname-$pkgver.rules::$_repo/udev/99-spade65.rules"
+  "$_appname-$pkgver.LICENSE::$_repo/LICENSE"
+)
+noextract=("$_appname-$pkgver.AppImage")
+sha256sums=('1475243b5bd821de4915609a0b27122987eab951948ab8bc9149defb1af3e516'
+            'a33d1ba62fc61f9b460b8d18870d0e0e87dbbd6643693a4a6b317b086bb8ccbc'
+            'c7f8dc7dce00fcb517d34ece0ba977f1b98c35a3212cb45224c3c1d075c70d64')
+
+prepare() {
+  cd "$srcdir"
+  chmod +x "$_appname-$pkgver.AppImage"
+  # Take the launcher metadata out of the image that is being installed rather
+  # than keeping a second copy here, so the two can never disagree.
+  ./"$_appname-$pkgver.AppImage" --appimage-extract "$_appname.desktop" >/dev/null
+  ./"$_appname-$pkgver.AppImage" --appimage-extract "$_appname.svg" >/dev/null
+  # Inside the image Exec is resolved by the AppImage runtime; installed, it
+  # has to name the path pacman puts on disk.
+  sed -i "s|^Exec=.*|Exec=/usr/bin/$_appname|" "squashfs-root/$_appname.desktop"
+  desktop-file-validate "squashfs-root/$_appname.desktop"
+}
+
+package() {
+  cd "$srcdir"
+  install -Dm755 "$_appname-$pkgver.AppImage" \
+    "$pkgdir/opt/$_appname/$_appname.AppImage"
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s "/opt/$_appname/$_appname.AppImage" "$pkgdir/usr/bin/$_appname"
+
+  install -Dm644 "squashfs-root/$_appname.desktop" \
+    "$pkgdir/usr/share/applications/$_appname.desktop"
+  install -Dm644 "squashfs-root/$_appname.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/$_appname.svg"
+
+  # Without this rule hidraw access needs root, and the keyboard shows up as
+  # present but unconfigurable.
+  install -Dm644 "$_appname-$pkgver.rules" \
+    "$pkgdir/usr/lib/udev/rules.d/99-spade65.rules"
+  install -Dm644 "$_appname-$pkgver.LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

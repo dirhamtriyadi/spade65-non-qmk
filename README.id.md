@@ -117,6 +117,19 @@ Paket siap jalan tersedia di
 | Linux x86_64 | `Spade65-Linux-x86_64.AppImage` | Dibangun pada Ubuntu 22.04; memakai library grafis dan desktop dari host |
 | macOS universal | `Spade65-macOS-universal.dmg` | Berjalan pada Intel dan Apple silicon |
 
+Pada distribusi berbasis Arch, AppImage dapat dipasang dari AUR. Cara ini juga
+menempatkan Spade65 di menu aplikasi dan memasang aturan udev:
+
+```bash
+yay -S spade65-appimage
+```
+
+AppImage yang diunduh langsung tidak muncul di menu aplikasi dengan sendirinya.
+Image-nya sudah membawa entri launcher dan ikon, tetapi yang memasang keduanya
+adalah manajer paket, sehingga AppImage yang diunduh manual dijalankan dari
+tempat penyimpanannya. Lihat [packaging/aur](packaging/aur/README.md) untuk
+rincian isi paket dan lokasi pemasangannya.
+
 Menjalankan aplikasi paket tanpa argumen akan membuka GUI desktop.
 **Pengaturan → Integrasi desktop** mengatur close-to-tray serta dapat memasang
 atau menghapus startup setelah login untuk pengguna saat ini. Startup GUI ini

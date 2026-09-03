@@ -116,6 +116,19 @@ Ready-to-run packages are published on
 | Linux x86_64 | `Spade65-Linux-x86_64.AppImage` | Built on Ubuntu 22.04; uses the host graphics and desktop libraries |
 | macOS universal | `Spade65-macOS-universal.dmg` | Runs on Intel and Apple silicon |
 
+On Arch-based distributions the AppImage can be installed from the AUR instead,
+which also places Spade65 in the application menu and installs the udev rule:
+
+```bash
+yay -S spade65-appimage
+```
+
+A downloaded AppImage does not appear in the application menu on its own. The
+image carries a launcher entry and icon, but installing them is the package
+manager's job, so a manually downloaded AppImage is run from where it was
+saved. See [packaging/aur](packaging/aur/README.md) for what the package
+installs and where.
+
 Opening the packaged application without arguments launches the desktop GUI.
 **Settings → Desktop integration** controls close-to-tray and can install or
 remove start-after-sign-in for the current user. This GUI startup is separate
