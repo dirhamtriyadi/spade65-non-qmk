@@ -4,14 +4,30 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
+import shutil
+import subprocess
+import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from .device import Device, ReportShape, choose_device, parse_report_descriptor
+from .device import (
+    HID_BUS_BLUETOOTH,
+    Device,
+    ReportShape,
+    choose_device,
+    parse_report_descriptor,
+)
 
 
 HidrawDevice = Device
+
+_BLUEZ_BATTERY_CACHE_SECONDS = 30.0
+_BLUEZ_BATTERY_CACHE: dict[str, tuple[float, int | None]] = {}
+_BLUEZ_BATTERY_LOCK = threading.Lock()
+_BLUETOOTH_ADDRESS = re.compile(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}")
 
 
 def _parse_uevent(path: Path) -> dict[str, str]:
@@ -38,6 +54,7 @@ def discover_hidraw(sys_class: Path = Path("/sys/class/hidraw")) -> list[HidrawD
         if len(hid_id) != 3:
             continue
         try:
+            bus_type = int(hid_id[0], 16)
             vendor_id = int(hid_id[1], 16)
             product_id = int(hid_id[2], 16)
         except ValueError:
@@ -52,6 +69,7 @@ def discover_hidraw(sys_class: Path = Path("/sys/class/hidraw")) -> list[HidrawD
                 path=Path("/dev") / entry.name,
                 vendor_id=vendor_id,
                 product_id=product_id,
+                bus_type=bus_type,
                 name=uevent.get("HID_NAME", ""),
                 unique=uevent.get("HID_UNIQ", ""),
                 usages=usages,
@@ -121,8 +139,55 @@ def _read_text(path: Path) -> str | None:
     return value or None
 
 
+def _bluez_battery_percent(address: str) -> int | None:
+    """Read BlueZ Battery1 through its standard CLI, with a short-lived cache."""
+
+    if _BLUETOOTH_ADDRESS.fullmatch(address) is None:
+        return None
+    normalized = address.upper()
+    now = time.monotonic()
+    with _BLUEZ_BATTERY_LOCK:
+        cached = _BLUEZ_BATTERY_CACHE.get(normalized)
+        if cached is not None and now - cached[0] < _BLUEZ_BATTERY_CACHE_SECONDS:
+            return cached[1]
+
+        environment = dict(os.environ)
+        original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+        if original_library_path:
+            environment["LD_LIBRARY_PATH"] = original_library_path
+        else:
+            environment.pop("LD_LIBRARY_PATH", None)
+        environment["LC_ALL"] = "C"
+        environment["LANG"] = "C"
+        executable = shutil.which("bluetoothctl", path=environment.get("PATH"))
+        battery = None
+        if executable is not None:
+            try:
+                result = subprocess.run(
+                    [executable, "--timeout", "2", "info", normalized],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    env=environment,
+                )
+                match = re.search(
+                    r"(?m)^\s*Battery Percentage:\s+0x[0-9a-fA-F]+\s+"
+                    r"\(([0-9]{1,3})\)\s*$",
+                    result.stdout,
+                )
+                if match is not None:
+                    measured = int(match.group(1))
+                    if 0 <= measured <= 100:
+                        battery = measured
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _BLUEZ_BATTERY_CACHE[normalized] = (now, battery)
+        return battery
+
+
 def readonly_device_info(device: HidrawDevice) -> dict[str, object | None]:
-    """Read USB metadata and a kernel-exported battery without sending HID data."""
+    """Read host metadata and available battery data without sending HID data."""
 
     usb_parent = None
     current = device.sysfs_path
@@ -150,6 +215,10 @@ def readonly_device_info(device: HidrawDevice) -> dict[str, object | None]:
                     battery = int(capacity)
                     battery_source = candidate.name
                     break
+    if battery is None and device.bus_type == HID_BUS_BLUETOOTH:
+        battery = _bluez_battery_percent(device.unique)
+        if battery is not None:
+            battery_source = "BlueZ Battery1"
     return {
         "usb_revision": revision,
         # The vendor calls a closed native GetFWVersion function. bcdDevice is
@@ -159,7 +228,12 @@ def readonly_device_info(device: HidrawDevice) -> dict[str, object | None]:
         "battery_percent": battery,
         "battery_source": battery_source,
         "battery_status": (
-            "reported by Linux power_supply" if battery is not None
+            (
+                "reported by BlueZ Battery1"
+                if battery_source == "BlueZ Battery1"
+                else "reported by Linux power_supply"
+            )
+            if battery is not None
             else "not exposed by the current transport/kernel"
         ),
     }

@@ -22,8 +22,11 @@ from . import __version__
 from .transport import (
     Device,
     choose_device,
+    device_configuration_status,
     discover_devices,
     feature_report_session,
+    is_observed_device,
+    observed_transport,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -43,10 +46,8 @@ from .protocol import (
     MAIN_REPORT_ID,
     MAIN_REPORT_LENGTH,
     MAIN_USAGE,
-    OBSERVED_PRODUCT_IDS,
     OUTPUT_USAGE,
     PRODUCT_IDS,
-    configuration_status,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
     STREAMING_PRODUCT_IDS,
@@ -79,10 +80,11 @@ def _device_summary(device: Device) -> dict[str, object]:
     return {
         "path": str(device.path),
         "backend": device.backend,
+        "bus": f"{device.bus_type:04x}",
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
-        "transport": OBSERVED_PRODUCT_IDS.get(device.product_id, "unknown"),
-        "configuration_status": configuration_status(device.product_id),
+        "transport": observed_transport(device) or "unknown",
+        "configuration_status": device_configuration_status(device),
         "name": device.name,
         "usages": [f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)],
         "reports": [
@@ -97,10 +99,7 @@ def gui_metadata() -> dict[str, object]:
     devices = [
         device
         for device in discover_devices()
-        if (
-            device.vendor_id == VENDOR_ID
-            and device.product_id in OBSERVED_PRODUCT_IDS
-        )
+        if is_observed_device(device)
     ]
     return {
         "version": __version__,

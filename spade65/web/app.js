@@ -482,7 +482,7 @@ function fetchGuiStatus() {
 }
 
 function deviceSignature(devices) {
-  return JSON.stringify((devices || []).map(item => [item.path, item.vid, item.pid, item.usages]).sort((left, right) => String(left[0]).localeCompare(String(right[0]))))
+  return JSON.stringify((devices || []).map(item => [item.path, item.bus, item.vid, item.pid, item.usages, item.readonly?.battery_percent]).sort((left, right) => String(left[0]).localeCompare(String(right[0]))))
 }
 
 function toast(message, error = false) {
@@ -760,29 +760,39 @@ async function pollDeviceChanges() {
 function renderConnectionStatus() {
   if (!meta) return;
   const connected = meta.devices.length > 0,
-    readOnlyReceiver = connected && meta.devices.every(d => d.configuration_status === 'unsupported-read-only'),
-    primary = layoutState.primaryDevice(meta.devices);
+    readOnlyDevice = connected && meta.devices.every(d => d.configuration_status === 'unsupported-read-only'),
+    primary = layoutState.primaryDevice(meta.devices),
+    battery = primary?.readonly?.battery_percent,
+    hasBattery = Number.isInteger(battery) && battery >= 0 && battery <= 100,
+    batteryBadge = $('batteryBadge');
   $('connectionDot').classList.toggle('online', connected);
-  $('connectionText').textContent = connected ? t(readOnlyReceiver ? 'status.detectedReadOnly' : 'status.connected', {
+  $('connectionText').textContent = connected ? t(readOnlyDevice ? 'status.detectedReadOnly' : 'status.connected', {
     name: primary.name
   }) : t('status.noDevice');
   $('transportBadge').textContent = connected ? `${primary.transport} ${primary.vid}:${primary.pid}` : t('status.notConnected');
-  $('descriptorBadge').textContent = readOnlyReceiver ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable');
+  batteryBadge.hidden = !hasBattery;
+  batteryBadge.textContent = hasBattery ? t('status.battery', {
+    percent: battery
+  }) : '';
+  $('descriptorBadge').textContent = readOnlyDevice ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable');
   renderLightingConnectionStatus();
   setProfileControlsRecordingLocked()
 }
 
 function renderDevices() {
   const select = $('deviceSelect'),
-    old = select.value;
+    old = select.value,
+    configurable = meta.devices.filter(d => d.configuration_status === 'descriptor-gated' && d.usages.includes('ff02:0001'));
   select.innerHTML = '';
-  for (const item of meta.devices.filter(d => d.configuration_status === 'descriptor-gated' && d.usages.includes('ff02:0001'))) {
+  for (const item of configurable) {
     const o = document.createElement('option');
     o.value = item.path;
     o.textContent = `${item.name} · ${item.transport} · ${item.path}`;
     select.append(o)
   }
-  if ([...select.options].some(o => o.value === old)) select.value = old
+  if ([...select.options].some(o => o.value === old)) select.value = old;
+  select.disabled = configurable.length === 0;
+  $('applyProfileBtn').disabled = configurable.length === 0
 }
 
 function builtInEffects() {

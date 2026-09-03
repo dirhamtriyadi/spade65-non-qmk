@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Iterable
 
 
+HID_BUS_BLUETOOTH = 0x0005
+
+
 @dataclass(frozen=True)
 class ReportShape:
     kind: str
@@ -29,6 +32,7 @@ class Device:
     reports: list[ReportShape] = field(default_factory=list)
     descriptor: bytes = b""
     sysfs_path: Path | None = None
+    bus_type: int = 0
     backend: str = "hidraw"
     hidapi_path: bytes | str | None = None
     release_number: int = 0

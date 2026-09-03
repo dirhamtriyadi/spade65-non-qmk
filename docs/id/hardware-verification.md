@@ -4,7 +4,8 @@
 
 Pengujian kabel dilakukan pada 29 Agustus–1 September 2026 menggunakan Spade65
 USB `0603:0351`. Pada 31 Agustus, receiver fisik 2,4 GHz milik keyboard yang
-sama juga diperiksa dan terdeteksi sebagai `0603:0352`.
+sama juga diperiksa dan terdeteksi sebagai `0603:0352`. Pada 3 September,
+ketiga profil Bluetooth diperiksa di Linux dan diuji melalui input fisik.
 
 ## Berhasil
 
@@ -149,6 +150,46 @@ operasi tersebut dan tidak menebak bahwa kedua protokol receiver kompatibel.
 Keberadaan report `0x06` sepanjang 64 byte pada `0352` saja bukan bukti yang
 cukup: protokol streaming kabel juga membutuhkan feature report aktivasi pendek
 yang terverifikasi, sedangkan receiver ini tidak mengiklankannya.
+
+## Profil Bluetooth LE yang diamati
+
+Pada 3 September 2026, profil Bluetooth `Fn+Q`, `Fn+W`, dan `Fn+E` dipasangkan
+ke host Linux/BlueZ yang sama dan diamati satu per satu. BlueZ menyimpan tiga
+record Spade65 terpisah yang bonded dan trusted. Setelah pairing awal, setiap
+profil terhubung kembali tanpa Pair ulang ketika dipilih atau setelah keyboard
+dimatikan lalu dinyalakan. Input teks fisik (`fn+w auto 789`, `fn+q auto 456`,
+dan `fn+e auto 789`) mengonfirmasi jalur input keyboard. BlueZ melaporkan
+baterai 100% selama pengujian ini.
+
+Setiap profil aktif terdeteksi melalui bus HID Linux `0005` dengan nama
+`Spade65`, modalias `bluetooth:v0000p0000d0001`, dan VID/PID `0000:0000`.
+Setiap bond memakai identitas Bluetooth acak yang berbeda, sehingga alamatnya
+bukan pengenal model yang stabil dan tidak dicatat di sini. Ketiga profil
+menyediakan HID report descriptor 253 byte yang sama, dengan SHA-256:
+
+```text
+571f74c48018a34a853786c72a0a9bfe24023ffae639b2cd6b207cbd88d0d334
+```
+
+Descriptor tersebut menyediakan report input keyboard,
+consumer/system-control, dan mouse standar. Descriptor juga menyediakan report
+input/output `0x06` sepanjang 64 byte pada usage `ff55:0202`, tetapi **tidak
+mengiklankan feature report** serta tidak memiliki `ff02:0001` maupun
+`ff03:0001`. Karena itu protokol konfigurasi yang diverifikasi melalui USB
+kabel tidak memiliki endpoint report pada transport Bluetooth yang diamati.
+Output report 64 byte saja juga belum cukup untuk streaming karena urutan
+streaming terverifikasi diawali feature report aktivasi `0x08` sepanjang 8 byte
+yang tidak tersedia. Tidak ada HID write Bluetooth yang dicoba.
+
+Setelah pengukuran ini, discovery Linux hanya mengenali kombinasi
+bus/nama/descriptor Bluetooth yang persis sama sebagai perangkat hanya-baca.
+GUI dapat menampilkan persentase baterai dari BlueZ, sedangkan seluruh allowlist
+write konfigurasi tetap mewajibkan identitas USB yang telah diverifikasi.
+Perangkat generik dengan VID/PID nol atau nama produk yang sama tidak akan
+cocok, dan alamat Bluetooth acak tidak dipakai untuk mendeteksi model.
+
+Reconnect setelah reboot host, sleep/wake panjang, kontrol media, dan report
+mouse belum diuji secara fisik dalam sesi ini.
 
 ## Layout baris bawah
 

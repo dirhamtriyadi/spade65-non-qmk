@@ -146,6 +146,7 @@ class HidrawTests(unittest.TestCase):
             devices = discover_hidraw(root)
             self.assertEqual(len(devices), 1)
             self.assertEqual(devices[0].path, Path("/dev/hidraw3"))
+            self.assertEqual(devices[0].bus_type, 0x0003)
             self.assertEqual(devices[0].report_length("feature", 8), 8)
             selected = choose_device(
                 devices,

@@ -156,13 +156,15 @@ hardware workflows are in [`docs/cli.md`](docs/cli.md).
 The current physical validation uses a wired Linux device identified as
 `0603:0351`, together with that keyboard's physical 2.4 GHz receiver, which
 enumerates as `0603:0352` and was inspected read-only with the cable removed
-and the keyboard live over 2.4 GHz. Every configuration check below was
-exercised over the wired device. Descriptor discovery, all 20 built-in RGB
-effects with their brightness and speed controls, debounce, per-key RGB,
-real-time streaming, the AP wave and a custom timeline, an authenticated GUI RGB
-action, a three-layer keymap and macro, a configuration reset, a
-background-service timeline frame, and read-only USB revision reporting have
-been exercised successfully.
+and the keyboard live over 2.4 GHz. Bluetooth input was also physically tested
+on all three `Fn+Q`/`Fn+W`/`Fn+E` profiles, including separate bonds, profile
+switching, input, and reconnect after a keyboard power-cycle. Every
+configuration check below was exercised over the wired device. Descriptor
+discovery, all 20 built-in RGB effects with their brightness and speed
+controls, debounce, per-key RGB, real-time streaming, the AP wave and a custom
+timeline, an authenticated GUI RGB action, a three-layer keymap and macro, a
+configuration reset, a background-service timeline frame, and read-only USB
+revision reporting have been exercised successfully.
 
 Keymap, macro, and reset writes have now been sent to the wired device: the
 temporary keymap and macro were verified through physical input and then
@@ -184,7 +186,9 @@ streaming is not presented as proof of those operating-system backends.
 Only the dongle light-off/hibernate timers remain unsent. The logical dongle
 identity `0603:0356` has never enumerated here, and the physical receiver that
 does enumerate, `0603:0352`, advertises no feature reports at all, so it cannot
-carry the frame. See
+carry the frame. Bluetooth similarly exposes no feature reports; the measured
+Linux identity is recognized for input-only diagnostics and BlueZ battery
+status, not configuration. See
 [`docs/hardware-verification.md`](docs/hardware-verification.md) for the precise
 test record. Automated or offline coverage is never presented as physical
 device verification.

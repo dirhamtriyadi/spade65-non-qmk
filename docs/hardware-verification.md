@@ -4,7 +4,8 @@
 
 The wired tests were performed on August 29–September 1, 2026, using the USB
 Spade65 `0603:0351`. On August 31, the same keyboard's physical 2.4 GHz receiver
-was also inspected and enumerated as `0603:0352`.
+was also inspected and enumerated as `0603:0352`. On September 3, all three
+Bluetooth profiles were inspected on Linux and exercised through physical input.
 
 ## Successful tests
 
@@ -148,6 +149,45 @@ of guessing that the receiver protocols are compatible. Merely seeing a
 64-byte report `0x06` on `0352` is not sufficient evidence: the wired streaming
 protocol also requires a verified short feature activation report, which this
 receiver does not advertise.
+
+## Observed Bluetooth LE profiles
+
+On September 3, 2026, the `Fn+Q`, `Fn+W`, and `Fn+E` Bluetooth profiles were
+paired to the same Linux/BlueZ host and observed one at a time. BlueZ retained
+three separate bonded and trusted Spade65 records. After the initial pairing,
+each profile reconnected without pairing again when selected or after a
+keyboard power-cycle. Physical text input (`fn+w auto 789`, `fn+q auto 456`,
+and `fn+e auto 789`) confirmed the keyboard input path. BlueZ reported 100%
+battery during these tests.
+
+Each active profile enumerated through Linux HID bus `0005` with the name
+`Spade65`, modalias `bluetooth:v0000p0000d0001`, and VID/PID `0000:0000`.
+Each bond used a distinct random Bluetooth identity, so those addresses are
+neither stable model identifiers nor recorded here. All three profiles exposed
+the same 253-byte HID report descriptor, with SHA-256:
+
+```text
+571f74c48018a34a853786c72a0a9bfe24023ffae639b2cd6b207cbd88d0d334
+```
+
+The descriptor provides standard keyboard, consumer/system-control, and mouse
+input reports. It also provides a 64-byte input/output report `0x06` under
+usage `ff55:0202`, but it advertises **no feature report** and neither
+`ff02:0001` nor `ff03:0001`. Consequently, the configuration protocol verified
+over wired USB has no report endpoint on the observed Bluetooth transport. The
+64-byte output report alone is not enough for streaming either, because the
+verified streaming sequence first requires the absent 8-byte feature report
+`0x08` for activation. No Bluetooth HID write was attempted.
+
+Starting after this measurement, Linux discovery recognizes only this exact
+Bluetooth bus/name/descriptor combination as read-only. The GUI can show its
+BlueZ battery percentage, while every configuration-write allowlist continues
+to require the verified USB identities. Generic devices with the same zero
+VID/PID or product name do not match, and random Bluetooth addresses are not
+used for model detection.
+
+Host reboot reconnection, long sleep/wake, media controls, and mouse reports
+were not physically exercised in this session.
 
 ## Bottom-row layout
 

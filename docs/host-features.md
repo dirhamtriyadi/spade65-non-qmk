@@ -213,8 +213,10 @@ sysfs; on Windows and macOS, it comes from HIDAPI enumeration metadata. This
 value is not a firmware version. The original software obtains its firmware
 version from `GetFWVersion` in a closed Windows native add-on; without a verified
 request method, this project does not send a guessed HID request. Battery data
-is shown only when Linux exports it through `power_supply` for the same device;
-there is no verified battery reader for Windows or macOS yet.
+is shown when Linux exports it through `power_supply` for the same USB device.
+For the measured Spade65 Bluetooth descriptor, Linux also reads the standard
+BlueZ `Battery1` percentage without sending a HID report. There is no verified
+battery reader for Windows or macOS yet.
 
 Physical test results and the boundaries of operations intentionally not sent
 are documented in

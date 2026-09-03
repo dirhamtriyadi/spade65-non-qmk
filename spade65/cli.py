@@ -12,8 +12,11 @@ from . import __version__
 from .transport import (
     Device,
     choose_device,
+    device_configuration_status,
     discover_devices,
     feature_report_session,
+    is_observed_device,
+    observed_transport,
     readonly_device_info,
     send_feature_report,
     send_output_report,
@@ -35,10 +38,8 @@ from .protocol import (
     MAIN_REPORT_ID,
     MAIN_REPORT_LENGTH,
     MAIN_USAGE,
-    OBSERVED_PRODUCT_IDS,
     OUTPUT_USAGE,
     PRODUCT_IDS,
-    configuration_status,
     SHORT_REPORT_ID,
     SHORT_REPORT_LENGTH,
     STREAMING_PRODUCT_IDS,
@@ -71,10 +72,11 @@ def _device_dict(device: Device, *, include_unique: bool = False) -> dict[str, o
     result: dict[str, object] = {
         "path": str(device.path),
         "backend": device.backend,
+        "bus": f"{device.bus_type:04x}",
         "vid": f"{device.vendor_id:04x}",
         "pid": f"{device.product_id:04x}",
-        "transport": OBSERVED_PRODUCT_IDS.get(device.product_id, "unknown"),
-        "configuration_status": configuration_status(device.product_id),
+        "transport": observed_transport(device) or "unknown",
+        "configuration_status": device_configuration_status(device),
         "name": device.name,
         "usages": [f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)],
         "reports": [
@@ -96,10 +98,7 @@ def command_probe(args: argparse.Namespace) -> int:
     devices = [
         device
         for device in discover_devices()
-        if (
-            device.vendor_id == VENDOR_ID
-            and device.product_id in OBSERVED_PRODUCT_IDS
-        )
+        if is_observed_device(device)
     ]
     if args.json:
         print(
@@ -112,15 +111,18 @@ def command_probe(args: argparse.Namespace) -> int:
             )
         )
     elif not devices:
-        print("Spade65 not found (VID 0603, PID 0351/0352/0356).")
+        print(
+            "Spade65 not found (USB VID 0603 PID 0351/0352/0356 or "
+            "the verified Linux Bluetooth descriptor)."
+        )
     else:
         for device in devices:
             print(
                 f"{device.path}: {device.vendor_id:04x}:{device.product_id:04x} "
-                f"{OBSERVED_PRODUCT_IDS[device.product_id]} {device.name}".rstrip()
+                f"{observed_transport(device)} {device.name}".rstrip()
             )
             print(
-                "  configuration: " + configuration_status(device.product_id)
+                "  configuration: " + device_configuration_status(device)
             )
             usages = ", ".join(
                 f"{page:04x}:{usage:04x}" for page, usage in sorted(device.usages)
@@ -443,10 +445,7 @@ def command_gui(args: argparse.Namespace) -> int:
 def command_info(args: argparse.Namespace) -> int:
     devices = [
         device for device in discover_devices()
-        if (
-            device.vendor_id == VENDOR_ID
-            and device.product_id in OBSERVED_PRODUCT_IDS
-        )
+        if is_observed_device(device)
     ]
     summaries = []
     seen: set[tuple[int, int, str]] = set()
@@ -564,7 +563,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe.set_defaults(handler=command_probe)
 
     info = subparsers.add_parser(
-        "info", help="read-only USB revision and available battery information"
+        "info", help="read-only device metadata and available battery information"
     )
     info.set_defaults(handler=command_info)
 

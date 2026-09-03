@@ -6,7 +6,7 @@
 
 | Platform | Discovery and writes | Desktop renderer (v0.7.0) | Packaged system-output capture | Active application | Background launcher | Physical validation |
 |---|---|---|---|---|---|---|
-| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard with a PipeWire/PulseAudio monitor | X11, Wayland process fallback | systemd user service | Yes, USB `0603:0351` |
+| Linux | `hidraw` + sysfs/BlueZ | PySide6/QtWebEngine | SoundCard with a PipeWire/PulseAudio monitor | X11, Wayland process fallback | systemd user service | USB configuration and Bluetooth input/diagnostics |
 | Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | No keyboard yet; packaged and smoke-tested on Windows runners |
 | macOS | HIDAPI / IOKit | Cocoa/WebKit | `pysysaudio` CoreAudio tap (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | No keyboard yet; packaged and smoke-tested on macOS runners |
 
@@ -141,12 +141,14 @@ source as described below remains a fallback.
 Linux still requires the repository's udev rule so an ordinary user can open
 `hidraw`. The official AppImage includes only the verified `hidraw` transport;
 an experimental HIDAPI override can still be installed from source through the
-`cross-platform` extra, but it is not part of the AppImage. macOS
-Automation/Accessibility permission requirements for application associations
-also apply to the desktop package. macOS system-audio permission is relevant
-only when system output is selected for an audio-reactive effect, and microphone
-permission is relevant only for the microphone fallback. The localhost server
-is not exposed to an external network.
+`cross-platform` extra, but it is not part of the AppImage.
+The measured Linux Bluetooth descriptor is recognized read-only and its battery
+percentage is obtained from BlueZ; configuration continues to require USB.
+macOS Automation/Accessibility permission requirements for application
+associations also apply to the desktop package. macOS system-audio permission
+is relevant only when system output is selected for an audio-reactive effect,
+and microphone permission is relevant only for the microphone fallback. The
+localhost server is not exposed to an external network.
 
 For live effects, the source selector also exposes sensitivity 200–8000
 (default 1000), noise gate, smoothing, and spectrum, bass, or overall-loudness

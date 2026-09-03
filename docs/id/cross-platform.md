@@ -6,7 +6,7 @@
 
 | Platform | Discovery dan write | Renderer desktop v0.7.0 | Penangkapan output sistem pada paket | Aplikasi aktif | Background launcher | Validasi fisik |
 |---|---|---|---|---|---|---|
-| Linux | `hidraw` + sysfs | PySide6/QtWebEngine | SoundCard dengan monitor PipeWire/PulseAudio | X11, fallback proses Wayland | systemd user | Ya, USB `0603:0351` |
+| Linux | `hidraw` + sysfs/BlueZ | PySide6/QtWebEngine | SoundCard dengan monitor PipeWire/PulseAudio | X11, fallback proses Wayland | systemd user | Konfigurasi USB dan input/diagnostik Bluetooth |
 | Windows | HIDAPI / Win32 HID | Edge WebView2 | `pysysaudio` WASAPI loopback | Win32 foreground window | Startup `.cmd` | Belum dengan keyboard; dipaket dan di-smoke-test pada runner Windows |
 | macOS | HIDAPI / IOKit | Cocoa/WebKit | CoreAudio tap `pysysaudio` (macOS 14.2+) | System Events frontmost process | LaunchAgent `.plist` | Belum dengan keyboard; dipaket dan di-smoke-test pada runner macOS |
 
@@ -139,11 +139,14 @@ dipercaya. Instalasi source di bawah tetap menjadi fallback.
 Linux tetap membutuhkan rule udev repository agar user biasa dapat membuka
 `hidraw`. AppImage resmi hanya membundel transport `hidraw` yang diverifikasi;
 override HIDAPI untuk eksperimen tetap dapat dipasang dari source melalui extra
-`cross-platform`, tetapi tidak menjadi bagian dari AppImage. Kebutuhan izin
-Automation/Accessibility macOS untuk association aplikasi juga tetap berlaku
-pada paket desktop. Izin audio sistem macOS hanya relevan saat output sistem
-dipilih bagi efek audio-reactive, sedangkan izin mikrofon hanya relevan bagi
-fallback mikrofon. Localhost tidak mengekspos server ke jaringan eksternal.
+`cross-platform`, tetapi tidak menjadi bagian dari AppImage.
+Descriptor Bluetooth Linux yang telah diukur dikenali secara hanya-baca dan
+persentase baterainya diperoleh dari BlueZ; konfigurasi tetap memerlukan USB.
+Kebutuhan izin Automation/Accessibility macOS untuk association aplikasi juga
+tetap berlaku pada paket desktop. Izin audio sistem macOS hanya relevan saat
+output sistem dipilih bagi efek audio-reactive, sedangkan izin mikrofon hanya
+relevan bagi fallback mikrofon. Localhost tidak mengekspos server ke jaringan
+eksternal.
 
 Untuk efek langsung, selector sumber juga menyediakan sensitivitas 200–8000
 (default 1000), noise gate, smoothing, dan respons spektrum, bass, atau

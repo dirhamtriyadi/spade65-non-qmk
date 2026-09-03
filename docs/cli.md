@@ -9,13 +9,16 @@ automation, and explicit configuration writes.
 
 Spade65 supports the non-QMK Noir Spade65 wired USB identity `0603:0351` and
 2.4 GHz dongle identity `0603:0356`. The physical receiver identity `0603:0352`
-is listed for read-only diagnostics only: its descriptor advertises neither
-verified configuration collection, so it is never a configuration target. Hardware validation now covers the
-whole wired write surface: discovery, descriptor parsing, all 20 built-in RGB
-effects with brightness and speed, per-key RGB, streaming RGB, the AP wave, a
-custom timeline, debounce, a temporary three-layer keymap and macro that were
-applied, verified through physical input, and restored, and a configuration
-reset have all been sent to a physical keyboard. Only the dongle
+is listed for read-only diagnostics only: its descriptor advertises no verified
+configuration collection, so it is never a configuration target. On
+Linux, the exact Bluetooth descriptor measured across the three
+`Fn+Q`/`Fn+W`/`Fn+E` profiles is also recognized for input-only diagnostics and
+BlueZ battery status. Hardware validation now covers the whole wired write
+surface: discovery, descriptor parsing, all 20 built-in RGB effects with
+brightness and speed, per-key RGB, streaming RGB, the AP wave, a custom
+timeline, debounce, a temporary three-layer keymap and macro that were applied,
+verified through physical input, and restored, and a configuration reset have
+all been sent to a physical keyboard. Only the dongle
 light-off/hibernate frame is still unsent, because the logical dongle identity
 `0603:0356` has never appeared on this hardware. See the
 [current hardware verification record](hardware-verification.md) for the exact
@@ -226,11 +229,12 @@ spade65ctl info
 ```
 
 `info` sends no HID packets. On Linux, it can report the USB revision from
-sysfs and battery information only when the operating system exposes a matching
-power-supply device. Windows and macOS use enumeration metadata. The displayed
-USB revision is **not** claimed to be the keyboard firmware version: the vendor
-firmware-version request has not been safely verified, so Spade65 does not guess
-or transmit one.
+sysfs, battery information from a matching power-supply device, and the
+standard BlueZ `Battery1` percentage for the verified Bluetooth descriptor.
+Windows and macOS use enumeration metadata. The displayed USB revision is
+**not** claimed to be the keyboard firmware version: the vendor
+firmware-version request has not been safely verified, so Spade65 does not
+guess or transmit one.
 
 ### Export the known default frame offline
 

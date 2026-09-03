@@ -218,8 +218,10 @@ sysfs; di Windows/macOS nilainya berasal dari metadata enumerasi HIDAPI. Nilai
 tersebut bukan versi firmware. Versi firmware software original berasal dari
 fungsi `GetFWVersion` dalam native addon Windows tertutup; tanpa metode request
 yang dapat diverifikasi, proyek tidak mengirim tebakan HID. Baterai hanya
-ditampilkan jika Linux mengekspornya melalui `power_supply` untuk perangkat yang
-sama; belum ada pembacaan baterai terverifikasi pada Windows/macOS.
+ditampilkan jika Linux mengekspornya melalui `power_supply` untuk perangkat USB
+yang sama. Untuk descriptor Bluetooth Spade65 yang telah diukur, Linux juga
+membaca persentase standar BlueZ `Battery1` tanpa mengirim report HID. Belum ada
+pembacaan baterai terverifikasi pada Windows/macOS.
 
 Hasil pengujian fisik dan batas operasi yang sengaja tidak dikirim dicatat di
 [`hardware-verification.md`](hardware-verification.md).

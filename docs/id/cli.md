@@ -11,7 +11,9 @@ Spade65 mendukung identitas USB berkabel `0603:0351` dan identitas dongle 2,4 GH
 `0603:0356` milik Noir Spade65 non-QMK. Identitas receiver fisik `0603:0352`
 hanya dicantumkan untuk diagnostik hanya-baca: descriptor-nya tidak
 mengiklankan satu pun koleksi konfigurasi terverifikasi, sehingga tidak pernah
-menjadi target konfigurasi. Validasi hardware kini mencakup seluruh permukaan
+menjadi target konfigurasi. Di Linux, descriptor Bluetooth persis yang diukur
+pada ketiga profil `Fn+Q`/`Fn+W`/`Fn+E` juga dikenali untuk diagnostik input-only
+dan status baterai BlueZ. Validasi hardware kini mencakup seluruh permukaan
 penulisan berkabel: deteksi, parsing descriptor, seluruh 20 efek RGB bawaan
 beserta brightness dan speed, RGB per tombol, streaming RGB, AP wave, timeline
 kustom, debounce, keymap tiga layer dan macro sementara yang diterapkan,
@@ -232,11 +234,12 @@ spade65ctl info
 ```
 
 `info` tidak mengirim paket HID. Pada Linux, perintah ini dapat menampilkan
-revisi USB dari sysfs dan informasi baterai hanya bila sistem operasi
-menyediakan power-supply yang cocok. Windows dan macOS memakai metadata
-enumerasi. Revisi USB yang ditampilkan **bukan** diklaim sebagai versi firmware
-keyboard: request versi firmware vendor belum diverifikasi dengan aman, sehingga
-Spade65 tidak menebak atau mengirim request tersebut.
+revisi USB dari sysfs, informasi baterai dari power-supply yang cocok, serta
+persentase standar BlueZ `Battery1` untuk descriptor Bluetooth yang
+terverifikasi. Windows dan macOS memakai metadata enumerasi. Revisi USB yang
+ditampilkan **bukan** diklaim sebagai versi firmware keyboard: request versi
+firmware vendor belum diverifikasi dengan aman, sehingga Spade65 tidak menebak
+atau mengirim request tersebut.
 
 ### Mengekspor frame default secara offline
 

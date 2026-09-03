@@ -111,7 +111,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(main(["probe"]), 2)
         self.assertEqual(
             output.getvalue(),
-            "Spade65 not found (VID 0603, PID 0351/0352/0356).\n",
+            "Spade65 not found (USB VID 0603 PID 0351/0352/0356 or the "
+            "verified Linux Bluetooth descriptor).\n",
         )
 
     def test_profile_write_requires_double_confirmation(self) -> None:

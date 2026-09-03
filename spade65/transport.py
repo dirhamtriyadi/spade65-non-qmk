@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import os
 import sys
@@ -10,8 +11,53 @@ from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 
-from .device import Device, choose_device, parse_report_descriptor
-from .protocol import OBSERVED_PRODUCT_IDS, VENDOR_ID
+from .device import HID_BUS_BLUETOOTH, Device, choose_device, parse_report_descriptor
+from .protocol import (
+    OBSERVED_PRODUCT_IDS,
+    VENDOR_ID,
+    configuration_status,
+)
+
+
+BLUETOOTH_DESCRIPTOR_SHA256 = (
+    "571f74c48018a34a853786c72a0a9bfe24023ffae639b2cd6b207cbd88d0d334"
+)
+BLUETOOTH_TRANSPORT = "Bluetooth LE"
+
+
+def is_observed_bluetooth(device: Device) -> bool:
+    """Match only the measured Linux Bluetooth identity, read-only."""
+
+    return (
+        device.backend == "hidraw"
+        and device.bus_type == HID_BUS_BLUETOOTH
+        and device.vendor_id == 0
+        and device.product_id == 0
+        and device.name.strip().casefold() == "spade65"
+        and hashlib.sha256(device.descriptor).hexdigest()
+        == BLUETOOTH_DESCRIPTOR_SHA256
+    )
+
+
+def observed_transport(device: Device) -> str | None:
+    if (
+        device.vendor_id == VENDOR_ID
+        and device.product_id in OBSERVED_PRODUCT_IDS
+    ):
+        return OBSERVED_PRODUCT_IDS[device.product_id]
+    if is_observed_bluetooth(device):
+        return BLUETOOTH_TRANSPORT
+    return None
+
+
+def is_observed_device(device: Device) -> bool:
+    return observed_transport(device) is not None
+
+
+def device_configuration_status(device: Device) -> str:
+    if is_observed_bluetooth(device):
+        return "unsupported-read-only"
+    return configuration_status(device.product_id)
 
 
 def backend_name(platform: str | None = None) -> str:
@@ -186,7 +232,10 @@ def readonly_device_info(device: Device) -> dict[str, object | None]:
 
 
 __all__ = [
-    "Device", "backend_name", "choose_device", "discover_devices",
-    "discover_hidapi", "feature_report_session", "readonly_device_info",
+    "BLUETOOTH_DESCRIPTOR_SHA256", "BLUETOOTH_TRANSPORT", "Device",
+    "backend_name", "choose_device", "device_configuration_status",
+    "discover_devices", "discover_hidapi", "feature_report_session",
+    "is_observed_bluetooth", "is_observed_device", "observed_transport",
+    "readonly_device_info",
     "send_feature_report", "send_output_report",
 ]

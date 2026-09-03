@@ -159,13 +159,15 @@ alur hardware yang aman tersedia di [`docs/id/cli.md`](docs/id/cli.md).
 Validasi fisik terkini menggunakan perangkat Linux berkabel dengan identitas
 `0603:0351`, bersama receiver fisik 2,4 GHz milik keyboard tersebut yang
 terdeteksi sebagai `0603:0352` dan diperiksa secara hanya-baca dengan kabel
-dilepas serta keyboard beroperasi lewat 2,4 GHz. Seluruh pemeriksaan
-konfigurasi di bawah ini dijalankan melalui perangkat berkabel. Penemuan
-descriptor, seluruh 20 efek RGB bawaan beserta kontrol brightness dan speed,
-debounce, RGB per tombol, streaming real-time, AP wave dan satu custom
-timeline, aksi RGB GUI yang terautentikasi, keymap tiga layer dan macro, reset
-konfigurasi, satu frame timeline melalui background service, dan pembacaan
-revisi USB secara read-only telah berhasil dijalankan.
+dilepas serta keyboard beroperasi lewat 2,4 GHz. Input Bluetooth juga diuji
+secara fisik pada ketiga profil `Fn+Q`/`Fn+W`/`Fn+E`, termasuk bond terpisah,
+perpindahan profil, input, dan reconnect setelah keyboard dimatikan lalu
+dinyalakan. Seluruh pemeriksaan konfigurasi di bawah ini dijalankan melalui
+perangkat berkabel. Penemuan descriptor, seluruh 20 efek RGB bawaan beserta
+kontrol brightness dan speed, debounce, RGB per tombol, streaming real-time,
+AP wave dan satu custom timeline, aksi RGB GUI yang terautentikasi, keymap tiga
+layer dan macro, reset konfigurasi, satu frame timeline melalui background
+service, dan pembacaan revisi USB secara read-only telah berhasil dijalankan.
 
 Write keymap, macro, dan reset kini telah dikirim ke perangkat berkabel: keymap
 dan macro sementara diverifikasi melalui input fisik lalu dipulihkan, dan
@@ -187,7 +189,9 @@ berkabel yang sudah diverifikasi bukan bukti bagi kedua backend OS tersebut.
 Hanya timer light-off/hibernate dongle yang masih belum dikirim. Identitas
 dongle logis `0603:0356` belum pernah terdeteksi di sini, dan receiver fisik
 yang terdeteksi, `0603:0352`, sama sekali tidak mengiklankan feature report,
-sehingga tidak dapat membawa frame tersebut. Lihat
+sehingga tidak dapat membawa frame tersebut. Bluetooth juga tidak menyediakan
+feature report; identitas Linux yang terukur dikenali untuk diagnostik
+input-only dan status baterai BlueZ, bukan konfigurasi. Lihat
 [`docs/id/hardware-verification.md`](docs/id/hardware-verification.md) untuk
 catatan pengujian lengkap. Cakupan otomatis atau offline tidak pernah disebut
 sebagai verifikasi perangkat fisik.
