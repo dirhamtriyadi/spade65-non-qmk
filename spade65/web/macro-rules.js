@@ -73,6 +73,42 @@
     return null;
   }
 
+  // The firmware macro buffer holds 84 events, and protocol.py refuses a
+  // longer one, so the recorder has to stop before it overruns rather than
+  // truncate afterwards.
+  const MAX_EVENTS = 84;
+
+  function hasRoomForEvent(eventCount, heldAfter) {
+    // Reserve one release for every key that will still be held after this
+    // event, so stopping can never leave a key down on the keyboard.
+    return eventCount + 1 + heldAfter <= MAX_EVENTS;
+  }
+
+  function isRecordingFull(eventCount, heldCount) {
+    return eventCount >= MAX_EVENTS && heldCount === 0;
+  }
+
+  function pendingReleases(heldUsages, eventCount) {
+    const events = [];
+    let total = eventCount;
+    for (const usage of heldUsages || []) {
+      if (total >= MAX_EVENTS) return {
+        events,
+        overflow: true
+      };
+      events.push({
+        delay_ms: 0,
+        usage,
+        pressed: false
+      });
+      total += 1;
+    }
+    return {
+      events,
+      overflow: false
+    };
+  }
+
   function bindings(layers, index) {
     const result = [];
     if (!layers || typeof layers !== "object") return result;
@@ -91,7 +127,11 @@
   }
 
   return Object.freeze({
+    MAX_EVENTS,
     bindings,
+    hasRoomForEvent,
+    isRecordingFull,
+    pendingReleases,
     sequenceIssue,
     usageIdentity
   });

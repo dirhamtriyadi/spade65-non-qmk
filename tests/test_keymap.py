@@ -21,7 +21,7 @@ from spade65.keymap import (
     export_default,
     profile_template,
 )
-from spade65.protocol import debounce_report
+from spade65.protocol import MacroEvent, debounce_report, macro_report
 
 
 class KeymapTests(unittest.TestCase):
@@ -268,6 +268,30 @@ class WebUsageNameTests(unittest.TestCase):
         for name in sorted(self._producible()):
             with self.subTest(usage=name):
                 self.assertIsInstance(parse_usage(name), int)
+
+
+class WebMacroLimitTests(unittest.TestCase):
+    """The recorder must stop where the protocol stops accepting."""
+
+    def test_the_recorder_limit_matches_the_one_the_protocol_enforces(self) -> None:
+        # A recorder that let one more event through would build a macro
+        # macro_reports refuses, and the user would only find out on Apply.
+        if shutil.which("node") is None:
+            self.skipTest("node is required to read the web macro limit")
+        module = (
+            Path(__file__).resolve().parents[1] / "spade65" / "web" / "macro-rules.js"
+        )
+        script = f"console.log(require({str(module)!r}).MAX_EVENTS)"
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, timeout=60
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        limit = int(result.stdout.strip())
+
+        events = [MacroEvent(delay_ms=0, usage=4, pressed=True)] * limit
+        macro_report(0, events)
+        with self.assertRaisesRegex(ValueError, "at most"):
+            macro_report(0, events + events[:1])
 
 
 if __name__ == "__main__":

@@ -343,7 +343,12 @@ class I18nTests(unittest.TestCase):
         self.assertIn("pendingMacroAssignment=macro.index", compact)
         self.assertIn("assignmentEditorKey!==assignmentIdentity()", compact)
         self.assertIn("selected.pid==='0351'", compact)
-        self.assertIn("macro.events.length+1+pressedAfter>84", compact)
+        # The recorder reserves a release slot per held key so stopping
+        # cannot leave a key down; the rule itself lives in macro-rules.js.
+        self.assertIn(
+            "macroRules.hasRoomForEvent(macro.events.length,pressedAfter)", compact
+        )
+        self.assertIn("macroRules.pendingReleases(held,macro.events.length)", compact)
         # Macro validation moved into macro-rules.js so it can be tested
         # without a browser; the rule the editor keeps is that it consults
         # the shared validator instead of judging a sequence itself.

@@ -2181,9 +2181,7 @@ function recordMacroEvent(event) {
     return
   }
   const pressedAfter = recordPressed.size + (isDown ? 1 : -1);
-  // Reserve one release slot for every key that will still be held after this
-  // event. That guarantees Stop can never leave a key-down without a key-up.
-  if (macro.events.length + 1 + pressedAfter > 84) {
+  if (!macroRules.hasRoomForEvent(macro.events.length, pressedAfter)) {
     stopMacroRecording({
       notify: false
     });
@@ -2199,7 +2197,7 @@ function recordMacroEvent(event) {
   recordLast = now;
   event.preventDefault();
   renderMacros();
-  if (macro.events.length === 84 && recordPressed.size === 0) {
+  if (macroRules.isRecordingFull(macro.events.length, recordPressed.size)) {
     stopMacroRecording({
       notify: false
     });
@@ -2224,19 +2222,11 @@ function startMacroRecording() {
 }
 
 function closeRecordedKeyPresses(macro) {
-  for (const code of recordPressed) {
-    const usage = keyEvents.usageForCode(code);
-    if (!usage) continue;
-    if (macro.events.length < 84) {
-      macro.events.push({
-        delay_ms: 0,
-        usage,
-        pressed: false
-      });
-    } else {
-      console.error('Macro recorder exhausted its reserved release slots');
-      break
-    }
+  const held = [...recordPressed].map(code => keyEvents.usageForCode(code)).filter(Boolean);
+  const closing = macroRules.pendingReleases(held, macro.events.length);
+  macro.events.push(...closing.events);
+  if (closing.overflow) {
+    console.error('Macro recorder exhausted its reserved release slots');
   }
 }
 

@@ -93,3 +93,70 @@ test("a plain assignment is never mistaken for a macro binding", () => {
   // A key assigned the letter "a" has no macro property to compare.
   assert.deepEqual(rules.bindings({ normal: { q: "a", w: { usage: "b" } } }, 0), []);
 });
+
+test("the recorder stops before it runs out of reserved release slots", () => {
+  // Room is judged against the events already recorded plus one release for
+  // every key that will still be held after this one.
+  assert.equal(rules.hasRoomForEvent(0, 0), true);
+  assert.equal(rules.hasRoomForEvent(82, 1), true);
+  assert.equal(rules.hasRoomForEvent(83, 1), false);
+  assert.equal(rules.hasRoomForEvent(83, 0), true);
+  assert.equal(rules.hasRoomForEvent(84, 0), false);
+  assert.equal(rules.hasRoomForEvent(80, 4), false);
+});
+
+test("a recording is finished once it is full with nothing held", () => {
+  assert.equal(rules.isRecordingFull(84, 0), true);
+  assert.equal(rules.isRecordingFull(84, 1), false);
+  assert.equal(rules.isRecordingFull(83, 0), false);
+});
+
+test("closing a recording releases every held key in order", () => {
+  const closing = rules.pendingReleases(["a", "b"], 4);
+  assert.equal(closing.overflow, false);
+  assert.deepEqual(closing.events, [
+    { delay_ms: 0, usage: "a", pressed: false },
+    { delay_ms: 0, usage: "b", pressed: false },
+  ]);
+  assert.deepEqual(rules.pendingReleases([], 4), { events: [], overflow: false });
+});
+
+test("closing reports overflow rather than exceeding the limit", () => {
+  const closing = rules.pendingReleases(["a", "b"], rules.MAX_EVENTS - 1);
+  assert.equal(closing.events.length, 1);
+  assert.equal(closing.overflow, true);
+  assert.equal(rules.pendingReleases(["a"], rules.MAX_EVENTS).events.length, 0);
+  assert.equal(rules.pendingReleases(["a"], rules.MAX_EVENTS).overflow, true);
+});
+
+test("no recording session can produce a macro the keyboard would reject", () => {
+  // The reservation rule exists so Stop never leaves a key held down. Drive a
+  // whole session through the same rules the recorder uses and check the
+  // macro it produces always validates.
+  const usages = { a: 4, b: 5, c: 6, d: 7, e: 8 };
+  const names = Object.keys(usages);
+  let seed = 20260903;
+  const rnd = n => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) >>> 8) % n;
+
+  for (let session = 0; session < 3000; session += 1) {
+    const events = [];
+    const held = [];
+    for (let step = 0; step < 200; step += 1) {
+      const name = names[rnd(names.length)];
+      const down = held.includes(name) ? false : rnd(3) > 0;
+      if (down === held.includes(name)) continue;
+      const heldAfter = held.length + (down ? 1 : -1);
+      if (!rules.hasRoomForEvent(events.length, heldAfter)) break;
+      events.push({ delay_ms: 0, usage: name, pressed: down });
+      if (down) held.push(name);
+      else held.splice(held.indexOf(name), 1);
+      if (rules.isRecordingFull(events.length, held.length)) break;
+    }
+    const closing = rules.pendingReleases(held, events.length);
+    assert.equal(closing.overflow, false, "reservation ran out");
+    events.push(...closing.events);
+    assert.ok(events.length <= rules.MAX_EVENTS, "over the protocol limit");
+    assert.equal(rules.sequenceIssue({ events }, usages), null,
+      "invalid macro from a legal session: " + JSON.stringify(events));
+  }
+});
