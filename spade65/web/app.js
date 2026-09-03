@@ -816,30 +816,6 @@ function renderEffects() {
   select.value = effects.includes(selected) ? selected : DEFAULT_LIGHTING.effect
 }
 
-function normalizedLighting(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const baseFields = ['effect', 'brightness', 'speed', 'color_index', 'multicolor'],
-    fields = value.effect === 'custom' ? [...baseFields, 'colors'] : baseFields,
-    invalid = Object.keys(value).length !== fields.length ||
-    fields.some(field => !hasOwn(value, field)) ||
-    !meta?.effects.includes(value.effect) ||
-    !Number.isInteger(value.brightness) || value.brightness < 0 || value.brightness > 4 ||
-    !Number.isInteger(value.speed) || value.speed < 1 || value.speed > 5 ||
-    !Number.isInteger(value.color_index) || value.color_index < 0 || value.color_index > 7 ||
-    typeof value.multicolor !== 'boolean' ||
-    (value.effect === 'custom' && (!value.colors || typeof value.colors !== 'object' || Array.isArray(value.colors)));
-  if (invalid) return null;
-  const lighting = {
-    effect: value.effect,
-    brightness: value.brightness,
-    speed: value.speed,
-    color_index: value.color_index,
-    multicolor: value.multicolor
-  };
-  if (value.effect === 'custom') lighting.colors = cloneJson(value.colors);
-  return lighting
-}
-
 function migrateProfileLighting(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   // A legacy top-level color table is an editable draft, not evidence that it
@@ -850,7 +826,7 @@ function migrateProfileLighting(value) {
 }
 
 function savedLighting() {
-  return normalizedLighting(profile?.lighting)
+  return liveEffects.normalizedLighting(profile?.lighting, meta?.effects)
 }
 
 function lightingTarget() {
@@ -867,7 +843,7 @@ function resetLightingDraft() {
 }
 
 function ensureLightingDraft() {
-  if (lightingDraftProfile !== profile || !normalizedLighting(lightingDraft)) resetLightingDraft();
+  if (lightingDraftProfile !== profile || !liveEffects.normalizedLighting(lightingDraft, meta?.effects)) resetLightingDraft();
   return lightingDraft
 }
 
@@ -920,7 +896,7 @@ function lightingValuesMatch(left, right) {
 }
 
 function renderLightingIntent() {
-  const lighting = normalizedLighting(lightingDraft) || savedLighting() || DEFAULT_LIGHTING,
+  const lighting = liveEffects.normalizedLighting(lightingDraft, meta?.effects) || savedLighting() || DEFAULT_LIGHTING,
     changed = !lightingValuesMatch(lighting, savedLighting()),
     effectKey = `effect.${lighting.effect}`,
     translatedEffect = t(effectKey),
@@ -987,7 +963,7 @@ function renderLiveEffectStatus() {
 }
 
 function rememberLighting(value, target) {
-  const lighting = normalizedLighting(value);
+  const lighting = liveEffects.normalizedLighting(value, meta?.effects);
   if (!lighting) return;
   target.profile.lighting = cloneJson(lighting);
   if (profile === target.profile) {

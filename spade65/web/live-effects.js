@@ -242,8 +242,51 @@
     return output;
   }
 
+  // The firmware accepts these ranges and rgb_effect_report refuses anything
+  // outside them, so a snapshot that falls out of range must be rejected here
+  // rather than sent and failed on Apply.
+  const LIGHTING_BOUNDS = Object.freeze({
+    brightness: Object.freeze([0, 4]),
+    speed: Object.freeze([1, 5]),
+    color_index: Object.freeze([0, 7])
+  });
+
+  function inBounds(value, field) {
+    const [low, high] = LIGHTING_BOUNDS[field];
+    return Number.isInteger(value) && value >= low && value <= high;
+  }
+
+  function normalizedLighting(value, effects) {
+    // A stored or imported snapshot is only usable if it describes exactly the
+    // fields the device takes; anything else is a draft, not a saved state.
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const base = ["effect", "brightness", "speed", "color_index", "multicolor"];
+    const fields = value.effect === "custom" ? [...base, "colors"] : base;
+    const custom = value.colors;
+    const invalid = Object.keys(value).length !== fields.length ||
+      fields.some(field => !Object.prototype.hasOwnProperty.call(value, field)) ||
+      !(effects || []).includes(value.effect) ||
+      !inBounds(value.brightness, "brightness") ||
+      !inBounds(value.speed, "speed") ||
+      !inBounds(value.color_index, "color_index") ||
+      typeof value.multicolor !== "boolean" ||
+      (value.effect === "custom" &&
+        (!custom || typeof custom !== "object" || Array.isArray(custom)));
+    if (invalid) return null;
+    const lighting = {
+      effect: value.effect,
+      brightness: value.brightness,
+      speed: value.speed,
+      color_index: value.color_index,
+      multicolor: value.multicolor
+    };
+    if (value.effect === "custom") lighting.colors = JSON.parse(JSON.stringify(custom));
+    return lighting;
+  }
+
   return {
     DEFAULT_BAND_COUNT,
+    LIGHTING_BOUNDS,
     applyMasterBrightness,
     audioInfluence,
     bandRowPosition,
@@ -252,6 +295,7 @@
     compositePixels,
     hexRgb,
     layerPixel,
+    normalizedLighting,
     paletteRgb,
     emptyAudioFrame,
     preferredAudioSource,

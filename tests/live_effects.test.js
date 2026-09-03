@@ -206,3 +206,72 @@ test("master brightness scales the whole composed frame", () => {
   assert.ok(value(half) > value(dark));
   assert.equal(dark.esc, "#000000");
 });
+
+test("a lighting snapshot is accepted only when every field is in range", () => {
+  const available = ["neon-stream", "fixed", "custom"];
+  const good = {
+    effect: "neon-stream",
+    brightness: 4,
+    speed: 5,
+    color_index: 0,
+    multicolor: true,
+  };
+  assert.deepEqual(effects.normalizedLighting(good, available), good);
+
+  const rejected = [
+    ["an unknown effect", { ...good, effect: "sparkle" }],
+    ["brightness above the limit", { ...good, brightness: 5 }],
+    ["brightness below zero", { ...good, brightness: -1 }],
+    ["a fractional brightness", { ...good, brightness: 2.5 }],
+    ["speed below the limit", { ...good, speed: 0 }],
+    ["speed above the limit", { ...good, speed: 6 }],
+    ["a colour index above the palette", { ...good, color_index: 8 }],
+    ["a colour index below zero", { ...good, color_index: -1 }],
+    ["multicolor as a string", { ...good, multicolor: "true" }],
+    ["a missing field", { effect: "fixed", brightness: 1, speed: 1, color_index: 0 }],
+    ["an unexpected extra field", { ...good, extra: 1 }],
+    ["an array", [good]],
+    ["null", null],
+    ["a string", "neon-stream"],
+  ];
+  for (const [why, value] of rejected) {
+    assert.equal(effects.normalizedLighting(value, available), null, why);
+  }
+});
+
+test("a custom snapshot carries its own copy of the colours", () => {
+  const available = ["neon-stream", "custom"];
+  const source = {
+    effect: "custom",
+    brightness: 2,
+    speed: 3,
+    color_index: 1,
+    multicolor: false,
+    colors: { esc: "#ff0000" },
+  };
+  const copy = effects.normalizedLighting(source, available);
+  assert.deepEqual(copy, source);
+  copy.colors.esc = "#00ff00";
+  assert.equal(source.colors.esc, "#ff0000", "the snapshot aliased its input");
+
+  // "custom" without a colour table, and a colour table on any other effect,
+  // are both malformed.
+  assert.equal(effects.normalizedLighting({ ...source, colors: undefined }, available), null);
+  assert.equal(
+    effects.normalizedLighting({ ...source, effect: "neon-stream" }, available),
+    null
+  );
+  assert.equal(effects.normalizedLighting({ ...source, colors: [] }, available), null);
+});
+
+test("an absent effect list accepts nothing", () => {
+  const good = {
+    effect: "neon-stream",
+    brightness: 4,
+    speed: 5,
+    color_index: 0,
+    multicolor: true,
+  };
+  assert.equal(effects.normalizedLighting(good, undefined), null);
+  assert.equal(effects.normalizedLighting(good, []), null);
+});

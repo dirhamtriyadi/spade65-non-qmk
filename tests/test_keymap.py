@@ -21,7 +21,13 @@ from spade65.keymap import (
     export_default,
     profile_template,
 )
-from spade65.protocol import MacroEvent, debounce_report, macro_report
+from spade65.protocol import (
+    EFFECTS,
+    MacroEvent,
+    debounce_report,
+    macro_report,
+    rgb_effect_report,
+)
 
 
 class KeymapTests(unittest.TestCase):
@@ -292,6 +298,37 @@ class WebMacroLimitTests(unittest.TestCase):
         macro_report(0, events)
         with self.assertRaisesRegex(ValueError, "at most"):
             macro_report(0, events + events[:1])
+
+
+class WebLightingBoundsTests(unittest.TestCase):
+    """The editor must refuse what rgb_effect_report would refuse."""
+
+    def _bounds(self) -> dict[str, list[int]]:
+        if shutil.which("node") is None:
+            self.skipTest("node is required to read the web lighting bounds")
+        module = (
+            Path(__file__).resolve().parents[1] / "spade65" / "web" / "live-effects.js"
+        )
+        script = (
+            f"console.log(JSON.stringify(require({str(module)!r}).LIGHTING_BOUNDS))"
+        )
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, timeout=60
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_each_bound_is_exactly_where_the_protocol_starts_refusing(self) -> None:
+        # A snapshot the page accepts but the protocol rejects would only fail
+        # on Apply, after the user thought the setting was saved.
+        effect = next(iter(EFFECTS))
+        for field, (low, high) in self._bounds().items():
+            with self.subTest(field=field):
+                rgb_effect_report(effect, **{field: low})
+                rgb_effect_report(effect, **{field: high})
+                for outside in (low - 1, high + 1):
+                    with self.assertRaises(ValueError):
+                        rgb_effect_report(effect, **{field: outside})
 
 
 if __name__ == "__main__":
