@@ -2,13 +2,20 @@ post_install() {
   cat <<'MSG'
 Spade65 is in the application menu as "Spade65".
 
-The udev rule that grants hidraw access was installed. Replug the keyboard,
-or reload the rules now:
+A udev rule granting hidraw access was installed, and pacman's udev hook has
+already reloaded it. A keyboard that was plugged in before this install keeps
+its old permissions until it is replugged, or until:
 
-  sudo udevadm control --reload-rules && sudo udevadm trigger
+  sudo udevadm trigger --subsystem-match=hidraw
 
-The rule tags the device with uaccess, so the logged-in user gets access
+The rule tags the device with uaccess, so the signed-in user gets access
 without joining a group.
+
+On a KDE session that was already running, the entry appears in the launcher
+but without its icon: plasmashell reads newly installed desktop entries and
+keeps its own icon cache. Restart the shell once, or sign out and back in:
+
+  systemctl --user restart plasma-plasmashell.service
 MSG
 }
 
