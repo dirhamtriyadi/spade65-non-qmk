@@ -84,6 +84,19 @@ Do not move a published tag to a different commit. If a build fails, fix the
 source and publish a new patch version. A manual run is appropriate for retrying
 an infrastructure failure when the tagged commit has not changed.
 
+### Tags whose build failed are kept
+
+`publish` requires all three platform builds, so a single failing job leaves the
+tag in place with no release behind it. Those tags are deliberately not deleted:
+they record that the attempt happened, and where. As of v0.8.9 that is `v0.6.0`,
+`v0.6.1`, `v0.7.0`, `v0.8.2` and `v0.8.7`.
+
+Rebuilding them is not possible. Each points at a commit from before its own
+fix existed, so `workflow_dispatch` would reproduce the original failure --
+`v0.8.7` predates the universal2 system-audio wheel that v0.8.8 introduced, and
+would again fail with `IncompatibleBinaryArchError`. The release that carries
+the fix is the one users install; the failed tag is history, not a candidate.
+
 ## What the workflow validates
 
 Before publishing any assets, the pipeline:

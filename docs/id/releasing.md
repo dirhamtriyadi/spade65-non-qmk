@@ -86,6 +86,20 @@ Jangan memindahkan tag yang telah dipublikasikan ke commit lain. Jika build
 gagal, perbaiki source dan terbitkan versi patch baru. Eksekusi manual cocok
 untuk mengulang kegagalan infrastruktur pada tag yang commit-nya tidak berubah.
 
+### Tag yang build-nya gagal tetap disimpan
+
+`publish` mensyaratkan ketiga build platform, sehingga satu job yang gagal
+menyisakan tag tanpa rilis di belakangnya. Tag seperti itu sengaja tidak
+dihapus: keduanya mencatat bahwa percobaan itu pernah ada dan gagal di mana.
+Per v0.8.9 yaitu `v0.6.0`, `v0.6.1`, `v0.7.0`, `v0.8.2`, dan `v0.8.7`.
+
+Membangun ulangnya tidak mungkin. Masing-masing menunjuk commit dari sebelum
+perbaikannya sendiri ada, sehingga `workflow_dispatch` hanya akan mengulang
+kegagalan yang sama -- `v0.8.7` mendahului wheel system-audio universal2 yang
+baru diperkenalkan v0.8.8, dan akan kembali gagal dengan
+`IncompatibleBinaryArchError`. Rilis yang membawa perbaikanlah yang dipasang
+pengguna; tag yang gagal itu catatan sejarah, bukan kandidat.
+
 ## Apa yang divalidasi workflow
 
 Sebelum memublikasikan asset, pipeline:
