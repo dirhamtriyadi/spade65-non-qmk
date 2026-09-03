@@ -155,6 +155,30 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "requires an x86_64 host"):
             build.validate_architecture("linux", "aarch64")
 
+    def test_no_test_imports_a_module_the_minimum_python_lacks(self):
+        # tomllib arrived in 3.11. Importing it in a test fails collection on
+        # every 3.10 job at once, and the local interpreter is newer, so the
+        # break only shows up in CI.
+        requires = re.search(
+            r'requires-python\s*=\s*["\']>=\s*(\d+)\.(\d+)',
+            (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+        )
+        self.assertIsNotNone(requires)
+        floor = (int(requires.group(1)), int(requires.group(2)))
+        added_in = {"tomllib": (3, 11)}
+        too_new = {name for name, since in added_in.items() if since > floor}
+        self.assertIn("tomllib", too_new, "the minimum Python moved; revisit this")
+
+        offenders = []
+        for path in sorted((ROOT / "tests").glob("*.py")):
+            text = path.read_text(encoding="utf-8")
+            for name in too_new:
+                # A guarded import inside try/except ModuleNotFoundError is how
+                # check_version does it and stays fine.
+                if re.search(rf"(?m)^(?:import|from) {re.escape(name)}\b", text):
+                    offenders.append(f"{path.name}: {name}")
+        self.assertEqual(offenders, [])
+
     def test_source_version_requires_pyproject_and_package_to_match(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

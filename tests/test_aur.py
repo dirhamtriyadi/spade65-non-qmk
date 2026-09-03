@@ -1,13 +1,26 @@
+import importlib.util
 import re
 import shutil
 import subprocess
-import tomllib
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AUR = ROOT / "packaging" / "aur"
 PKGBUILD = AUR / "PKGBUILD"
+
+
+def _load(name: str, relative_path: str):
+    spec = importlib.util.spec_from_file_location(name, ROOT / relative_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+# tomllib arrived in 3.11 and this project supports 3.10, so read the
+# project version through the helper the release scripts already use.
+versions = _load("spade65_aur_versions", "packaging/check_version.py")
 
 
 def _field(name: str) -> str:
@@ -40,9 +53,11 @@ class AurPackageTests(unittest.TestCase):
         # The AUR package trails the project: its checksums can only be taken
         # after a release build has published its artefacts. Ahead of the
         # project version it would name a tag nobody can download.
-        project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+        current_text = versions.project_version_from_text(
+            (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
         packaged = tuple(int(part) for part in _field("pkgver").split("."))
-        current = tuple(int(part) for part in project["version"].split("."))
+        current = tuple(int(part) for part in current_text.split("."))
         self.assertLessEqual(packaged, current)
 
     def test_every_source_is_pinned_to_the_packaged_version(self) -> None:
