@@ -2,7 +2,7 @@
 
 pkgname=spade65-appimage
 _appname=spade65
-pkgver=0.8.10
+pkgver=0.8.11
 pkgrel=1
 pkgdesc="Configuration utility for the non-QMK Noir Spade65 keyboard (AppImage)"
 arch=('x86_64')
@@ -23,7 +23,7 @@ source=(
   "$_appname-$pkgver.LICENSE::$_repo/LICENSE"
 )
 noextract=("$_appname-$pkgver.AppImage")
-sha256sums=('3a788d2791bd613573137268f434838f81355c1022e1c4f6125529dee95c4db9'
+sha256sums=('1b2f3e6acdb0cf6392595964424e117d79218be0c56075703e4f18ecee4c397c'
             'a33d1ba62fc61f9b460b8d18870d0e0e87dbbd6643693a4a6b317b086bb8ccbc'
             'c7f8dc7dce00fcb517d34ece0ba977f1b98c35a3212cb45224c3c1d075c70d64')
 

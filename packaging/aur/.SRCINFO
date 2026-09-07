@@ -1,6 +1,6 @@
 pkgbase = spade65-appimage
 	pkgdesc = Configuration utility for the non-QMK Noir Spade65 keyboard (AppImage)
-	pkgver = 0.8.10
+	pkgver = 0.8.11
 	pkgrel = 1
 	url = https://github.com/dirhamtriyadi/spade65-non-qmk
 	install = spade65-appimage.install
@@ -10,13 +10,13 @@ pkgbase = spade65-appimage
 	depends = hicolor-icon-theme
 	provides = spade65
 	conflicts = spade65
-	noextract = spade65-0.8.10.AppImage
+	noextract = spade65-0.8.11.AppImage
 	options = !strip
 	options = !debug
-	source = spade65-0.8.10.AppImage::https://github.com/dirhamtriyadi/spade65-non-qmk/releases/download/v0.8.10/Spade65-Linux-x86_64.AppImage
-	source = spade65-0.8.10.rules::https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.10/udev/99-spade65.rules
-	source = spade65-0.8.10.LICENSE::https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.10/LICENSE
-	sha256sums = 3a788d2791bd613573137268f434838f81355c1022e1c4f6125529dee95c4db9
+	source = spade65-0.8.11.AppImage::https://github.com/dirhamtriyadi/spade65-non-qmk/releases/download/v0.8.11/Spade65-Linux-x86_64.AppImage
+	source = spade65-0.8.11.rules::https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/udev/99-spade65.rules
+	source = spade65-0.8.11.LICENSE::https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/LICENSE
+	sha256sums = 1b2f3e6acdb0cf6392595964424e117d79218be0c56075703e4f18ecee4c397c
 	sha256sums = a33d1ba62fc61f9b460b8d18870d0e0e87dbbd6643693a4a6b317b086bb8ccbc
 	sha256sums = c7f8dc7dce00fcb517d34ece0ba977f1b98c35a3212cb45224c3c1d075c70d64
 
