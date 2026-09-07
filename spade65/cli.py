@@ -9,8 +9,10 @@ import time
 from pathlib import Path
 
 from . import __version__
+from .device import HID_BUS_BLUETOOTH
 from .transport import (
     Device,
+    bluez_battery_probe,
     choose_device,
     device_configuration_status,
     discover_devices,
@@ -454,7 +456,13 @@ def command_info(args: argparse.Namespace) -> int:
         if identity in seen:
             continue
         seen.add(identity)
-        summaries.append({**_device_dict(device), **readonly_device_info(device)})
+        summary = {**_device_dict(device), **readonly_device_info(device)}
+        if getattr(args, "battery_probe", False) and device.bus_type == HID_BUS_BLUETOOTH:
+            # BlueZ publishes the last level the keyboard notified. Reading the
+            # characteristic asks the keyboard now, so a difference between the
+            # two says the cached value had gone stale.
+            summary["battery_probe"] = bluez_battery_probe(device)
+        summaries.append(summary)
     print(json.dumps(summaries, indent=2))
     return 0 if summaries else 2
 
@@ -564,6 +572,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     info = subparsers.add_parser(
         "info", help="read-only device metadata and available battery information"
+    )
+    info.add_argument(
+        "--battery-probe",
+        action="store_true",
+        help=(
+            "for a Bluetooth device, also read the battery level straight from "
+            "the keyboard and report it beside the value BlueZ has cached"
+        ),
     )
     info.set_defaults(handler=command_info)
 

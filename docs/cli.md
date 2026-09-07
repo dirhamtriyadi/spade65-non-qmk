@@ -236,6 +236,36 @@ Windows and macOS use enumeration metadata. The displayed USB revision is
 firmware-version request has not been safely verified, so Spade65 does not
 guess or transmit one.
 
+#### Is the Bluetooth battery level current?
+
+BlueZ publishes `Battery1.Percentage` from the last value the keyboard
+notified. A keyboard that does not notify on change leaves it frozen at
+whatever it reported when the link came up, which looks like a battery that
+never discharges and then dies without warning.
+
+```bash
+spade65ctl info --battery-probe
+```
+
+For a Bluetooth device this adds a `battery_probe` block that reads the
+standard Battery Level characteristic (`0x2A19`) from the keyboard through
+BlueZ and reports it beside the cached property:
+
+```json
+"battery_probe": {
+  "device_path": "/org/bluez/hci0/dev_...",
+  "characteristic": "/org/bluez/hci0/dev_.../service0010/char0011",
+  "cached_percent": 100,
+  "fresh_percent": 62,
+  "differs": true
+}
+```
+
+`differs` being true means the cached value had gone stale, which is a BlueZ
+or firmware notification problem rather than a wrong reading. Both values are
+reads; nothing is written to the keyboard. This needs `busctl`, which ships
+with systemd, and works on Linux only.
+
 ### Export the known default frame offline
 
 ```bash

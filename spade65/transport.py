@@ -210,6 +210,26 @@ def send_output_report(device: Device, report: bytes) -> int:
         handle.close()
 
 
+def bluez_battery_probe(device: Device) -> dict[str, object | None]:
+    """Compare BlueZ's cached battery level against a fresh read of the device.
+
+    Linux only: BlueZ is the only place either value exists.
+    """
+
+    if device.backend != "hidraw":
+        return {
+            "device_path": None,
+            "characteristic": None,
+            "cached_percent": None,
+            "fresh_percent": None,
+            "differs": False,
+            "note": "battery probing is implemented for Linux/BlueZ only",
+        }
+    from .hidraw import bluez_battery_probe as linux_bluez_battery_probe
+
+    return linux_bluez_battery_probe(device.unique)
+
+
 def readonly_device_info(device: Device) -> dict[str, object | None]:
     if device.backend == "hidraw":
         from .hidraw import readonly_device_info as linux_readonly_device_info

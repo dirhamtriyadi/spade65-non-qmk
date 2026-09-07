@@ -241,6 +241,36 @@ ditampilkan **bukan** diklaim sebagai versi firmware keyboard: request versi
 firmware vendor belum diverifikasi dengan aman, sehingga Spade65 tidak menebak
 atau mengirim request tersebut.
 
+#### Apakah level baterai Bluetooth masih terkini?
+
+BlueZ menerbitkan `Battery1.Percentage` dari nilai terakhir yang dinotifikasikan
+keyboard. Keyboard yang tidak mengirim notifikasi saat nilainya berubah membuat
+properti itu membeku di angka saat koneksi terbentuk — terlihat seperti baterai
+yang tidak pernah berkurang lalu tiba-tiba habis.
+
+```bash
+spade65ctl info --battery-probe
+```
+
+Untuk perangkat Bluetooth, perintah ini menambahkan blok `battery_probe` yang
+membaca karakteristik Battery Level standar (`0x2A19`) langsung dari keyboard
+lewat BlueZ, lalu menampilkannya berdampingan dengan properti yang di-cache:
+
+```json
+"battery_probe": {
+  "device_path": "/org/bluez/hci0/dev_...",
+  "characteristic": "/org/bluez/hci0/dev_.../service0010/char0011",
+  "cached_percent": 100,
+  "fresh_percent": 62,
+  "differs": true
+}
+```
+
+`differs` bernilai true berarti nilai yang di-cache memang sudah basi — itu
+masalah notifikasi BlueZ atau firmware, bukan pembacaan yang salah. Keduanya
+operasi baca; tidak ada apa pun yang ditulis ke keyboard. Perintah ini
+membutuhkan `busctl` yang merupakan bagian systemd, dan hanya untuk Linux.
+
 ### Mengekspor frame default secara offline
 
 ```bash

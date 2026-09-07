@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import os
 import re
 import shutil
@@ -139,6 +140,25 @@ def _read_text(path: Path) -> str | None:
     return value or None
 
 
+def _clean_environment() -> dict[str, str]:
+    """Environment for a host tool: the host's libraries and a stable locale.
+
+    An AppImage puts its own libraries on LD_LIBRARY_PATH, which makes host
+    binaries fail to start, so restore what the launcher saved. The C locale
+    keeps any text output parseable.
+    """
+
+    environment = dict(os.environ)
+    original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original_library_path:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    else:
+        environment.pop("LD_LIBRARY_PATH", None)
+    environment["LC_ALL"] = "C"
+    environment["LANG"] = "C"
+    return environment
+
+
 def _bluez_battery_percent(address: str) -> int | None:
     """Read BlueZ Battery1 through its standard CLI, with a short-lived cache."""
 
@@ -151,14 +171,7 @@ def _bluez_battery_percent(address: str) -> int | None:
         if cached is not None and now - cached[0] < _BLUEZ_BATTERY_CACHE_SECONDS:
             return cached[1]
 
-        environment = dict(os.environ)
-        original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
-        if original_library_path:
-            environment["LD_LIBRARY_PATH"] = original_library_path
-        else:
-            environment.pop("LD_LIBRARY_PATH", None)
-        environment["LC_ALL"] = "C"
-        environment["LANG"] = "C"
+        environment = _clean_environment()
         executable = shutil.which("bluetoothctl", path=environment.get("PATH"))
         battery = None
         if executable is not None:
@@ -184,6 +197,142 @@ def _bluez_battery_percent(address: str) -> int | None:
                 pass
         _BLUEZ_BATTERY_CACHE[normalized] = (now, battery)
         return battery
+
+
+# Assigned number 0x2A19, the standard Bluetooth Battery Level characteristic.
+BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+
+
+def _busctl(arguments: list[str]) -> str | None:
+    """Run one busctl call and return stdout, or None if it did not succeed."""
+
+    environment = _clean_environment()
+    executable = shutil.which("busctl", path=environment.get("PATH"))
+    if executable is None:
+        return None
+    try:
+        result = subprocess.run(
+            [executable, "--system", *arguments],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=environment,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _busctl_json(arguments: list[str]) -> object | None:
+    output = _busctl(["--json=short", *arguments])
+    if not output:
+        return None
+    try:
+        return json.loads(output)
+    except ValueError:
+        return None
+
+
+def _percentage(value: object) -> int | None:
+    return value if isinstance(value, int) and 0 <= value <= 100 else None
+
+
+def bluez_battery_probe(address: str | None) -> dict[str, object | None]:
+    """Compare the battery level BlueZ has cached against a fresh read.
+
+    BlueZ publishes org.bluez.Battery1.Percentage from the last value the
+    keyboard notified, so a keyboard that never notifies leaves it frozen at
+    whatever it reported when the link came up. Reading the GATT
+    characteristic asks the keyboard for the value now. Both are reads; this
+    never writes to the device.
+
+    The shapes used here are the ones busctl was observed to emit: `tree
+    --list` prints one object path per line, and `--json=short` wraps a value
+    as {"type": ..., "data": ...}.
+    """
+
+    result: dict[str, object | None] = {
+        "device_path": None,
+        "characteristic": None,
+        "cached_percent": None,
+        "fresh_percent": None,
+        "differs": False,
+        "note": None,
+    }
+    if not address or _BLUETOOTH_ADDRESS.fullmatch(address) is None:
+        result["note"] = "no usable Bluetooth address to look up"
+        return result
+
+    tree = _busctl(["tree", "--list", "org.bluez"])
+    if tree is None:
+        result["note"] = "busctl is unavailable or org.bluez is not running"
+        return result
+
+    wanted = "dev_" + address.strip().upper().replace(":", "_")
+    paths = [line.strip() for line in tree.splitlines() if line.strip()]
+    devices = [path for path in paths if path.rsplit("/", 1)[-1] == wanted]
+    if not devices:
+        result["note"] = f"no BlueZ device object for {address}"
+        return result
+    device_path = devices[0]
+    result["device_path"] = device_path
+
+    cached = _busctl_json(
+        ["get-property", "org.bluez", device_path, "org.bluez.Battery1", "Percentage"]
+    )
+    if isinstance(cached, dict):
+        result["cached_percent"] = _percentage(cached.get("data"))
+
+    prefix = device_path + "/"
+    for path in paths:
+        if not path.startswith(prefix):
+            continue
+        uuid = _busctl_json(
+            [
+                "get-property",
+                "org.bluez",
+                path,
+                "org.bluez.GattCharacteristic1",
+                "UUID",
+            ]
+        )
+        if not isinstance(uuid, dict):
+            continue
+        if str(uuid.get("data", "")).lower() != BATTERY_LEVEL_UUID:
+            continue
+        result["characteristic"] = path
+        # ReadValue takes an options dictionary; an empty one is the plain
+        # read. Nothing in this project ever calls WriteValue.
+        value = _busctl_json(
+            [
+                "call",
+                "org.bluez",
+                path,
+                "org.bluez.GattCharacteristic1",
+                "ReadValue",
+                "a{sv}",
+                "0",
+            ]
+        )
+        if isinstance(value, dict):
+            data = value.get("data")
+            # A byte array arrives as a list; some builds nest it one deeper.
+            while isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+                data = data[0]
+            if isinstance(data, list) and data:
+                result["fresh_percent"] = _percentage(data[0])
+        break
+
+    if result["characteristic"] is None:
+        result["note"] = "the device exposes no battery level characteristic"
+    cached_percent, fresh_percent = result["cached_percent"], result["fresh_percent"]
+    result["differs"] = (
+        isinstance(cached_percent, int)
+        and isinstance(fresh_percent, int)
+        and cached_percent != fresh_percent
+    )
+    return result
 
 
 def readonly_device_info(device: HidrawDevice) -> dict[str, object | None]:
