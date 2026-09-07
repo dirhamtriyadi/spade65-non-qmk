@@ -84,3 +84,75 @@ test("storage parser keeps only bounded known layout values", () => {
   );
   assert.deepEqual(layout.parseDeviceLayouts([]), {});
 });
+
+test("a wired keyboard says nothing about a battery it does not have", () => {
+  // Plugged in, so an "unavailable" badge would be noise rather than news.
+  const wired = { transport: "USB", readonly: { battery_percent: null } };
+  assert.deepEqual(layout.batteryDisplay(wired), { show: false });
+  assert.deepEqual(layout.batteryDisplay(null), { show: false });
+  assert.deepEqual(layout.batteryDisplay(undefined), { show: false });
+});
+
+test("a wireless keyboard reports its level and where the level came from", () => {
+  for (const transport of ["Dongle", "2.4 GHz receiver", "Bluetooth LE"]) {
+    const device = {
+      transport,
+      readonly: {
+        battery_percent: 87,
+        battery_source: "BlueZ Battery1",
+        battery_status: "reported by BlueZ Battery1",
+      },
+    };
+    assert.deepEqual(layout.batteryDisplay(device), {
+      show: true,
+      percent: 87,
+      source: "BlueZ Battery1",
+      status: "reported by BlueZ Battery1",
+    });
+  }
+});
+
+test("a wireless keyboard without a reading says so instead of vanishing", () => {
+  // The badge used to hide itself, which is why the reading was never found.
+  const device = {
+    transport: "Bluetooth LE",
+    readonly: {
+      battery_percent: null,
+      battery_source: null,
+      battery_status: "not exposed by the current transport/kernel",
+    },
+  };
+  assert.deepEqual(layout.batteryDisplay(device), {
+    show: true,
+    percent: null,
+    source: null,
+    status: "not exposed by the current transport/kernel",
+  });
+  // A device with no readonly block at all is the same situation.
+  assert.deepEqual(layout.batteryDisplay({ transport: "Dongle" }), {
+    show: true,
+    percent: null,
+    source: null,
+    status: null,
+  });
+});
+
+test("an impossible percentage is treated as no reading", () => {
+  // A percentage outside 0-100, or a non-integer, is a broken source rather
+  // than a level worth showing.
+  for (const percent of [-1, 101, 1.5, "87", null, undefined, NaN]) {
+    const device = { transport: "Dongle", readonly: { battery_percent: percent } };
+    assert.equal(layout.batteryDisplay(device).percent, null, String(percent));
+  }
+  for (const percent of [0, 1, 50, 100]) {
+    const device = { transport: "Dongle", readonly: { battery_percent: percent } };
+    assert.equal(layout.batteryDisplay(device).percent, percent);
+  }
+});
+
+test("an unknown transport is treated as wired rather than guessed at", () => {
+  assert.deepEqual(layout.batteryDisplay({ transport: "" }), { show: false });
+  assert.deepEqual(layout.batteryDisplay({ transport: "Thunderbolt" }), {
+    show: false,
+  });
+});

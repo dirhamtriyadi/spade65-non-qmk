@@ -115,10 +115,41 @@
     };
   }
 
+  // Only these transports run on the battery. On USB the keyboard is powered
+  // by the cable, so an "unavailable" badge would be noise rather than news.
+  const BATTERY_TRANSPORTS = Object.freeze([
+    "Dongle",
+    "2.4 GHz receiver",
+    "Bluetooth LE"
+  ]);
+
+  function batteryDisplay(device) {
+    // The badge used to hide itself whenever a reading was missing, which is
+    // why users never found it: the only mode most people run is USB, where
+    // there is nothing to show. On a wireless link the absence of a reading is
+    // itself worth saying, along with the reason the backend already worked
+    // out, so report the state rather than disappearing.
+    const transport = device && device.transport;
+    if (!BATTERY_TRANSPORTS.includes(transport)) return {
+      show: false
+    };
+    const readonly = device.readonly || {};
+    const percent = readonly.battery_percent;
+    const usable = Number.isInteger(percent) && percent >= 0 && percent <= 100;
+    return {
+      show: true,
+      percent: usable ? percent : null,
+      source: readonly.battery_source == null ? null : readonly.battery_source,
+      status: readonly.battery_status == null ? null : readonly.battery_status
+    };
+  }
+
   return Object.freeze({
+    BATTERY_TRANSPORTS,
     CONFIG_USAGE,
     DEFAULT_LAYOUT,
     VALID_LAYOUTS,
+    batteryDisplay,
     deviceKey,
     isValidLayout,
     parseDeviceLayouts,

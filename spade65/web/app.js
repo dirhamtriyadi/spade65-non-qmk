@@ -763,18 +763,28 @@ function renderConnectionStatus() {
   const connected = meta.devices.length > 0,
     readOnlyDevice = connected && meta.devices.every(d => d.configuration_status === 'unsupported-read-only'),
     primary = layoutState.primaryDevice(meta.devices),
-    battery = primary?.readonly?.battery_percent,
-    hasBattery = Number.isInteger(battery) && battery >= 0 && battery <= 100,
+    battery = layoutState.batteryDisplay(primary),
     batteryBadge = $('batteryBadge');
   $('connectionDot').classList.toggle('online', connected);
   $('connectionText').textContent = connected ? t(readOnlyDevice ? 'status.detectedReadOnly' : 'status.connected', {
     name: primary.name
   }) : t('status.noDevice');
   $('transportBadge').textContent = connected ? `${primary.transport} ${primary.vid}:${primary.pid}` : t('status.notConnected');
-  batteryBadge.hidden = !hasBattery;
-  batteryBadge.textContent = hasBattery ? t('status.battery', {
-    percent: battery
-  }) : '';
+  batteryBadge.hidden = !battery.show;
+  batteryBadge.textContent = !battery.show ? '' : battery.percent === null ?
+    t('status.batteryUnavailable') :
+    t('status.battery', {
+      percent: battery.percent
+    });
+  // Explain where a level came from, or why there is none. A reading that
+  // looks wrong is worth attributing rather than hiding. The label is built
+  // from the source name, not from the backend's English prose, so it follows
+  // the interface language.
+  batteryBadge.title = !battery.show ? '' : battery.source === null ?
+    t('status.batteryNoSource') :
+    t('status.batterySource', {
+      source: battery.source
+    });
   $('descriptorBadge').textContent = readOnlyDevice ? t('status.unsupportedReadOnly') : meta.devices.some(d => d.reports.some(r => r.kind === 'feature' && r.id === 7 && r.bytes === 620)) ? t('status.descriptorVerified') : t('status.configUnavailable');
   renderLightingConnectionStatus();
   setProfileControlsRecordingLocked()
