@@ -123,6 +123,27 @@
     "Bluetooth LE"
   ]);
 
+  function configurableDevices(devices) {
+    // Writes go through the ff02:0001 feature report, so an interface without
+    // it can never be the target no matter what its status says.
+    if (!Array.isArray(devices)) return [];
+    return devices.filter(
+      device =>
+      device &&
+      device.configuration_status === "descriptor-gated" &&
+      Array.isArray(device.usages) &&
+      device.usages.includes(CONFIG_USAGE)
+    );
+  }
+
+  function unconfigurableReason(devices) {
+    // The interface list used to go blank with no explanation, which reads as
+    // "the keyboard is not detected" even while the header says it is. Say
+    // which of the two situations this is instead.
+    if (configurableDevices(devices).length) return null;
+    return Array.isArray(devices) && devices.length ? "readOnly" : "none";
+  }
+
   function batteryDisplay(device) {
     // The badge used to hide itself whenever a reading was missing, which is
     // why users never found it: the only mode most people run is USB, where
@@ -150,10 +171,12 @@
     DEFAULT_LAYOUT,
     VALID_LAYOUTS,
     batteryDisplay,
+    configurableDevices,
     deviceKey,
     isValidLayout,
     parseDeviceLayouts,
     primaryDevice,
+    unconfigurableReason,
     resolveLayout,
   });
 });

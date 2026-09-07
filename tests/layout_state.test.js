@@ -156,3 +156,69 @@ test("an unknown transport is treated as wired rather than guessed at", () => {
     show: false,
   });
 });
+
+test("an empty interface list says why it is empty", () => {
+  // The dropdown used to go blank with no explanation, which reads as "the
+  // keyboard is not detected" even while the header says it is.
+  const configurable = {
+    configuration_status: "descriptor-gated",
+    usages: ["ff02:0001", "0001:0006"],
+  };
+  const receiver = {
+    configuration_status: "unsupported-read-only",
+    usages: ["0001:0006", "ff55:0202"],
+  };
+  assert.equal(layout.unconfigurableReason([]), "none");
+  assert.equal(layout.unconfigurableReason(null), "none");
+  assert.equal(layout.unconfigurableReason([receiver, receiver]), "readOnly");
+  assert.equal(layout.unconfigurableReason([configurable]), null);
+  assert.equal(layout.unconfigurableReason([receiver, configurable]), null);
+});
+
+test("a read-only judgement outranks a config report the device advertises", () => {
+  // Both checks have to hold. The backend decides configurability from the
+  // whole descriptor, so an interface it rejected must stay rejected even if
+  // it advertises the report writes would use.
+  const rejected = {
+    path: "/dev/hidraw9",
+    configuration_status: "unsupported-read-only",
+    usages: ["ff02:0001", "0001:0006"],
+  };
+  assert.deepEqual(layout.configurableDevices([rejected]), []);
+  assert.equal(layout.unconfigurableReason([rejected]), "readOnly");
+});
+
+test("a device that claims to be configurable without the config report is not", () => {
+  // configuration_status alone is not enough: writes go through ff02:0001,
+  // so an interface without it can never be the target.
+  const liar = {
+    configuration_status: "descriptor-gated",
+    usages: ["0001:0006"],
+  };
+  assert.equal(layout.unconfigurableReason([liar]), "readOnly");
+  assert.deepEqual(layout.configurableDevices([liar]), []);
+});
+
+test("the selector lists every interface that can actually be written to", () => {
+  const first = {
+    path: "/dev/hidraw2",
+    configuration_status: "descriptor-gated",
+    usages: ["ff02:0001"],
+  };
+  const second = {
+    path: "/dev/hidraw4",
+    configuration_status: "descriptor-gated",
+    usages: ["ff02:0001"],
+  };
+  const receiver = {
+    path: "/dev/hidraw1",
+    configuration_status: "unsupported-read-only",
+    usages: ["ff55:0202"],
+  };
+  assert.deepEqual(layout.configurableDevices([receiver, first, second]), [
+    first,
+    second,
+  ]);
+  assert.deepEqual(layout.configurableDevices(null), []);
+  assert.deepEqual(layout.configurableDevices([{ usages: null }]), []);
+});

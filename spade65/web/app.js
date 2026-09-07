@@ -793,12 +793,21 @@ function renderConnectionStatus() {
 function renderDevices() {
   const select = $('deviceSelect'),
     old = select.value,
-    configurable = meta.devices.filter(d => d.configuration_status === 'descriptor-gated' && d.usages.includes('ff02:0001'));
+    configurable = layoutState.configurableDevices(meta.devices),
+    reason = layoutState.unconfigurableReason(meta.devices);
   select.innerHTML = '';
   for (const item of configurable) {
     const o = document.createElement('option');
     o.value = item.path;
     o.textContent = `${item.name} · ${item.transport} · ${item.path}`;
+    select.append(o)
+  }
+  if (reason) {
+    // An empty list reads as "not detected" even when the keyboard is right
+    // there on a transport that cannot be configured. Say which it is.
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = t(reason === 'readOnly' ? 'device.readOnlyOnly' : 'device.noneDetected');
     select.append(o)
   }
   if ([...select.options].some(o => o.value === old)) select.value = old;

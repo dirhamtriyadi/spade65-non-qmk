@@ -41,6 +41,8 @@
   "common.minutes": "menit",
   "common.beginnerFriendly": "Panduan langkah demi langkah",
   "device.select": "Pilih antarmuka perangkat",
+  "device.noneDetected": "Tidak ada keyboard terdeteksi",
+  "device.readOnlyOnly": "Terhubung, tetapi transport ini tidak bisa dikonfigurasi",
   "device.intro": "Konfigurasi lokal dan terbuka dengan validasi descriptor serta kontrol penulisan yang aman.",
   "status.scanning": "Memindai…",
   "status.loading": "Memuat…",

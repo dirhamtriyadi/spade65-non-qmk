@@ -41,6 +41,8 @@
   "common.minutes": "minutes",
   "common.beginnerFriendly": "Guided setup",
   "device.select": "Select device interface",
+  "device.noneDetected": "No keyboard detected",
+  "device.readOnlyOnly": "Connected, but this transport cannot be configured",
   "device.intro": "Local, open configuration with descriptor validation and safe write controls.",
   "status.scanning": "Scanning…",
   "status.loading": "Loading…",
