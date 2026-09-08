@@ -368,3 +368,17 @@ There was no recorded baseline for the wired descriptor before this flash, so
 "unchanged" is a statement about the capabilities the project depends on, not
 a byte-level comparison. `tests/test_wired_descriptor.py` now pins the measured
 bytes so the next firmware change is visible rather than silent.
+
+### The one effect that was observed
+
+The owner reports that the 2.4 GHz link stopped dropping and reconnecting
+after the receiver was flashed. That is consistent with a descriptor which did
+not change: the drops are on the radio link between keyboard and receiver,
+while the receiver itself stays enumerated on USB throughout, so the kernel
+never sees them. The USB journal for the fortnight around the flash contains
+only enumeration events explained by mode switches and replugging, and it
+neither supports nor contradicts the report.
+
+This is an unquantified observation over a short period, recorded because it
+is the only visible effect of the receiver firmware and because it explains
+why that firmware exists at all.

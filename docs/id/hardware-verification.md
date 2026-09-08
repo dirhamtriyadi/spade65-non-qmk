@@ -378,3 +378,17 @@ sehingga "tidak berubah" adalah pernyataan tentang kemampuan yang diandalkan
 proyek, bukan perbandingan byte per byte. `tests/test_wired_descriptor.py`
 sekarang memaku byte hasil pengukuran agar perubahan firmware berikutnya
 terlihat, bukan senyap.
+
+### Satu-satunya efek yang teramati
+
+Pemilik melaporkan bahwa koneksi 2,4 GHz berhenti putus-sambung setelah
+receiver di-flash. Itu konsisten dengan descriptor yang tidak berubah: putusnya
+terjadi pada tautan radio antara keyboard dan receiver, sementara receiver-nya
+sendiri tetap ter-enumerasi di USB sepanjang waktu, sehingga kernel tidak
+pernah melihatnya. Journal USB selama dua pekan di sekitar flashing hanya
+berisi event enumerasi yang bisa dijelaskan oleh pergantian mode dan
+colok-cabut, dan tidak mendukung maupun membantah laporan itu.
+
+Ini pengamatan yang tidak terkuantifikasi dalam rentang waktu pendek, dicatat
+karena inilah satu-satunya efek yang terlihat dari firmware receiver dan
+karena inilah yang menjelaskan mengapa firmware itu ada.
