@@ -313,3 +313,58 @@ recovered from the original backend. A physical timer test requires a dongle
 that enumerates as `0603:0356` and exposes the `ff03:0001` configuration
 interface; it is not safe to substitute the descriptor-incompatible `0352`
 receiver.
+
+## Official firmware, applied 8 September 2026
+
+The vendor supplies firmware as two Windows updaters, obtained from customer
+service rather than through the configuration software. Their own guide warns
+that a failed flash is not covered by warranty.
+
+| file | payload | target |
+|---|---|---|
+| `Spade65_3M_20240325B(RALT).exe` | 141,060 bytes | keyboard, flash address `0x30000` |
+| `Spade65_Dongle_20240301.exe` | 15,676 bytes | 2.4 GHz receiver, flash address `0x0` |
+
+`3M` is tri-mode. The `(RALT)` suffix is the vendor's own acknowledgement of
+the right-alt position that the original configuration software mislabels.
+
+The guide documents two shortcuts this project had not recorded: `Fn+Tab`
+enters wired mode, and holding `Fn+ESC` for three seconds performs a factory
+reset, which the guide requires after every flash.
+
+### Package format
+
+The firmware is appended after the end of the PE image rather than stored as a
+resource. Each overlay begins with a 128-byte ASCII name field, then the magic
+`68 ed a6 c3`, then a payload obfuscated with a single-byte XOR of `0x55`.
+That key is not a guess: decoding with it turns the padding into 230 runs of
+sixteen zero bytes in the keyboard image and 31 in the receiver image, and the
+container header becomes readable as target address, block size (512) and
+image length.
+
+The image itself starts at offset `0x200` of the container and begins with an
+ARM Cortex-M vector table: initial stack pointer `0x2000ac60` in RAM, followed
+by reset, NMI and hard-fault handlers whose addresses all carry the Thumb bit.
+Linux names the vendor ID as Novatek Microelectronics, which is consistent.
+
+Analysis stops here. Flashing, bootloader entry and raw writes remain outside
+this project for the reason stated in the README: no bootloader entry sequence
+or recovery path has been observed for this board.
+
+### What changed on the host after flashing
+
+Nothing that the host can see.
+
+- The receiver's three interfaces produced byte-identical descriptors before
+  and after, still advertising no battery usage. Battery over 2.4 GHz remains
+  unavailable for the same reason as before.
+- The wired configuration interface still carries feature report `0x07` at 620
+  bytes, feature report `0x08` at 8 bytes, and report `0x06` at 64 bytes in
+  both directions, with `ff02:0001` and `ff03:0001` present.
+- `bcdDevice` reads `01.00` on both the keyboard and the receiver, before and
+  after. It is static, so it cannot be used to tell firmware versions apart.
+
+There was no recorded baseline for the wired descriptor before this flash, so
+"unchanged" is a statement about the capabilities the project depends on, not
+a byte-level comparison. `tests/test_wired_descriptor.py` now pins the measured
+bytes so the next firmware change is visible rather than silent.

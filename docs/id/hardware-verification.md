@@ -322,3 +322,59 @@ backend original. Pengujian timer secara fisik membutuhkan dongle yang
 terdeteksi sebagai `0603:0356` dan menyediakan interface konfigurasi
 `ff03:0001`; receiver `0352` yang descriptor-nya tidak kompatibel tidak aman
 digunakan sebagai pengganti.
+
+## Firmware resmi, dipasang 8 September 2026
+
+Vendor menyediakan firmware sebagai dua updater Windows, diperoleh lewat
+customer service dan bukan melalui software konfigurasi. Panduan resminya
+memperingatkan bahwa kegagalan flashing tidak ditanggung garansi.
+
+| berkas | payload | target |
+|---|---|---|
+| `Spade65_3M_20240325B(RALT).exe` | 141.060 byte | keyboard, alamat flash `0x30000` |
+| `Spade65_Dongle_20240301.exe` | 15.676 byte | receiver 2,4 GHz, alamat flash `0x0` |
+
+`3M` berarti tri-mode. Akhiran `(RALT)` adalah pengakuan vendor sendiri atas
+posisi right-alt yang dilabeli keliru oleh software konfigurasi aslinya.
+
+Panduan itu mencatat dua pintasan yang belum pernah terekam proyek ini:
+`Fn+Tab` masuk mode wired, dan menahan `Fn+ESC` selama tiga detik melakukan
+factory reset, yang diwajibkan panduan setelah setiap flashing.
+
+### Format paket
+
+Firmware di-append setelah akhir citra PE, bukan disimpan sebagai resource.
+Setiap overlay diawali field nama ASCII 128 byte, lalu magic `68 ed a6 c3`,
+lalu payload yang diobfuskasi dengan XOR satu byte `0x55`. Kunci itu bukan
+tebakan: mendekode dengannya mengubah padding menjadi 230 blok enam belas byte
+nol pada citra keyboard dan 31 pada citra receiver, dan header kontainernya
+menjadi terbaca sebagai alamat target, ukuran blok (512), dan panjang citra.
+
+Citranya sendiri mulai di offset `0x200` dan diawali tabel vektor ARM Cortex-M:
+stack pointer awal `0x2000ac60` di RAM, disusul handler reset, NMI, dan
+hard-fault yang alamatnya semua membawa bit Thumb. Linux menamai vendor ID-nya
+sebagai Novatek Microelectronics, yang konsisten dengan temuan itu.
+
+Analisis berhenti di sini. Flashing, akses bootloader, dan tulis mentah tetap
+di luar cakupan proyek ini dengan alasan yang tertulis di README: tidak ada
+urutan masuk bootloader maupun jalur pemulihan yang pernah teramati untuk papan
+ini.
+
+### Apa yang berubah di sisi host setelah flashing
+
+Tidak ada yang bisa dilihat host.
+
+- Ketiga antarmuka receiver menghasilkan descriptor identik byte per byte
+  sebelum dan sesudah, tetap tanpa usage baterai. Baterai lewat 2,4 GHz tetap
+  tidak tersedia dengan alasan yang sama seperti sebelumnya.
+- Antarmuka konfigurasi wired tetap membawa feature report `0x07` 620 byte,
+  feature report `0x08` 8 byte, dan report `0x06` 64 byte dua arah, dengan
+  `ff02:0001` dan `ff03:0001` tetap ada.
+- `bcdDevice` terbaca `01.00` pada keyboard maupun receiver, sebelum dan
+  sesudah. Nilainya statis, jadi tidak bisa dipakai membedakan versi firmware.
+
+Tidak ada baseline tersimpan untuk descriptor wired sebelum flashing ini,
+sehingga "tidak berubah" adalah pernyataan tentang kemampuan yang diandalkan
+proyek, bukan perbandingan byte per byte. `tests/test_wired_descriptor.py`
+sekarang memaku byte hasil pengukuran agar perubahan firmware berikutnya
+terlihat, bukan senyap.
