@@ -382,3 +382,32 @@ neither supports nor contradicts the report.
 This is an unquantified observation over a short period, recorded because it
 is the only visible effect of the receiver firmware and because it explains
 why that firmware exists at all.
+
+## The battery level is the keyboard's own, and it does not move
+
+Reported over several days of use: the `Fn+X` indicator stays at full and the
+keyboard then dies without warning, and BlueZ reported 100 percent throughout.
+
+That could have been a stale value. BlueZ publishes `Battery1.Percentage` from
+the last level the keyboard notified, so a keyboard that never notifies on
+change leaves it frozen. `spade65ctl info --battery-probe` was built to tell
+the two apart by reading the characteristic directly.
+
+It was not needed. The owner connected the keyboard to a smartphone, an
+entirely separate Bluetooth stack with none of this project's code or caching
+in it, and that host also read 100 percent. Two independent hosts reading the
+same characteristic and agreeing means the keyboard is reporting 100 percent,
+not that something between us and it went stale.
+
+So the level is produced inside the keyboard and is wrong there. Nothing on
+the host can correct it. The shape of the error, full for a long time and then
+a sudden cutoff, is what a gauge that reads only battery voltage produces: the
+lithium discharge curve is nearly flat for most of its capacity, so a reading
+taken straight from voltage barely moves until the end. Measuring the
+remaining charge properly needs coulomb counting, which is a separate part on
+the board rather than a firmware decision.
+
+Firmware could still improve the mapping, since that flat curve is known and
+can be calibrated against. The latest official firmware, dated March 2024 and
+applied on 8 September 2026, does not. Noir publishes exactly one firmware
+archive for this keyboard, so there is no newer build to try.

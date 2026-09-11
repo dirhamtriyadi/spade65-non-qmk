@@ -392,3 +392,34 @@ colok-cabut, dan tidak mendukung maupun membantah laporan itu.
 Ini pengamatan yang tidak terkuantifikasi dalam rentang waktu pendek, dicatat
 karena inilah satu-satunya efek yang terlihat dari firmware receiver dan
 karena inilah yang menjelaskan mengapa firmware itu ada.
+
+## Level baterai berasal dari keyboard sendiri, dan tidak bergerak
+
+Dilaporkan setelah beberapa hari pemakaian: indikator `Fn+X` bertahan penuh
+lalu keyboard mati tanpa peringatan, dan BlueZ melaporkan 100 persen sepanjang
+waktu itu.
+
+Itu bisa saja nilai basi. BlueZ menerbitkan `Battery1.Percentage` dari level
+terakhir yang dinotifikasikan keyboard, sehingga keyboard yang tidak pernah
+mengirim notifikasi membuatnya membeku. `spade65ctl info --battery-probe`
+dibangun untuk membedakan keduanya dengan membaca karakteristiknya langsung.
+
+Ternyata tidak diperlukan. Pemilik menyambungkan keyboard ke smartphone —
+tumpukan Bluetooth yang sepenuhnya terpisah, tanpa kode maupun cache proyek
+ini di dalamnya — dan host itu pun membaca 100 persen. Dua host independen
+yang membaca karakteristik yang sama dan sepakat berarti keyboard-nya memang
+melaporkan 100 persen, bukan ada yang basi di antara kita dan dia.
+
+Jadi levelnya dihasilkan di dalam keyboard dan salah di sana. Tidak ada yang
+bisa dikoreksi dari sisi host. Bentuk kesalahannya — penuh dalam waktu lama
+lalu terputus mendadak — adalah yang dihasilkan pengukur yang hanya membaca
+tegangan baterai: kurva pelepasan litium nyaris datar sepanjang sebagian besar
+kapasitasnya, sehingga pembacaan langsung dari tegangan hampir tidak bergerak
+sampai ujung. Mengukur sisa muatan dengan benar membutuhkan coulomb counting,
+yang merupakan komponen terpisah di papan, bukan keputusan firmware.
+
+Firmware masih bisa memperbaiki pemetaannya, karena kurva datar itu diketahui
+dan bisa dikalibrasi. Firmware resmi terbaru, bertanggal Maret 2024 dan
+dipasang 8 September 2026, tidak melakukannya. Noir menerbitkan tepat satu
+arsip firmware untuk keyboard ini, jadi tidak ada build lebih baru untuk
+dicoba.
