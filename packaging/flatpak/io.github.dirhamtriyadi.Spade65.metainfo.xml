@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.dirhamtriyadi.Spade65</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Spade65</name>
+  <summary>Configure a non-QMK Noir Spade65 keyboard</summary>
+
+  <developer id="io.github.dirhamtriyadi">
+    <name>dirhamtriyadi</name>
+  </developer>
+
+  <description>
+    <p>
+      Spade65 is an independent, clean-room configuration tool for the non-QMK
+      Noir Spade65 keyboard. It remaps keys across the normal, Fn1 and Fn2
+      layers, records macros, sets built-in and per-key lighting, streams
+      real-time and audio-reactive effects, and adjusts debounce.
+    </p>
+    <p>
+      Every write is checked against the keyboard's own HID report descriptor
+      before it is sent, so an interface that cannot accept a report is never
+      written to. Firmware flashing, bootloader access and arbitrary HID
+      packets are deliberately not implemented.
+    </p>
+    <p>Before you start:</p>
+    <ul>
+      <li>
+        Configuration works over the wired USB connection. Press Fn+Tab on the
+        keyboard to enter wired mode.
+      </li>
+      <li>
+        The 2.4 GHz receiver and Bluetooth are recognised but read-only: those
+        transports carry no configuration endpoint, so the keyboard can be
+        identified over them but not changed.
+      </li>
+      <li>
+        A udev rule is required for access to the keyboard without root, and a
+        sandboxed application cannot install one. The rule ships in the project
+        repository and has to be installed on the host once.
+      </li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.dirhamtriyadi.Spade65.desktop</launchable>
+
+  <categories>
+    <category>Utility</category>
+    <category>Settings</category>
+    <category>HardwareSettings</category>
+  </categories>
+
+  <keywords>
+    <keyword>keyboard</keyword>
+    <keyword>keymap</keyword>
+    <keyword>macro</keyword>
+    <keyword>RGB</keyword>
+    <keyword>Spade65</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/dirhamtriyadi/spade65-non-qmk</url>
+  <url type="bugtracker">https://github.com/dirhamtriyadi/spade65-non-qmk/issues</url>
+  <url type="vcs-browser">https://github.com/dirhamtriyadi/spade65-non-qmk</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/docs/images/spade65-overview.png</image>
+      <caption>Device overview with descriptor and transport status</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/docs/images/spade65-keyboard.png</image>
+      <caption>Remapping keys across the normal, Fn1 and Fn2 layers</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/docs/images/spade65-lighting.png</image>
+      <caption>Built-in effects, per-key colours and live lighting</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/dirhamtriyadi/spade65-non-qmk/v0.8.11/docs/images/spade65-macros.png</image>
+      <caption>Recording a macro and assigning it to a key</caption>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.8.11" date="2026-09-07">
+      <description>
+        <p>
+          The device list now explains an empty interface list instead of
+          rendering nothing over the 2.4 GHz receiver.
+        </p>
+      </description>
+    </release>
+    <release version="0.8.10" date="2026-09-07">
+      <description>
+        <p>
+          The battery badge reports what it knows and where the reading came
+          from, rather than hiding itself when there is no reading.
+        </p>
+      </description>
+    </release>
+    <release version="0.8.9" date="2026-09-03">
+      <description>
+        <p>
+          Bluetooth is recognised as a read-only transport with battery
+          reporting, and an audio-reactive spectrum bar can reach the top
+          keyboard row.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>
